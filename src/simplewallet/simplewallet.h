@@ -36,6 +36,7 @@
 #pragma once
 
 #include <memory>
+#include <boost/serialization/version.hpp>
 
 #include <boost/optional/optional.hpp>
 #include <boost/program_options/variables_map.hpp>

@@ -29,7 +29,8 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include "include_base_utils.h"
-
+#include <boost/bind/placeholders.hpp>
+using namespace boost::placeholders;
 using namespace epee;
 
 #include "checkpoints.h"
