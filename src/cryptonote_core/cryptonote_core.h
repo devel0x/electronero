@@ -48,6 +48,7 @@
 #include "cryptonote_basic/cryptonote_stat_info.h"
 #include "warnings.h"
 #include "crypto/hash.h"
+#include "evm/evm.h"
 
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
@@ -222,7 +223,12 @@ namespace cryptonote
       *
       * @return a const reference to the miner instance
       */
-     const miner& get_miner()const{return m_miner;}
+    const miner& get_miner()const{return m_miner;}
+
+    /**
+     * @brief access the embedded EVM instance
+     */
+    CryptoNote::EVM& get_evm(){return m_evm;}
 
      /**
       * @brief adds command line options to the given options set
@@ -857,8 +863,10 @@ namespace cryptonote
       */
      bool check_tx_semantic(const transaction& tx, bool keeped_by_block) const;
 
-     bool handle_incoming_tx_pre(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
-     bool handle_incoming_tx_post(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
+    bool handle_incoming_tx_pre(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
+    bool handle_incoming_tx_post(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
+
+    void process_evm_tx(const transaction& tx);
 
      /**
       * @copydoc miner::on_block_chain_update
@@ -943,8 +951,9 @@ namespace cryptonote
 
      uint64_t m_test_drop_download_height = 0; //!< height under which to drop incoming blocks, if doing so
 
-     tx_memory_pool m_mempool; //!< transaction pool instance
-     Blockchain m_blockchain_storage; //!< Blockchain instance
+    tx_memory_pool m_mempool; //!< transaction pool instance
+    Blockchain m_blockchain_storage; //!< Blockchain instance
+    CryptoNote::EVM m_evm; //!< simple Ethereum-compatible VM
 
      i_cryptonote_protocol* m_pprotocol; //!< cryptonote protocol instance
 
