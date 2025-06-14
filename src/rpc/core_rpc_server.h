@@ -112,6 +112,8 @@ namespace cryptonote
       MAP_URI_AUTO_JON2_IF("/stop_daemon", on_stop_daemon, COMMAND_RPC_STOP_DAEMON, !m_restricted)
       MAP_URI_AUTO_JON2("/get_info", on_get_info, COMMAND_RPC_GET_INFO)
       MAP_URI_AUTO_JON2("/getinfo", on_get_info, COMMAND_RPC_GET_INFO)
+      MAP_URI_AUTO_JON2_IF("/deploy_contract", on_deploy_contract, COMMAND_RPC_DEPLOY_CONTRACT, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/call_contract", on_call_contract, COMMAND_RPC_CALL_CONTRACT, !m_restricted)
       else if(std::string::npos != query_info.m_URI.find("/get_coins")) return on_get_coins(response_info);
       else if(std::string::npos != query_info.m_URI.find("/getcoins")) return on_get_coins(response_info);
       MAP_URI_AUTO_JON2("/get_limit", on_get_limit, COMMAND_RPC_GET_LIMIT)
@@ -219,6 +221,8 @@ namespace cryptonote
     bool on_sync_info(const COMMAND_RPC_SYNC_INFO::request& req, COMMAND_RPC_SYNC_INFO::response& res, epee::json_rpc::error& error_resp);
     bool on_get_txpool_backlog(const COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::response& res, epee::json_rpc::error& error_resp);
     bool on_get_output_distribution(const COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request& req, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response& res, epee::json_rpc::error& error_resp);
+    bool on_deploy_contract(const COMMAND_RPC_DEPLOY_CONTRACT::request& req, COMMAND_RPC_DEPLOY_CONTRACT::response& res);
+    bool on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res);
     //-----------------------
 
 private:
