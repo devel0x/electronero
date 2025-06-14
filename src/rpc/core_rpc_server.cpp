@@ -34,6 +34,8 @@ using namespace epee;
 
 #include "core_rpc_server.h"
 #include "common/command_line.h"
+#include "evm/evm.h"
+#include <boost/algorithm/string/predicate.hpp>
 #include "common/updates.h"
 #include "common/download.h"
 #include "common/util.h"
@@ -2158,6 +2160,96 @@ namespace cryptonote
 
     res.status = CORE_RPC_STATUS_OK;
     return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_deploy_contract(const COMMAND_RPC_DEPLOY_CONTRACT::request& req, COMMAND_RPC_DEPLOY_CONTRACT::response& res)
+  {
+    std::string bin;
+    if (!epee::string_tools::parse_hexstr_to_binbuff(req.bytecode, bin))
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    std::vector<uint8_t> code(bin.begin(), bin.end());
+    const uint64_t required_fee = code.size() * config::EVM_DEPLOY_FEE_PER_BYTE;
+    if (req.fee < required_fee)
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    res.address = m_core.get_evm().deploy(req.account, code);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
+  {
+    if (boost::algorithm::starts_with(req.data, "deposit:"))
+    {
+      uint64_t amount = std::stoull(req.data.substr(8));
+      if (req.write)
+      {
+        const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+        if (req.fee < required_fee)
+        {
+          res.status = CORE_RPC_STATUS_FAILED;
+          return false;
+        }
+      }
+      bool ok = m_core.get_evm().deposit(req.account, amount);
+      res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
+      res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
+      return ok;
+    }
+    else if (boost::algorithm::starts_with(req.data, "transfer:"))
+    {
+      std::string rest = req.data.substr(9);
+      size_t pos = rest.find(':');
+      if (pos == std::string::npos)
+      {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+      std::string dest = rest.substr(0, pos);
+      uint64_t amount = std::stoull(rest.substr(pos + 1));
+      if (req.write)
+      {
+        const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+        if (req.fee < required_fee)
+        {
+          res.status = CORE_RPC_STATUS_FAILED;
+          return false;
+        }
+      }
+      bool ok = m_core.get_evm().transfer(req.account, dest, amount, req.caller);
+      res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
+      res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
+      return ok;
+    }
+    else
+    {
+      std::string bin;
+      if (!epee::string_tools::parse_hexstr_to_binbuff(req.data, bin))
+      {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+      std::vector<uint8_t> data(bin.begin(), bin.end());
+      if (req.write)
+      {
+        const uint64_t required_fee = data.size() * config::EVM_CALL_FEE_PER_BYTE;
+        if (req.fee < required_fee)
+        {
+          res.status = CORE_RPC_STATUS_FAILED;
+          return false;
+        }
+      }
+      res.result = m_core.get_evm().call(req.account, data);
+      res.status = CORE_RPC_STATUS_OK;
+      return true;
+    }
   }
   //------------------------------------------------------------------------------------------------------------------------------
 
