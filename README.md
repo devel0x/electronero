@@ -72,6 +72,73 @@ Electronero is a private, secure, untraceable, decentralised digital currency. Y
 
 **Untraceability:** By taking advantage of ring signatures, a special property of a certain type of cryptography, Electronero is able to ensure that transactions are not only untraceable, but have an optional measure of ambiguity that ensures that transactions cannot easily be tied back to an individual user or computer.
 
+## Smart Contracts
+
+Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file> [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, and the `REVERT` opcode for greater compatibility with Solidity 0.8.
+
+Deploying a contract incurs a fee proportional to its bytecode size. The wallet calculates this automatically using a rate of 10 atomic units per byte.
+Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free.
+
+Every contract maintains its own balance tracked by the EVM. You can deposit coins with `call_contract <address> deposit:<amount> write`. Transfers should normally be performed by contract code. The built-in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
+
+To send coins from one contract directly to another in Solidity you may invoke
+the EVM transfer opcode from inline assembly. This opcode takes the destination
+address and amount from the stack and moves funds from the current contract to
+that destination. A simple helper looks like:
+
+```solidity
+pragma solidity ^0.4.0;
+
+contract Faucet {
+    function payout(address dest, uint64 amount) public {
+        assembly {
+            // push destination then amount for the TRANSFER (0xa0) opcode
+            let d := dest
+            let a := amount
+            // the host interprets 0xa0 as a transfer from this contract
+            // no value is returned other than success (ignored here)
+            mstore(0x0, d)
+            mstore(0x20, a)
+            pop(call(gas(), 0xa0, 0, 0x0, 0x40, 0, 0))
+        }
+    }
+}
+```
+
+Calling `payout` moves the requested `amount` from the contract balance to the
+`dest` contract.
+
+Alternatively you can use Solidity's standard `call` mechanism to forward coins
+from a contract to any address. The following helper checks the contract's
+balance and sends the requested amount:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleTreasury {
+    function transferCoins(address payable _to, uint256 _amount) public {
+        require(address(this).balance >= _amount, "Insufficient ether balance in contract");
+        (bool sent, ) = _to.call{value: _amount}("");
+        require(sent, "Failed to send Coins");
+    }
+}
+```
+
+The file you pass to `call_contract` must contain the ABI‑encoded function data in hexadecimal. Generate this using `solc --abi` along with the function signature and arguments or any Ethereum toolkit like `ethers.js`. Write the hex string without a `0x` prefix to a file next to the wallet, then reference that filename with `call_contract`.
+
+## Bulk Transfers
+
+The command‑line wallet can send payouts to many addresses at once using `bulk_transfer`. Create a text file in the wallet directory containing one destination per line:
+
+```
+etnk...address1 1.5
+etnk...address2 0.75
+etnk...address3 10
+```
+
+Invoke `bulk_transfer payouts.txt` to construct a single transaction with all of the listed outputs. Each line must provide a valid Electronero address and amount separated by whitespace. `bulk_transfer` simply feeds these pairs into the regular transfer logic.
+
 ## Supporting the project
 
 Electronero is a 100% community driven endeavor. To join community efforts, the easiest thing you can do is support the project financially. Electronero donations can be made to the Electronero donation address via the `donate` command (type `help` in the command-line wallet for details). Else, here are our dev teams addresses. The funding goes to many developers, and volunteers who contribute, they are grateful for our donations! 
@@ -168,9 +235,9 @@ library archives (`.a`).
 | libunbound   | 1.4.16        | YES      | `libunbound-dev`   | `unbound`    | `unbound-devel`   | NO       | DNS resolver   |
 | libsodium    | ?             | NO       | `libsodium-dev`    | ?            | `libsodium-devel` | NO       | libsodium      |
 | libminiupnpc | 2.0           | YES      | `libminiupnpc-dev` | `miniupnpc`  | `miniupnpc-devel` | YES      | NAT punching   |
-| libunwind    | any           | NO       | `libunwind8-dev`   | `libunwind`  | `libunwind-devel` | YES      | Stack traces   |
+| libunwind    | any           | NO       | `libunwind-dev`   | `libunwind`  | `libunwind-devel` | YES      | Stack traces   |
 | liblzma      | any           | NO       | `liblzma-dev`      | `xz`         | `xz-devel`        | YES      | For libunwind  |
-| libreadline  | 6.3.0         | NO       | `libreadline6-dev` | `readline`   | `readline-devel`  | YES      | Input editing  |
+| libreadline  | 6.3.0         | NO       | `libreadline-dev` | `readline`   | `readline-devel`  | YES      | Input editing  |
 | ldns         | 1.6.17        | NO       | `libldns-dev`      | `ldns`       | `ldns-devel`      | YES      | SSL toolkit    |
 | expat        | 1.1           | NO       | `libexpat1-dev`    | `expat`      | `expat-devel`     | YES      | XML parsing    |
 | GTest        | 1.5           | YES      | `libgtest-dev`^    | `gtest`      | `gtest-devel`     | YES      | Test suite     |
@@ -189,9 +256,9 @@ Then:
 
 [2] libnorm-dev is needed if your zmq library was built with libnorm, and not needed otherwise
 
-Install all dependencies at once on Debian/Ubuntu:
+Install all dependencies at once on Debian/Ubuntu (tested on 22.04):
 
-``` sudo apt update && sudo apt install build-essential cmake pkg-config libssl-dev libzmq3-dev libunbound-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev libldns-dev libexpat1-dev libpgm-dev qttools5-dev-tools libhidapi-dev libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-locale-dev libboost-program-options-dev libboost-regex-dev libboost-serialization-dev libboost-system-dev libboost-thread-dev ccache doxygen graphviz ```
+``` sudo apt update && sudo apt install build-essential cmake pkg-config libssl-dev libzmq3-dev libunbound-dev libsodium-dev libunwind-dev liblzma-dev libreadline-dev libldns-dev libexpat1-dev libpgm-dev qttools5-dev-tools libhidapi-dev libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-locale-dev libboost-program-options-dev libboost-regex-dev libboost-serialization-dev libboost-system-dev libboost-thread-dev ccache doxygen graphviz ```
 
 Install all dependencies at once on openSUSE:
 
@@ -525,3 +592,9 @@ config](utils/conf/electronerod.conf).
 
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
+
+When restoring a wallet from private keys or a mnemonic seed, provide the
+`--restore-height <block>` option to `electronero-wallet-cli` (or set the height
+when prompted). Starting from a recent block dramatically reduces the scanning
+time. After the wallet is created you can run `set refresh-type no-coinbase` to
+skip miner transactions for even faster synchronization.
