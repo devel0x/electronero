@@ -517,6 +517,20 @@ namespace cryptonote
     return true;
   }
   //---------------------------------------------------------------
+  bool add_stablecoin_to_tx_extra(std::vector<uint8_t>& tx_extra, uint64_t amount, uint8_t type)
+  {
+    tx_extra_field field = tx_extra_stablecoin{type, amount};
+    std::ostringstream oss;
+    binary_archive<true> ar(oss);
+    bool r = ::do_serialize(ar, field);
+    CHECK_AND_NO_ASSERT_MES_L1(r, false, "failed to serialize tx extra stablecoin");
+    std::string tx_extra_str = oss.str();
+    size_t pos = tx_extra.size();
+    tx_extra.resize(tx_extra.size() + tx_extra_str.size());
+    memcpy(&tx_extra[pos], tx_extra_str.data(), tx_extra_str.size());
+    return true;
+  }
+  //---------------------------------------------------------------
   bool remove_field_from_tx_extra(std::vector<uint8_t>& tx_extra, const std::type_info &type)
   {
     if (tx_extra.empty())

@@ -2882,6 +2882,21 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
 
   crypto::hash tx_prefix_hash = get_transaction_prefix_hash(tx);
 
+  std::vector<tx_extra_field> extra_fields;
+  if (parse_tx_extra(tx.extra, extra_fields))
+  {
+    tx_extra_stablecoin sc;
+    if (find_tx_extra_field_by_type(extra_fields, sc))
+    {
+      if (sc.amount == 0)
+      {
+        MERROR("Stablecoin amount is zero");
+        tvc.m_verifivation_failed = true;
+        return false;
+      }
+    }
+  }
+
   const uint8_t hf_version = m_hardfork->get_current_version();
 
   // from hard fork 2, we require mixin at least 2 unless one output cannot mix with 2 others
