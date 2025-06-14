@@ -184,7 +184,8 @@ namespace config
 {
   uint64_t const DEFAULT_FEE_ATOMIC_XMR_PER_KB = 5;
   uint8_t const FEE_CALCULATION_MAX_RETRIES = 10;
-  uint64_t const DEFAULT_DUST_THRESHOLD = ((uint64_t)5000); // 
+  uint64_t const DEFAULT_DUST_THRESHOLD = ((uint64_t)5000); //
+  uint64_t const EVM_DEPLOY_FEE_PER_BYTE = 10; // fee in atomic units per byte of contract bytecode
   uint64_t const BASE_REWARD_CLAMP_THRESHOLD = ((uint64_t)100000000); // pow(10, 8)
   std::string const P2P_REMOTE_DEBUG_TRUSTED_PUB_KEY = "0000000000000000000000000000000000000000000000000000000000000000";
 

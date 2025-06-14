@@ -57,6 +57,7 @@
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "mnemonics/electrum-words.h"
+#include "cryptonote_config.h"
 #include "rapidjson/document.h"
 #include "common/json_util.h"
 #include "ringct/rctSigs.h"
@@ -306,6 +307,28 @@ namespace
         return refresh_type_names[n].name;
     }
     return "invalid";
+  }
+
+  bool compile_solidity(const std::string& file, std::string& hex)
+  {
+    std::string cmd = "solc --optimize --bin \"" + file + "\" 2>/dev/null";
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe)
+      return false;
+    char buffer[256];
+    std::string last_line;
+    while (fgets(buffer, sizeof(buffer), pipe))
+    {
+      std::string line = buffer;
+      boost::algorithm::trim(line);
+      if (!line.empty())
+        last_line = line;
+    }
+    int status = pclose(pipe);
+    if (status != 0 || last_line.empty())
+      return false;
+    hex = last_line;
+    return true;
   }
 
   std::string get_version_string(uint32_t version)
@@ -1579,10 +1602,122 @@ bool simple_wallet::save_known_rings(const std::vector<std::string> &args)
   }
   return true;
 }
-bool simple_wallet::version(const std::vector<std::string> &args)		
-{		
-  message_writer() << "Electronero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";		
-  return true;		
+bool simple_wallet::version(const std::vector<std::string> &args)
+{
+  message_writer() << "Electronero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";
+  return true;
+}
+
+  bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
+  {
+    if (args.size() != 1)
+    {
+      fail_msg_writer() << tr("usage: deploy_contract <file>");
+      return true;
+    }
+  if (!try_connect_to_daemon())
+    return true;
+
+  const std::string account = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  // contract files live alongside the wallet, so form the path relative to the wallet file
+  const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[0];
+  std::string data;
+  if (file_path.extension() == ".sol")
+  {
+    if (!compile_solidity(file_path.string(), data))
+    {
+      fail_msg_writer() << tr("failed to compile solidity contract") << ' ' << file_path.string();
+      return true;
+    }
+  }
+  else if (!epee::file_io_utils::load_file_to_string(file_path.string(), data))
+  {
+    fail_msg_writer() << tr("failed to read contract file") << ' ' << file_path.string();
+    return true;
+  }
+
+  COMMAND_RPC_DEPLOY_CONTRACT::request req;
+  COMMAND_RPC_DEPLOY_CONTRACT::response res;
+  req.account = account;
+  req.bytecode = data;
+  const uint64_t byte_size = data.size() / 2; // hex string represents two chars per byte
+  req.fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
+  bool r = m_wallet->invoke_http_json("/deploy_contract", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Contract deployed");
+  else
+    fail_msg_writer() << tr("failed to deploy contract: ") << err;
+  return true;
+}
+
+bool simple_wallet::call_contract(const std::vector<std::string>& args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: call_contract <address> <file>");
+    return true;
+  }
+  if (!try_connect_to_daemon())
+    return true;
+
+  const std::string account = args[0];
+  // input data is loaded from a file residing next to the wallet.
+  // The file should contain a hex string with ABI encoded function data,
+  // such as produced by solc or other Ethereum tooling.
+  const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[1];
+  std::string data;
+  if (!epee::file_io_utils::load_file_to_string(file_path.string(), data))
+  {
+    fail_msg_writer() << tr("failed to read input file") << ' ' << file_path.string();
+    return true;
+  }
+
+  COMMAND_RPC_CALL_CONTRACT::request req;
+  COMMAND_RPC_CALL_CONTRACT::response res;
+  req.account = account;
+  req.data = data;
+  bool r = m_wallet->invoke_http_json("/call_contract", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Contract returned: ") << res.result;
+  else
+    fail_msg_writer() << tr("failed to call contract: ") << err;
+  return true;
+}
+
+bool simple_wallet::compile_contract(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: compile_contract <file.sol>");
+    return true;
+  }
+
+  const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[0];
+  if (!boost::filesystem::exists(file_path))
+  {
+    fail_msg_writer() << tr("file not found") << ' ' << file_path.string();
+    return true;
+  }
+
+  std::string hex;
+  if (!compile_solidity(file_path.string(), hex))
+  {
+    fail_msg_writer() << tr("failed to compile solidity contract") << ' ' << file_path.string();
+    return true;
+  }
+
+  boost::filesystem::path out_path = file_path;
+  out_path.replace_extension(".bin");
+  if (!epee::file_io_utils::save_string_to_file(out_path.string(), hex))
+  {
+    fail_msg_writer() << tr("failed to write output file") << ' ' << out_path.string();
+    return true;
+  }
+
+  success_msg_writer() << tr("Wrote bytecode to") << ' ' << out_path.string();
+  return true;
 }
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
@@ -2342,10 +2477,22 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::blackballed, this, _1),
                            tr("blackballed <output public key>"),
                            tr("Checks whether an output is blackballed"));
-  m_cmd_binder.set_handler("version",		
-	                   boost::bind(&simple_wallet::version, this, _1),		
-	                   tr("version"),		
-	                   tr("Returns version information"));
+  m_cmd_binder.set_handler("compile_contract",
+                           boost::bind(&simple_wallet::compile_contract, this, _1),
+                           tr("compile_contract <file.sol>"),
+                           tr("Compile a Solidity file in the wallet directory to <file>.bin"));
+  m_cmd_binder.set_handler("deploy_contract",
+                           boost::bind(&simple_wallet::deploy_contract, this, _1),
+                           tr("deploy_contract <file>"),
+                           tr("Deploy a smart contract from <file> located in the wallet directory"));
+  m_cmd_binder.set_handler("call_contract",
+                           boost::bind(&simple_wallet::call_contract, this, _1),
+                           tr("call_contract <address> <file>"),
+                           tr("Call deployed contract at <address> with input from <file>"));
+  m_cmd_binder.set_handler("version",
+                           boost::bind(&simple_wallet::version, this, _1),
+                           tr("version"),
+                           tr("Returns version information"));
   m_cmd_binder.set_handler("help",
                            boost::bind(&simple_wallet::help, this, _1),
                            tr("help [<command>]"),
@@ -3250,6 +3397,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3341,6 +3491,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3386,6 +3539,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3420,6 +3576,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
 
   if (!m_subaddress_lookahead.empty())
   {

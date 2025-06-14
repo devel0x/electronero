@@ -2250,4 +2250,54 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_DEPLOY_CONTRACT
+  {
+    struct request
+    {
+      std::string account;
+      std::string bytecode;
+      uint64_t fee;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(account)
+        KV_SERIALIZE(bytecode)
+        KV_SERIALIZE(fee)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_CALL_CONTRACT
+  {
+    struct request
+    {
+      std::string account;
+      std::string data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(account)
+        KV_SERIALIZE(data)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      int64_t result;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(result)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
 }
