@@ -2039,6 +2039,22 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::show_balance, this, _1),
                            tr("balance [detail]"),
                            tr("Show the wallet's balance of the currently selected account."));
+  m_cmd_binder.set_handler("stablecoin_balance",
+                           boost::bind(&simple_wallet::show_stablecoin_balance, this, _1),
+                           tr("stablecoin_balance"),
+                           tr("Show the wallet's stablecoin balance."));
+  m_cmd_binder.set_handler("stablecoin_mint",
+                           boost::bind(&simple_wallet::stablecoin_mint, this, _1),
+                           tr("stablecoin_mint <amount>"),
+                           tr("Mint stablecoin to wallet."));
+  m_cmd_binder.set_handler("stablecoin_burn",
+                           boost::bind(&simple_wallet::stablecoin_burn, this, _1),
+                           tr("stablecoin_burn <amount>"),
+                           tr("Burn stablecoin from wallet."));
+  m_cmd_binder.set_handler("stablecoin_transfer",
+                           boost::bind(&simple_wallet::stablecoin_transfer, this, _1),
+                           tr("stablecoin_transfer <address> <amount>"),
+                           tr("Transfer stablecoin to an address."));
   m_cmd_binder.set_handler("incoming_transfers",
                            boost::bind(&simple_wallet::show_incoming_transfers, this, _1),
                            tr("incoming_transfers [available|unavailable] [verbose] [index=<N1>[,<N2>[,...]]]"),
@@ -3936,6 +3952,66 @@ bool simple_wallet::show_balance(const std::vector<std::string>& args/* = std::v
   }
   LOCK_IDLE_SCOPE();
   show_balance_unlocked(args.size() == 1);
+  return true;
+}
+//--------------------------------------------------------------------------------------
+bool simple_wallet::show_stablecoin_balance(const std::vector<std::string>& args)
+{
+  if (!args.empty())
+  {
+    fail_msg_writer() << tr("usage: stablecoin_balance");
+    return true;
+  }
+  LOCK_IDLE_SCOPE();
+  success_msg_writer() << tr("Stablecoin balance: ") << print_money(m_wallet->stablecoin_balance());
+  return true;
+}
+//--------------------------------------------------------------------------------------
+bool simple_wallet::stablecoin_mint(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: stablecoin_mint <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  try { amount = boost::lexical_cast<uint64_t>(args[0]); } catch(...) { fail_msg_writer() << tr("Invalid amount"); return true; }
+  m_wallet->mint_stablecoin(amount);
+  success_msg_writer() << tr("Minted stablecoin");
+  return true;
+}
+//--------------------------------------------------------------------------------------
+bool simple_wallet::stablecoin_burn(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: stablecoin_burn <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  try { amount = boost::lexical_cast<uint64_t>(args[0]); } catch(...) { fail_msg_writer() << tr("Invalid amount"); return true; }
+  m_wallet->burn_stablecoin(amount);
+  success_msg_writer() << tr("Burned stablecoin");
+  return true;
+}
+//------------------------------------------------------------------------------------------------------------------------------
+bool simple_wallet::stablecoin_transfer(const std::vector<std::string>& args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: stablecoin_transfer <address> <amount>");
+    return true;
+  }
+  cryptonote::address_parse_info info;
+  if (!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), args[0]))
+  {
+    fail_msg_writer() << tr("invalid address");
+    return true;
+  }
+  uint64_t amount = 0;
+  try { amount = boost::lexical_cast<uint64_t>(args[1]); } catch(...) { fail_msg_writer() << tr("Invalid amount"); return true; }
+  m_wallet->transfer_stablecoin(info.address, info.is_subaddress, amount);
+  success_msg_writer() << tr("Stablecoin transfer sent");
   return true;
 }
 //----------------------------------------------------------------------------------------------------

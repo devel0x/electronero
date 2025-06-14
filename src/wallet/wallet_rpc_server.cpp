@@ -2899,6 +2899,47 @@ namespace tools
 
     return true;
   }
+  //----------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_get_stablecoin_balance(const wallet_rpc::COMMAND_RPC_GET_STABLECOIN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_GET_STABLECOIN_BALANCE::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    res.balance = m_wallet->stablecoin_balance();
+    return true;
+  }
+  //----------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_mint_stablecoin(const wallet_rpc::COMMAND_RPC_MINT_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_MINT_STABLECOIN::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    m_wallet->mint_stablecoin(req.amount);
+    return true;
+  }
+  //----------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_burn_stablecoin(const wallet_rpc::COMMAND_RPC_BURN_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_BURN_STABLECOIN::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    m_wallet->burn_stablecoin(req.amount);
+    return true;
+  }
+  //--------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_transfer_stablecoin(const wallet_rpc::COMMAND_RPC_TRANSFER_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_TRANSFER_STABLECOIN::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    cryptonote::address_parse_info info;
+    if (!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), req.address))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+      er.message = "Invalid address";
+      return false;
+    }
+    try {
+      m_wallet->transfer_stablecoin(info.address, info.is_subaddress, req.amount);
+    } catch (const std::exception &e) {
+      er.code = WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR;
+      er.message = e.what();
+      return false;
+    }
+    return true;
+  }
   //------------------------------------------------------------------------------------------------------------------------------
 }
 
