@@ -34,6 +34,7 @@ using namespace epee;
 
 #include "core_rpc_server.h"
 #include "common/command_line.h"
+#include "evm/evm.h"
 #include "common/updates.h"
 #include "common/download.h"
 #include "common/util.h"
@@ -2156,6 +2157,51 @@ namespace cryptonote
       return false;
     }
 
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_deploy_contract(const COMMAND_RPC_DEPLOY_CONTRACT::request& req, COMMAND_RPC_DEPLOY_CONTRACT::response& res)
+  {
+    std::string bin;
+    if (!epee::string_tools::parse_hexstr_to_binbuff(req.bytecode, bin))
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    std::vector<uint8_t> code(bin.begin(), bin.end());
+    const uint64_t required_fee = code.size() * config::EVM_DEPLOY_FEE_PER_BYTE;
+    if (req.fee < required_fee)
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    m_core.get_evm().deploy(req.account, code);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
+  {
+    std::string bin;
+    if (!epee::string_tools::parse_hexstr_to_binbuff(req.data, bin))
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    std::vector<uint8_t> data(bin.begin(), bin.end());
+    if (req.write)
+    {
+      const uint64_t required_fee = data.size() * config::EVM_CALL_FEE_PER_BYTE;
+      if (req.fee < required_fee)
+      {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+    }
+    res.result = m_core.get_evm().call(req.account, data);
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }

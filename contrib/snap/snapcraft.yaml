@@ -53,7 +53,7 @@ parts:
             - libminiupnpc-dev
             - libldns-dev
             - libexpat1-dev
-            - libreadline6-dev
+            - libreadline-dev
             - bison
             - doxygen
             - graphviz
