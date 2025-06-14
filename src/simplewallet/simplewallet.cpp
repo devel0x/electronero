@@ -3443,9 +3443,6 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
-  if (m_restoring)
-    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
-
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3537,9 +3534,6 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
-  if (m_restoring)
-    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
-
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3585,9 +3579,6 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
-  if (m_restoring)
-    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
-
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3622,9 +3613,6 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
-
-  if (m_restoring)
-    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
 
   if (!m_subaddress_lookahead.empty())
   {
