@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
-apt-get install build-essential cmake pkg-config libzmq3-dev libssl-dev libsodium-dev libunbound-dev libminiupnpc-dev libunwind8-dev libpcsclite-dev liblzma-dev libreadline6-dev libldns-dev libexpat1-dev libgtest-dev doxygen graphviz
-echo "Dependencies installation complete"
-echo "Download Submodules"
+set -e
+
+apt-get update
+apt-get install --yes \
+  build-essential cmake pkg-config libssl-dev libzmq3-dev \
+  libunbound-dev libsodium-dev libunwind-dev liblzma-dev \
+  libminiupnpc-dev libpcsclite-dev libreadline-dev libldns-dev \
+  libexpat1-dev libpgm-dev qttools5-dev-tools libhidapi-dev \
+  libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev \
+  libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev \
+  libboost-locale-dev libboost-program-options-dev libboost-regex-dev \
+  libboost-serialization-dev libboost-system-dev libboost-thread-dev \
+  libgtest-dev ccache doxygen graphviz
+
+git submodule update --init --recursive
+
+echo "Dependencies and submodules ready"
 
