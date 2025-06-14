@@ -31,6 +31,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string.hpp>
+#include <sstream>
 #include <cstdint>
 #include "include_base_utils.h"
 using namespace epee;
@@ -882,6 +883,77 @@ namespace tools
       handle_rpc_exception(std::current_exception(), er, WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR);
       return false;
     }
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_bulk_transfer(const wallet_rpc::COMMAND_RPC_BULK_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_BULK_TRANSFER::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_wallet->restricted())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+
+    std::string path = m_wallet_dir + "/" + req.filename;
+    std::string content;
+    if (!epee::file_io_utils::load_file_to_string(path, content))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+      er.message = "failed to read input file";
+      return false;
+    }
+
+    std::istringstream iss(content);
+    std::list<wallet_rpc::transfer_destination> destinations;
+    std::string address, amount_str;
+    while (iss >> address >> amount_str)
+    {
+      wallet_rpc::transfer_destination d;
+      d.address = address;
+      if (!cryptonote::parse_amount(d.amount, amount_str))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_WRONG_AMOUNT;
+        er.message = "invalid amount in file";
+        return false;
+      }
+      destinations.push_back(d);
+    }
+
+    if (destinations.empty())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_ZERO_DESTINATION;
+      er.message = "no transfers found in file";
+      return false;
+    }
+
+    wallet_rpc::COMMAND_RPC_TRANSFER::request treq;
+    treq.destinations = destinations;
+    treq.account_index = req.account_index;
+    treq.subaddr_indices = req.subaddr_indices;
+    treq.priority = req.priority;
+    treq.mixin = req.mixin;
+    treq.ring_size = req.ring_size;
+    treq.unlock_time = req.unlock_time;
+    treq.payment_id = req.payment_id;
+    treq.get_tx_key = req.get_tx_key;
+    treq.do_not_relay = req.do_not_relay;
+    treq.get_tx_hex = req.get_tx_hex;
+    treq.get_tx_metadata = req.get_tx_metadata;
+
+    wallet_rpc::COMMAND_RPC_TRANSFER::response tres;
+    if (!on_transfer(treq, tres, er))
+      return false;
+
+    res.tx_hash = tres.tx_hash;
+    res.tx_key = tres.tx_key;
+    res.amount_keys = tres.amount_keys;
+    res.amount = tres.amount;
+    res.fee = tres.fee;
+    res.tx_blob = tres.tx_blob;
+    res.tx_metadata = tres.tx_metadata;
+    res.multisig_txset = tres.multisig_txset;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
