@@ -2262,7 +2262,9 @@ namespace cryptonote
           return false;
         }
       }
-      res.result = m_core.get_evm().call(req.account, data);
+      uint64_t height = m_core.get_current_blockchain_height();
+      uint64_t ts = static_cast<uint64_t>(time(nullptr));
+      res.result = m_core.get_evm().call(req.account, data, height, ts);
       res.status = CORE_RPC_STATUS_OK;
       return true;
     }
@@ -2272,6 +2274,27 @@ namespace cryptonote
   bool core_rpc_server::on_get_contract_balance(const COMMAND_RPC_GET_CONTRACT_BALANCE::request& req, COMMAND_RPC_GET_CONTRACT_BALANCE::response& res)
   {
     res.balance = m_core.get_evm().balance_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_owner(const COMMAND_RPC_GET_CONTRACT_OWNER::request& req, COMMAND_RPC_GET_CONTRACT_OWNER::response& res)
+  {
+    res.owner = m_core.get_evm().owner_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_storage(const COMMAND_RPC_GET_CONTRACT_STORAGE::request& req, COMMAND_RPC_GET_CONTRACT_STORAGE::response& res)
+  {
+    res.value = m_core.get_evm().storage_at(req.address, req.key);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_logs(const COMMAND_RPC_GET_CONTRACT_LOGS::request& req, COMMAND_RPC_GET_CONTRACT_LOGS::response& res)
+  {
+    res.logs = m_core.get_evm().logs_of(req.address);
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }

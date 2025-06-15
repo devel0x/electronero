@@ -77,9 +77,11 @@ Electronero is a private, secure, untraceable, decentralised digital currency. Y
 Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file> [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, and the `REVERT` opcode for greater compatibility with Solidity 0.8.
 
 Deploying a contract incurs a fee proportional to its bytecode size. The wallet calculates this automatically using a rate of 10 atomic units per byte.
-Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free.
+Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free. Half of every EVM fee is forwarded to a governance address configured in `cryptonote_config.h`.
 
 Every contract maintains its own balance tracked by the EVM. You can deposit coins with `call_contract <address> deposit:<amount> write`. Transfers should normally be performed by contract code. The built-in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
+
+Regular Solidity code works on the embedded EVM. Inline `assembly` is only required for direct access to custom opcodes.
 
 To send coins from one contract directly to another in Solidity you may invoke
 the EVM transfer opcode from inline assembly. This opcode takes the destination
@@ -125,7 +127,109 @@ contract SimpleTreasury {
 }
 ```
 
+Two additional opcodes help contracts introspect their state. `ADDRESS` (0x30)
+pushes the executing contract's numeric identifier onto the stack, while
+`BALANCE` (0x31) accepts a contract id and pushes its balance. For example a
+contract can check its own balance in assembly:
+
+```solidity
+contract BalanceCheck {
+    function getBalance() public view returns (uint256) {
+        assembly {
+            // ADDRESS (0x30) leaves this contract's id on the stack
+            0x30
+            // BALANCE (0x31) consumes the id and pushes its balance
+            0x31
+            return(0, 32)
+        }
+    }
+}
+```
+
+Block metadata is also exposed through `TIMESTAMP` (0x42) and `NUMBER` (0x43).
+`TIMESTAMP` pushes the current block or RPC time in seconds and `NUMBER` pushes
+the blockchain height. A contract can query these values in assembly:
+
+```solidity
+contract BlockInfo {
+    function current() public view returns (uint256 ts, uint256 height) {
+        assembly {
+            0x42 // TIMESTAMP
+            0x43 // NUMBER
+            return(0, 64)
+        }
+    }
+}
+```
+
+Contracts can be destroyed to reclaim their remaining balance. The EVM now
+supports the `SELFDESTRUCT` (0xff) opcode which removes a contract and transfers
+its funds to another contract address. In Solidity you may use the built-in
+`selfdestruct` function:
+
+```solidity
+pragma solidity ^0.8.0;
+
+contract OneShot {
+    function burn(address payable to) public {
+        selfdestruct(to);
+    }
+}
+```
+
+The `LOG` (0xa1) opcode lets a contract record numeric values in an internal
+log array. These entries can be listed later:
+
+```solidity
+contract Notifier {
+    function log(uint256 id) public {
+        assembly {
+            // PUSH1 <id> followed by LOG
+            0x60
+            id
+            0xa1
+        }
+    }
+}
+```
+
+Run `contract_logs <address>` or call `/get_contract_logs` to dump the stored
+numbers.
+
 The file you pass to `call_contract` must contain the ABI‑encoded function data in hexadecimal. Generate this using `solc --abi` along with the function signature and arguments or any Ethereum toolkit like `ethers.js`. Write the hex string without a `0x` prefix to a file next to the wallet, then reference that filename with `call_contract`.
+Input data can be examined from assembly using `CALLDATASIZE` (0x36) and `CALLDATALOAD` (0x35). `CALLDATASIZE` returns the number of bytes supplied to the call while `CALLDATALOAD` reads up to eight bytes starting at a given offset:
+
+```solidity
+contract Args {
+    function first() public pure returns (uint64) {
+        assembly {
+            0x60 0x00 0x35
+            0xf3
+        }
+    }
+}
+```
+
+
+To inspect a value stored by a contract, use `contract_storage <address> <key>`.
+The key is a numeric index in the contract's storage map and the command returns
+the associated integer value. The same information is available remotely via the
+`/get_contract_storage` RPC method:
+
+```bash
+electronero-wallet-cli contract_storage c1 0
+```
+
+To find out who deployed a contract, use `contract_owner <address>`. This prints
+the account that originally created it and can also be fetched remotely via the
+`/get_contract_owner` RPC method:
+
+```bash
+electronero-wallet-cli contract_owner c1
+```
+
+Retrieve numeric events emitted by a contract with `contract_logs <address>` or by calling the `/get_contract_logs` RPC endpoint.
+Additional Solidity contract examples can be found in [SOLIDITY.md](SOLIDITY.md).
 
 ## Bulk Transfers
 
@@ -136,6 +240,9 @@ etnk...address1 1.5
 etnk...address2 0.75
 etnk...address3 10
 ```
+
+Blank lines and any line beginning with `#` or `;` are ignored. This allows
+annotating payout files with comments or temporarily disabling entries.
 
 Invoke `bulk_transfer payouts.txt` to construct a single transaction with all of the listed outputs. Each line must provide a valid Electronero address and amount separated by whitespace. `bulk_transfer` simply feeds these pairs into the regular transfer logic.
 

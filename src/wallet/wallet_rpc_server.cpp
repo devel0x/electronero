@@ -907,9 +907,16 @@ namespace tools
 
     std::istringstream iss(content);
     std::list<wallet_rpc::transfer_destination> destinations;
-    std::string address, amount_str;
-    while (iss >> address >> amount_str)
+    std::string line;
+    while (std::getline(iss, line))
     {
+      boost::algorithm::trim(line);
+      if (line.empty() || line[0] == '#' || line[0] == ';')
+        continue;
+      std::istringstream line_ss(line);
+      std::string address, amount_str;
+      if (!(line_ss >> address >> amount_str))
+        continue;
       wallet_rpc::transfer_destination d;
       d.address = address;
       if (!cryptonote::parse_amount(d.amount, amount_str))
@@ -2994,12 +3001,23 @@ namespace tools
 
     const uint64_t byte_size = req.bytecode.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
+    const uint64_t gov_fee = evm_fee / 2;
+    const uint64_t net_fee = evm_fee - gov_fee;
 
     cryptonote::tx_destination_entry de;
     de.addr = m_wallet->get_account().get_keys().m_account_address;
     de.amount = 1;
     de.is_subaddress = false;
     std::vector<cryptonote::tx_destination_entry> dsts{de};
+    cryptonote::address_parse_info gov_info;
+    if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+    {
+      cryptonote::tx_destination_entry gov;
+      gov.addr = gov_info.address;
+      gov.amount = gov_fee;
+      gov.is_subaddress = gov_info.is_subaddress;
+      dsts.push_back(gov);
+    }
 
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
     uint32_t priority = m_wallet->adjust_priority(0);
@@ -3007,7 +3025,7 @@ namespace tools
 
     std::vector<wallet2::pending_tx> ptx_vector;
     try {
-      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, evm_fee);
+      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, net_fee);
     } catch (const std::exception &e) {
       er.code = WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR;
       er.message = std::string("failed to create transaction: ") + e.what();
@@ -3026,7 +3044,7 @@ namespace tools
 
     crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     res.tx_hash = epee::string_tools::pod_to_hex(txid);
-    res.fee = ptx_vector[0].fee + evm_fee;
+    res.fee = ptx_vector[0].fee + net_fee;
     if (req.get_tx_hex)
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
@@ -3069,6 +3087,8 @@ namespace tools
     bool text_op = boost::algorithm::starts_with(req.data, "deposit:") || boost::algorithm::starts_with(req.data, "transfer:");
     const uint64_t byte_size = text_op ? req.data.size() : req.data.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
+    const uint64_t gov_fee = evm_fee / 2;
+    const uint64_t net_fee = evm_fee - gov_fee;
 
     std::vector<uint8_t> extra;
     std::string extra_nonce = std::string("evm:call:") + req.account + ":" + req.data;
@@ -3084,6 +3104,15 @@ namespace tools
     de.amount = 1;
     de.is_subaddress = false;
     std::vector<cryptonote::tx_destination_entry> dsts{de};
+    cryptonote::address_parse_info gov_info;
+    if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+    {
+      cryptonote::tx_destination_entry gov;
+      gov.addr = gov_info.address;
+      gov.amount = gov_fee;
+      gov.is_subaddress = gov_info.is_subaddress;
+      dsts.push_back(gov);
+    }
 
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
     uint32_t priority = m_wallet->adjust_priority(0);
@@ -3091,7 +3120,7 @@ namespace tools
 
     std::vector<wallet2::pending_tx> ptx_vector;
     try {
-      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, evm_fee);
+      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, net_fee);
     } catch (const std::exception &e) {
       er.code = WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR;
       er.message = std::string("failed to create transaction: ") + e.what();
@@ -3110,7 +3139,7 @@ namespace tools
 
     crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     res.tx_hash = epee::string_tools::pod_to_hex(txid);
-    res.fee = ptx_vector[0].fee + evm_fee;
+    res.fee = ptx_vector[0].fee + net_fee;
     if (req.get_tx_hex)
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
