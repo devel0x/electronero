@@ -184,10 +184,45 @@ namespace cryptonote
   {
     std::string bytecode;
   
-    BEGIN_SERIALIZE()
-      FIELD(bytecode)
-    END_SERIALIZE()
+    struct serialize_helper
+    {
+      tx_extra_evm_bytecode &self;
+      serialize_helper(tx_extra_evm_bytecode &self_) : self(self_) {}
+  
+      BEGIN_SERIALIZE()
+        FIELD(self.bytecode)
+      END_SERIALIZE()
+    };
+  
+    // load
+    template <template <bool> class Archive>
+    bool do_serialize(Archive<false> &ar)
+    {
+      std::string field;
+      if (!::do_serialize(ar, field))
+        return false;
+  
+      std::istringstream iss(field);
+      binary_archive<false> iar(iss);
+      serialize_helper helper(*this);
+      return ::serialization::serialize(iar, helper);
+    }
+  
+    // store
+    template <template <bool> class Archive>
+    bool do_serialize(Archive<true> &ar)
+    {
+      std::ostringstream oss;
+      binary_archive<true> oar(oss);
+      serialize_helper helper(*this);
+      if (!::do_serialize(oar, helper))
+        return false;
+  
+      std::string field = oss.str();
+      return ::serialization::serialize(ar, field);
+    }
   };
+
 
   // tx_extra_field format, except tx_extra_padding and tx_extra_pub_key:
   //   varint tag;
