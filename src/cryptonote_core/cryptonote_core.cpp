@@ -1581,7 +1581,9 @@ namespace cryptonote
       std::string bin;
       epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
       std::vector<uint8_t> data(bin.begin(), bin.end());
-      m_evm.call(account, data);
+      uint64_t height = m_blockchain_storage.get_current_blockchain_height();
+      uint64_t ts = static_cast<uint64_t>(time(nullptr));
+      m_evm.call(account, data, height, ts);
     }
   }
   //-----------------------------------------------------------------------------------------------
