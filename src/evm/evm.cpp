@@ -189,6 +189,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         stack.push_back(b == 0 ? 0 : a / b);
         break;
       }
+      case 0x14: { // EQ
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t b = stack.back(); stack.pop_back();
+        uint64_t a = stack.back(); stack.pop_back();
+        stack.push_back(a == b);
+        break;
+      }
       case 0x35: { // CALLDATALOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t off = stack.back(); stack.pop_back();

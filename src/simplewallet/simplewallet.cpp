@@ -1760,7 +1760,8 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
     cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::request rpc_req;
     cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::response rpc_res;
-    rpc_req.account = epee::string_tools::pod_to_hex(txid);
+    // use the wallet address as the contract owner so it can be queried later
+    rpc_req.account = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
     rpc_req.bytecode = data;
     rpc_req.fee = evm_fee+net_fee;
     bool r = m_wallet->invoke_http_json("/deploy_contract", rpc_req, rpc_res);
@@ -1891,6 +1892,115 @@ bool simple_wallet::contract_balance(const std::vector<std::string>& args)
     success_msg_writer() << tr("Balance: ") << print_money(res.balance);
   else
     fail_msg_writer() << tr("failed to get contract balance: ") << err;
+  return true;
+}
+
+namespace
+{
+  // deterministically derive a deposit address from a contract id so funds are
+  // removed from circulation yet traceable to the contract
+  cryptonote::account_public_address contract_deposit_address(const std::string &addr)
+  {
+    crypto::hash h1;
+    crypto::cn_fast_hash(addr.data(), addr.size(), h1);
+    crypto::hash h2;
+    crypto::cn_fast_hash(&h1, sizeof(h1), h2);
+    cryptonote::account_public_address out;
+    memcpy(&out.m_spend_public_key, &h1, sizeof(crypto::public_key));
+    memcpy(&out.m_view_public_key, &h2, sizeof(crypto::public_key));
+    return out;
+  }
+}
+
+bool simple_wallet::deposit_contract(const std::vector<std::string>& args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: deposit_contract <address> <amount>");
+    return true;
+  }
+  if (!try_connect_to_daemon())
+    return true;
+
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+
+  std::string data = std::string("deposit:") + std::to_string(amount);
+  const uint64_t evm_fee = data.size() * config::EVM_CALL_FEE_PER_BYTE;
+
+  std::vector<uint8_t> extra;
+  std::string extra_nonce = std::string("evm:call:") + args[0] + ":" + data;
+  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+  {
+    fail_msg_writer() << tr("failed to construct tx extra");
+    return true;
+  }
+
+  cryptonote::tx_destination_entry self_de;
+  self_de.addr = m_wallet->get_account().get_keys().m_account_address;
+  self_de.amount = 1;
+  self_de.is_subaddress = false;
+
+  cryptonote::tx_destination_entry gov_de;
+  cryptonote::address_parse_info gov_info;
+  gov_de.amount = evm_fee;
+  if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+  {
+    gov_de.addr = gov_info.address;
+    gov_de.is_subaddress = gov_info.is_subaddress;
+  }
+
+  cryptonote::tx_destination_entry dep_de;
+  dep_de.addr = contract_deposit_address(args[0]);
+  dep_de.amount = amount;
+  dep_de.is_subaddress = false;
+
+  std::vector<cryptonote::tx_destination_entry> dsts{self_de, gov_de, dep_de};
+
+  size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  uint32_t priority = m_wallet->adjust_priority(0);
+  std::set<uint32_t> subaddr_indices;
+  std::vector<tools::wallet2::pending_tx> ptx_vector;
+  try {
+    ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
+                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, 0);
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("failed to create transaction: ") << e.what();
+    return true;
+  }
+  if (ptx_vector.empty())
+  {
+    fail_msg_writer() << tr("No transaction created");
+    return true;
+  }
+  try {
+    m_wallet->commit_tx(ptx_vector[0]);
+    crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    success_msg_writer() << tr("Deposit transaction submitted: ") << txid;
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
+    return true;
+  }
+
+  cryptonote::COMMAND_RPC_CALL_CONTRACT::request req;
+  cryptonote::COMMAND_RPC_CALL_CONTRACT::response res;
+  req.account = args[0];
+  req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  req.data = data;
+  req.write = true;
+  req.fee = evm_fee;
+  bool r = m_wallet->invoke_http_json("/call_contract", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Deposit successful, new balance: ") << print_money(res.result);
+  else
+    fail_msg_writer() << tr("failed to deposit: ") << err;
   return true;
 }
 
@@ -2964,6 +3074,10 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::contract_balance, this, _1),
                            tr("contract_balance <address>"),
                            tr("Show the balance of a deployed smart contract"));
+  m_cmd_binder.set_handler("deposit_contract",
+                           boost::bind(&simple_wallet::deposit_contract, this, _1),
+                           tr("deposit_contract <address> <amount>"),
+                           tr("Deposit coins into a smart contract"));
   m_cmd_binder.set_handler("contract_owner",
                            boost::bind(&simple_wallet::contract_owner, this, _1),
                            tr("contract_owner <address>"),
@@ -5094,6 +5208,14 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     cryptonote::tx_destination_entry de;
     if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), local_args[i], oa_prompter))
     {
+      std::string prefix = local_args[i].substr(0, 4);
+      if (prefix == config::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX ||
+          prefix == config::testnet::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX ||
+          prefix == config::stagenet::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX)
+      {
+        fail_msg_writer() << tr("send funds to contracts with 'deposit_contract <address> <amount>'");
+        return true;
+      }
       fail_msg_writer() << tr("failed to parse address");
       return true;
     }
