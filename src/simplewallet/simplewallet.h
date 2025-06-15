@@ -223,6 +223,7 @@ namespace cryptonote
     bool deploy_contract(const std::vector<std::string>& args);
     bool call_contract(const std::vector<std::string>& args);
     bool contract_balance(const std::vector<std::string>& args);
+    bool deposit_contract(const std::vector<std::string>& args);
     bool contract_owner(const std::vector<std::string>& args);
     bool contract_storage(const std::vector<std::string>& args);
     bool contract_logs(const std::vector<std::string>& args);
