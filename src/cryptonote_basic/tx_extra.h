@@ -201,26 +201,27 @@ namespace cryptonote
       std::string field;
       if (!::do_serialize(ar, field))
         return false;
-  
+    
       std::istringstream iss(field);
       binary_archive<false> iar(iss);
       serialize_helper helper(*this);
       return ::serialization::serialize(iar, helper);
     }
-  
-    // store
+    
+    // store - MUST BE CONST
     template <template <bool> class Archive>
-    bool do_serialize(Archive<true> &ar)
+    bool do_serialize(Archive<true> &ar) const
     {
       std::ostringstream oss;
       binary_archive<true> oar(oss);
-      serialize_helper helper(*this);
+      serialize_helper helper(const_cast<tx_extra_evm_bytecode &>(*this)); // cast needed because helper takes non-const
       if (!::do_serialize(oar, helper))
         return false;
-  
+    
       std::string field = oss.str();
       return ::serialization::serialize(ar, field);
     }
+
   };
 
 
