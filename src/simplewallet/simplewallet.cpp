@@ -1757,7 +1757,18 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     m_wallet->commit_tx(ptx_vector[0]);
     crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     success_msg_writer() << tr("Contract deployment transaction submitted: ") << txid;
-    success_msg_writer() << tr("Contract address will be ") << epee::string_tools::pod_to_hex(txid);
+
+    cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::request rpc_req;
+    cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::response rpc_res;
+    rpc_req.account = epee::string_tools::pod_to_hex(txid);
+    rpc_req.bytecode = data;
+    rpc_req.fee = evm_fee;
+    bool r = m_wallet->invoke_http_json("/deploy_contract", rpc_req, rpc_res);
+    std::string err = interpret_rpc_response(r, rpc_res.status);
+    if (err.empty())
+      success_msg_writer() << tr("Contract address is ") << rpc_res.address;
+    else
+      fail_msg_writer() << tr("failed to register contract: ") << err;
   }
   catch (const std::exception &e) {
     fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
