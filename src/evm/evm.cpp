@@ -43,10 +43,25 @@ uint64_t EVM::balance_of(const std::string& address) const
   return it == contracts.end() ? 0 : it->second.balance;
 }
 
+std::string EVM::owner_of(const std::string& address) const
+{
+  auto it = contracts.find(address);
+  return it == contracts.end() ? std::string() : it->second.owner;
+}
+
 bool EVM::is_owner(const std::string& contract, const std::string& address) const
 {
   auto it = contracts.find(contract);
   return it != contracts.end() && it->second.owner == address;
+}
+
+uint64_t EVM::storage_at(const std::string& address, uint64_t key) const
+{
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return 0;
+  auto jt = it->second.storage.find(key);
+  return jt == it->second.storage.end() ? 0 : jt->second;
 }
 
 int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input) {
@@ -54,10 +69,10 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input)
   if (it == contracts.end()) {
     return 0;
   }
-  return execute(it->second, input);
+  return execute(address, it->second, input);
 }
 
-int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) {
+int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& /*input*/) {
   std::vector<uint64_t> stack;
   std::unordered_map<uint64_t, uint64_t> memory;
   const auto& code = contract.code;
@@ -123,6 +138,14 @@ int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) 
         uint64_t key = stack.back(); stack.pop_back();
         uint64_t value = stack.back(); stack.pop_back();
         contract.storage[key] = value;
+        break;
+      }
+      case 0xa0: { // TRANSFER
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t dest_id = stack.back(); stack.pop_back();
+        uint64_t amount = stack.back(); stack.pop_back();
+        std::string dest = std::string("c") + std::to_string(dest_id);
+        transfer(self, dest, amount, contract.owner);
         break;
       }
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
