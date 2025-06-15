@@ -402,30 +402,130 @@ namespace cryptonote
   bool parse_tx_extra(const std::vector<uint8_t>& tx_extra, std::vector<tx_extra_field>& tx_extra_fields)
   {
     tx_extra_fields.clear();
-
-    if(tx_extra.empty())
+  
+    if (tx_extra.empty())
       return true;
-
-    std::string extra_str(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size());
-    std::istringstream iss(extra_str);
-    binary_archive<false> ar(iss);
-
-    bool eof = false;
-    while (!eof)
+  
+    size_t offset = 0;
+    while (offset < tx_extra.size())
     {
-      tx_extra_field field;
-      bool r = ::do_serialize(ar, field);
-      CHECK_AND_NO_ASSERT_MES_L1(r, false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
-      tx_extra_fields.push_back(field);
-
-      std::ios_base::iostate state = iss.rdstate();
-      eof = (EOF == iss.peek());
-      iss.clear(state);
+      uint8_t tag = tx_extra[offset++];
+      switch (tag)
+      {
+        case TX_EXTRA_TAG_PADDING:
+        {
+          size_t count = 1;
+          while (offset < tx_extra.size() && tx_extra[offset] == 0 && count <= TX_EXTRA_PADDING_MAX_COUNT)
+          {
+            ++offset;
+            ++count;
+          }
+          cryptonote::tx_extra_padding padding;
+          padding.size = count;
+          tx_extra_fields.push_back(padding);
+          break;
+        }
+  
+        case TX_EXTRA_TAG_PUBKEY:
+        {
+          if (offset + sizeof(crypto::public_key) > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_pub_key pk;
+          std::memcpy(&pk.pub_key, &tx_extra[offset], sizeof(pk.pub_key));
+          offset += sizeof(pk.pub_key);
+          tx_extra_fields.push_back(pk);
+          break;
+        }
+  
+        case TX_EXTRA_NONCE:
+        {
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_nonce nonce;
+          nonce.nonce = std::string(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          offset += size;
+          tx_extra_fields.push_back(nonce);
+          break;
+        }
+  
+        case TX_EXTRA_MERGE_MINING_TAG:
+        {
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_merge_mining_tag mm_tag;
+          std::string blob(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          std::istringstream iss(blob);
+          binary_archive<false> ar(iss);
+          if (!::serialization::serialize(ar, mm_tag))
+            return false;
+          offset += size;
+          tx_extra_fields.push_back(mm_tag);
+          break;
+        }
+  
+        case TX_EXTRA_TAG_ADDITIONAL_PUBKEYS:
+        {
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_additional_pub_keys add_keys;
+          std::string blob(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          std::istringstream iss(blob);
+          binary_archive<false> ar(iss);
+          if (!::serialization::serialize(ar, add_keys))
+            return false;
+          offset += size;
+          tx_extra_fields.push_back(add_keys);
+          break;
+        }
+  
+        case TX_EXTRA_MYSTERIOUS_MINERGATE_TAG:
+        {
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_mysterious_minergate mg;
+          mg.data = std::string(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          offset += size;
+          tx_extra_fields.push_back(mg);
+          break;
+        }
+  
+        case TX_EXTRA_EVM_BYTECODE_TAG:
+        {
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_evm_bytecode evm;
+          evm.bytecode = std::string(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          offset += size;
+          tx_extra_fields.push_back(evm);
+          break;
+        }
+  
+        default:
+        {
+          MDEBUG("Unknown tx_extra tag: " << (int)tag);
+          return false;
+        }
+      }
     }
-    CHECK_AND_NO_ASSERT_MES_L1(::serialization::check_stream_state(ar), false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
-
+  
     return true;
   }
+
   //---------------------------------------------------------------
   crypto::public_key get_tx_pub_key_from_extra(const std::vector<uint8_t>& tx_extra, size_t pk_index)
   {
