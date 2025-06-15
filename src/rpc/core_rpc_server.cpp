@@ -2188,15 +2188,23 @@ namespace cryptonote
   {
     if (boost::algorithm::starts_with(req.data, "deposit:"))
     {
-      uint64_t amount = std::stoull(req.data.substr(8));
-      if (req.write)
+      if (!req.write)
       {
-        const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
-        if (req.fee < required_fee)
-        {
-          res.status = CORE_RPC_STATUS_FAILED;
-          return false;
-        }
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+      uint64_t amount = 0;
+      try {
+        amount = std::stoull(req.data.substr(8));
+      } catch (const std::exception&) {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+      const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+      if (req.fee < required_fee)
+      {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
       }
       bool ok = m_core.get_evm().deposit(req.account, amount);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
@@ -2205,6 +2213,11 @@ namespace cryptonote
     }
     else if (boost::algorithm::starts_with(req.data, "transfer:"))
     {
+      if (!req.write)
+      {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
       std::string rest = req.data.substr(9);
       size_t pos = rest.find(':');
       if (pos == std::string::npos)
@@ -2213,15 +2226,18 @@ namespace cryptonote
         return false;
       }
       std::string dest = rest.substr(0, pos);
-      uint64_t amount = std::stoull(rest.substr(pos + 1));
-      if (req.write)
+      uint64_t amount = 0;
+      try {
+        amount = std::stoull(rest.substr(pos + 1));
+      } catch (const std::exception&) {
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
+      }
+      const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+      if (req.fee < required_fee)
       {
-        const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
-        if (req.fee < required_fee)
-        {
-          res.status = CORE_RPC_STATUS_FAILED;
-          return false;
-        }
+        res.status = CORE_RPC_STATUS_FAILED;
+        return false;
       }
       bool ok = m_core.get_evm().transfer(req.account, dest, amount, req.caller);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;

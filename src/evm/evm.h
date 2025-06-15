@@ -4,6 +4,9 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/unordered_map.hpp>
+#include <boost/serialization/string.hpp>
 
 namespace CryptoNote {
 
@@ -15,6 +18,8 @@ public:
   bool deposit(const std::string& address, uint64_t amount);
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;
+  bool save(const std::string& path) const;
+  bool load(const std::string& path);
 
 private:
   struct Contract {
@@ -22,6 +27,27 @@ private:
     uint64_t balance = 0;
     std::string owner;
     std::unordered_map<uint64_t, uint64_t> storage;
+
+    template<class Archive>
+    void serialize(Archive& ar, const unsigned int /*version*/)
+    {
+      ar & code;
+      ar & balance;
+      ar & owner;
+      ar & storage;
+    }
+  };
+
+  struct State {
+    std::unordered_map<std::string, Contract> contracts;
+    uint64_t next_id = 0;
+
+    template<class Archive>
+    void serialize(Archive& ar, const unsigned int /*version*/)
+    {
+      ar & contracts;
+      ar & next_id;
+    }
   };
 
   int64_t execute(Contract& c, const std::vector<uint8_t>& input);

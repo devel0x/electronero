@@ -1,6 +1,8 @@
 #include "evm.h"
 
 #include <stdexcept>
+#include "common/boost_serialization_helper.h"
+#include <boost/filesystem.hpp>
 
 #include <unordered_map>
 
@@ -142,6 +144,26 @@ int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) 
     }
   }
   return stack.empty() ? 0 : static_cast<int64_t>(stack.back());
+}
+
+bool EVM::save(const std::string& path) const
+{
+  State state;
+  state.contracts = contracts;
+  state.next_id = next_id;
+  return tools::serialize_obj_to_file(state, path);
+}
+
+bool EVM::load(const std::string& path)
+{
+  State state;
+  if (!boost::filesystem::exists(path))
+    return true;
+  if (!tools::unserialize_obj_from_file(state, path))
+    return false;
+  contracts = std::move(state.contracts);
+  next_id = state.next_id;
+  return true;
 }
 
 } // namespace CryptoNote

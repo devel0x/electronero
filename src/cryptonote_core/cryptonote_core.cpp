@@ -45,6 +45,7 @@ using namespace epee;
 #include "common/threadpool.h"
 #include "common/command_line.h"
 #include "warnings.h"
+#include <boost/filesystem.hpp>
 #include "crypto/crypto.h"
 #include "cryptonote_config.h"
 #include "cryptonote_tx_utils.h"
@@ -558,12 +559,15 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::load_state_data()
   {
-    // may be some code later
+    boost::filesystem::path evm_file = boost::filesystem::path(m_config_folder) / "evm_state.bin";
+    m_evm.load(evm_file.string());
     return true;
   }
   //-----------------------------------------------------------------------------------------------
     bool core::deinit()
   {
+    boost::filesystem::path evm_file = boost::filesystem::path(m_config_folder) / "evm_state.bin";
+    m_evm.save(evm_file.string());
     m_miner.stop();
     m_mempool.deinit();
     m_blockchain_storage.deinit();

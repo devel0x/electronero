@@ -43,6 +43,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <boost/process.hpp>
 #include "include_base_utils.h"
 #include "common/i18n.h"
 #include "common/command_line.h"
@@ -307,6 +308,34 @@ namespace
         return refresh_type_names[n].name;
     }
     return "invalid";
+  }
+
+  bool compile_solidity(const std::string& file, std::string& hex)
+  {
+    try
+    {
+      namespace bp = boost::process;
+      bp::ipstream out;
+      bp::child c(bp::search_path("solc"), "--optimize", "--bin", file, bp::std_out > out, bp::std_err > bp::null);
+
+      std::string line, last_line;
+      while (out && std::getline(out, line))
+      {
+        boost::algorithm::trim(line);
+        if (!line.empty())
+          last_line = line;
+      }
+      c.wait();
+      if (c.exit_code() != 0 || last_line.empty())
+        return false;
+
+      hex = last_line;
+      return true;
+    }
+    catch (const std::exception&)
+    {
+      return false;
+    }
   }
 
   bool compile_solidity(const std::string& file, std::string& hex)
@@ -1602,6 +1631,7 @@ bool simple_wallet::save_known_rings(const std::vector<std::string> &args)
   }
   return true;
 }
+
 bool simple_wallet::version(const std::vector<std::string> &args)
 {
   message_writer() << "Electronero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";
@@ -1761,6 +1791,7 @@ bool simple_wallet::bulk_transfer(const std::vector<std::string>& args)
 
   return transfer_main(TransferNew, transfer_args);
 }
+
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -3443,6 +3474,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3534,6 +3568,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3579,6 +3616,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
+
   if (!m_subaddress_lookahead.empty())
   {
     auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -3613,6 +3653,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+
+  if (m_restoring)
+    m_wallet->set_refresh_type(tools::wallet2::RefreshNoCoinbase);
 
   if (!m_subaddress_lookahead.empty())
   {
