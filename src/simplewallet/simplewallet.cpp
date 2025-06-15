@@ -1616,8 +1616,8 @@ bool simple_wallet::version(const std::vector<std::string> &args)
   return true;
 }
 
-  bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
-  {
+bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
+{
     if (args.size() != 1)
     {
       fail_msg_writer() << tr("usage: deploy_contract <file>");
@@ -1626,7 +1626,6 @@ bool simple_wallet::version(const std::vector<std::string> &args)
   if (!try_connect_to_daemon())
     return true;
 
-  const std::string account = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   // contract files live alongside the wallet, so form the path relative to the wallet file
   const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[0];
   std::string data;
@@ -1644,18 +1643,47 @@ bool simple_wallet::version(const std::vector<std::string> &args)
     return true;
   }
 
-  COMMAND_RPC_DEPLOY_CONTRACT::request req;
-  COMMAND_RPC_DEPLOY_CONTRACT::response res;
-  req.account = account;
-  req.bytecode = data;
   const uint64_t byte_size = data.size() / 2; // bytecode is hex encoded
-  req.fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
-  bool r = m_wallet->invoke_http_json("/deploy_contract", req, res);
-  std::string err = interpret_rpc_response(r, res.status);
-  if (err.empty())
-    success_msg_writer() << tr("Contract deployed at ") << res.address;
-  else
-    fail_msg_writer() << tr("failed to deploy contract: ") << err;
+  const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
+  std::vector<uint8_t> extra;
+  std::string extra_nonce = std::string("evm:deploy:") + data;
+  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+  {
+    fail_msg_writer() << tr("failed to construct tx extra");
+    return true;
+  }
+
+  cryptonote::tx_destination_entry de;
+  de.addr = m_wallet->get_account().get_keys().m_account_address;
+  de.amount = 1;
+  de.is_subaddress = false;
+  std::vector<cryptonote::tx_destination_entry> dsts{de};
+  size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  uint32_t priority = m_wallet->adjust_priority(0);
+  std::set<uint32_t> subaddr_indices;
+  std::vector<wallet2::pending_tx> ptx_vector;
+  try {
+    ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
+                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, evm_fee);
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("failed to create transaction: ") << e.what();
+    return true;
+  }
+  if (ptx_vector.empty())
+  {
+    fail_msg_writer() << tr("No transaction created");
+    return true;
+  }
+  try {
+    m_wallet->commit_tx(ptx_vector[0]);
+    crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    success_msg_writer() << tr("Contract deployment transaction submitted: ") << txid;
+    success_msg_writer() << tr("Contract address will be ") << epee::string_tools::pod_to_hex(txid);
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
+  }
   return true;
 }
 
@@ -1681,24 +1709,66 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     return true;
   }
 
-  COMMAND_RPC_CALL_CONTRACT::request req;
-  COMMAND_RPC_CALL_CONTRACT::response res;
-  req.account = account;
-  req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
-  req.data = data;
-  req.write = args.size() == 3 && args[2] == "write";
-  if (req.write)
+  bool write = args.size() == 3 && args[2] == "write";
+  if (!write)
   {
-    bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
-    const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
-    req.fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
+    COMMAND_RPC_CALL_CONTRACT::request req;
+    COMMAND_RPC_CALL_CONTRACT::response res;
+    req.account = account;
+    req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    req.data = data;
+    req.write = false;
+    bool r = m_wallet->invoke_http_json("/call_contract", req, res);
+    std::string err = interpret_rpc_response(r, res.status);
+    if (err.empty())
+      success_msg_writer() << tr("Contract returned: ") << res.result;
+    else
+      fail_msg_writer() << tr("failed to call contract: ") << err;
+    return true;
   }
-  bool r = m_wallet->invoke_http_json("/call_contract", req, res);
-  std::string err = interpret_rpc_response(r, res.status);
-  if (err.empty())
-    success_msg_writer() << tr("Contract returned: ") << res.result;
-  else
-    fail_msg_writer() << tr("failed to call contract: ") << err;
+
+  bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
+  const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
+  const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
+
+  std::vector<uint8_t> extra;
+  std::string extra_nonce = std::string("evm:call:") + account + ":" + data;
+  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+  {
+    fail_msg_writer() << tr("failed to construct tx extra");
+    return true;
+  }
+
+  cryptonote::tx_destination_entry de;
+  de.addr = m_wallet->get_account().get_keys().m_account_address;
+  de.amount = 1;
+  de.is_subaddress = false;
+  std::vector<cryptonote::tx_destination_entry> dsts{de};
+  size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  uint32_t priority = m_wallet->adjust_priority(0);
+  std::set<uint32_t> subaddr_indices;
+  std::vector<wallet2::pending_tx> ptx_vector;
+  try {
+    ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
+                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, evm_fee);
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("failed to create transaction: ") << e.what();
+    return true;
+  }
+  if (ptx_vector.empty())
+  {
+    fail_msg_writer() << tr("No transaction created");
+    return true;
+  }
+  try {
+    m_wallet->commit_tx(ptx_vector[0]);
+    crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    success_msg_writer() << tr("Contract call transaction submitted: ") << txid;
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
+  }
   return true;
 }
 
