@@ -2992,7 +2992,7 @@ namespace tools
 
     std::vector<uint8_t> extra;
     std::string extra_nonce = std::string("evm:deploy:") + req.bytecode;
-    if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    if (!cryptonote::add_extra_nonce_to_tx_extra(extra, extra_nonce))
     {
       er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
       er.message = "failed to construct tx extra";
@@ -3092,7 +3092,7 @@ namespace tools
 
     std::vector<uint8_t> extra;
     std::string extra_nonce = std::string("evm:call:") + req.account + ":" + req.data;
-    if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    if (!cryptonote::add_extra_nonce_to_tx_extra(extra, extra_nonce))
     {
       er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
       er.message = "failed to construct tx extra";
