@@ -6,14 +6,36 @@
 #include <boost/filesystem.hpp>
 
 #include <unordered_map>
+#include <ctime>
+#include "cryptonote_config.h"
+#include "crypto/hash.h"
+#include "string_tools.h"
 
 namespace CryptoNote {
 
+void EVM::rebuild_id_map()
+{
+  id_map.clear();
+  for (const auto &kv : contracts)
+  {
+    id_map[kv.second.id] = kv.first;
+  }
+}
+
 std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& bytecode) {
-  std::string address = "c" + std::to_string(++next_id);
-  Contract& c = contracts[address];
+  const uint64_t id = ++next_id;
+  uint64_t ts = static_cast<uint64_t>(time(nullptr));
+  std::string data = owner + std::to_string(id) + std::to_string(ts);
+  crypto::hash h = crypto::cn_fast_hash(data.data(), data.size());
+  std::string hex = epee::string_tools::pod_to_hex(h);
+  hex.resize(50);
+  std::string address = config::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX + hex;
+  Contract c;
   c.code = bytecode;
   c.owner = owner;
+  c.id = id;
+  contracts[address] = c;
+  id_map[id] = address;
   return address;
 }
 
@@ -183,15 +205,15 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x30: { // ADDRESS
         // push the current contract id onto the stack
-        uint64_t id = std::stoull(self.substr(1));
-        stack.push_back(id);
+        stack.push_back(contract.id);
         break;
       }
       case 0x31: { // BALANCE
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t id = stack.back(); stack.pop_back();
-        std::string addr = std::string("c") + std::to_string(id);
-        stack.push_back(balance_of(addr));
+        auto it = id_map.find(id);
+        if (it == id_map.end()) { stack.push_back(0); break; }
+        stack.push_back(balance_of(it->second));
         break;
       }
       case 0x42: { // TIMESTAMP
@@ -237,8 +259,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t dest_id = stack.back(); stack.pop_back();
         uint64_t amount = stack.back(); stack.pop_back();
-        std::string dest = std::string("c") + std::to_string(dest_id);
-        transfer(self, dest, amount, contract.owner);
+        auto it = id_map.find(dest_id);
+        if (it != id_map.end())
+          transfer(self, it->second, amount, contract.owner);
         break;
       }
       case 0xa1: { // LOG
@@ -250,8 +273,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0xff: { // SELFDESTRUCT
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t dest_id = stack.back(); stack.pop_back();
-        std::string dest = std::string("c") + std::to_string(dest_id);
-        destroy(self, dest, contract.owner);
+        auto it = id_map.find(dest_id);
+        if (it != id_map.end())
+          destroy(self, it->second, contract.owner);
         return 0;
       }
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
@@ -281,6 +305,7 @@ bool EVM::save(const std::string& path) const
   State state;
   state.contracts = contracts;
   state.next_id = next_id;
+  state.id_map = id_map;
   return tools::serialize_obj_to_file(state, path);
 }
 
@@ -293,6 +318,7 @@ bool EVM::load(const std::string& path)
     return false;
   contracts = std::move(state.contracts);
   next_id = state.next_id;
+  id_map = std::move(state.id_map);
   return true;
 }
 

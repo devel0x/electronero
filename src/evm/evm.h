@@ -18,6 +18,7 @@ public:
     std::string owner;
     std::unordered_map<uint64_t, uint64_t> storage;
     std::vector<uint64_t> logs;
+    uint64_t id = 0;
 
     template<class Archive>
     void serialize(Archive& ar, const unsigned int /*version*/)
@@ -27,11 +28,12 @@ public:
       ar & owner;
       ar & storage;
       ar & logs;
+      ar & id;
     }
   };
 
   const std::unordered_map<std::string, Contract>& get_contracts() const { return contracts; }
-  void set_state(const std::unordered_map<std::string, Contract>& c, uint64_t id) { contracts = c; next_id = id; }
+  void set_state(const std::unordered_map<std::string, Contract>& c, uint64_t id) { contracts = c; next_id = id; rebuild_id_map(); }
 
   std::string deploy(const std::string& owner, const std::vector<uint8_t>& bytecode);
   int64_t call(const std::string& address, const std::vector<uint8_t>& input,
@@ -50,17 +52,20 @@ public:
   std::vector<std::string> all_addresses() const;
   bool save(const std::string& path) const;
   bool load(const std::string& path);
+  void rebuild_id_map();
 
 private:
   struct State {
     std::unordered_map<std::string, Contract> contracts;
     uint64_t next_id = 0;
+    std::unordered_map<uint64_t, std::string> id_map;
 
     template<class Archive>
     void serialize(Archive& ar, const unsigned int /*version*/)
     {
       ar & contracts;
       ar & next_id;
+      ar & id_map;
     }
   };
 
@@ -68,6 +73,7 @@ private:
                   uint64_t block_height, uint64_t timestamp);
 
   std::unordered_map<std::string, Contract> contracts;
+  std::unordered_map<uint64_t, std::string> id_map;
   uint64_t next_id = 0;
 };
 
