@@ -527,7 +527,7 @@ namespace cryptonote
           evm.bytecode = std::string(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
           offset += size;
           tx_extra_fields.push_back(evm);
-          // return false;
+          return true;
         }
       }
     }
