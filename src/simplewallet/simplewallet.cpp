@@ -1686,7 +1686,7 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
   uint32_t priority = m_wallet->adjust_priority(0);
   std::set<uint32_t> subaddr_indices;
-  std::vector<wallet2::pending_tx> ptx_vector;
+  std::vector<tools::wallet2::pending_tx> ptx_vector;
   try {
     ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
                                                 m_current_subaddress_account, subaddr_indices, m_trusted_daemon, net_fee);
@@ -1783,7 +1783,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
   uint32_t priority = m_wallet->adjust_priority(0);
   std::set<uint32_t> subaddr_indices;
-  std::vector<wallet2::pending_tx> ptx_vector;
+  std::vector<tools::wallet2::pending_tx> ptx_vector;
   try {
     ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
                                                 m_current_subaddress_account, subaddr_indices, m_trusted_daemon, net_fee);
