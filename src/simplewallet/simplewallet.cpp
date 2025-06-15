@@ -1760,7 +1760,8 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
     cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::request rpc_req;
     cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::response rpc_res;
-    rpc_req.account = epee::string_tools::pod_to_hex(txid);
+    // use the wallet address as the contract owner so it can be queried later
+    rpc_req.account = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
     rpc_req.bytecode = data;
     rpc_req.fee = evm_fee+net_fee;
     bool r = m_wallet->invoke_http_json("/deploy_contract", rpc_req, rpc_res);
