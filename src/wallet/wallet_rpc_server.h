@@ -136,6 +136,10 @@ namespace tools
         MAP_JON_RPC_WE("finalize_multisig",  on_finalize_multisig,  wallet_rpc::COMMAND_RPC_FINALIZE_MULTISIG)
         MAP_JON_RPC_WE("sign_multisig",      on_sign_multisig,      wallet_rpc::COMMAND_RPC_SIGN_MULTISIG)
         MAP_JON_RPC_WE("submit_multisig",    on_submit_multisig,    wallet_rpc::COMMAND_RPC_SUBMIT_MULTISIG)
+        MAP_JON_RPC_WE("get_stablecoin_balance", on_get_stablecoin_balance, wallet_rpc::COMMAND_RPC_GET_STABLECOIN_BALANCE)
+        MAP_JON_RPC_WE("mint_stablecoin", on_mint_stablecoin, wallet_rpc::COMMAND_RPC_MINT_STABLECOIN)
+        MAP_JON_RPC_WE("burn_stablecoin", on_burn_stablecoin, wallet_rpc::COMMAND_RPC_BURN_STABLECOIN)
+        MAP_JON_RPC_WE("transfer_stablecoin", on_transfer_stablecoin, wallet_rpc::COMMAND_RPC_TRANSFER_STABLECOIN)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -205,6 +209,10 @@ namespace tools
       bool on_finalize_multisig(const wallet_rpc::COMMAND_RPC_FINALIZE_MULTISIG::request& req, wallet_rpc::COMMAND_RPC_FINALIZE_MULTISIG::response& res, epee::json_rpc::error& er);
       bool on_sign_multisig(const wallet_rpc::COMMAND_RPC_SIGN_MULTISIG::request& req, wallet_rpc::COMMAND_RPC_SIGN_MULTISIG::response& res, epee::json_rpc::error& er);
       bool on_submit_multisig(const wallet_rpc::COMMAND_RPC_SUBMIT_MULTISIG::request& req, wallet_rpc::COMMAND_RPC_SUBMIT_MULTISIG::response& res, epee::json_rpc::error& er);
+      bool on_get_stablecoin_balance(const wallet_rpc::COMMAND_RPC_GET_STABLECOIN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_GET_STABLECOIN_BALANCE::response& res, epee::json_rpc::error& er);
+      bool on_mint_stablecoin(const wallet_rpc::COMMAND_RPC_MINT_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_MINT_STABLECOIN::response& res, epee::json_rpc::error& er);
+      bool on_burn_stablecoin(const wallet_rpc::COMMAND_RPC_BURN_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_BURN_STABLECOIN::response& res, epee::json_rpc::error& er);
+      bool on_transfer_stablecoin(const wallet_rpc::COMMAND_RPC_TRANSFER_STABLECOIN::request& req, wallet_rpc::COMMAND_RPC_TRANSFER_STABLECOIN::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);

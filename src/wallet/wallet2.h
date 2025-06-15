@@ -669,6 +669,10 @@ namespace tools
     // all locked & unlocked balances of all subaddress accounts
     uint64_t balance_all() const;
     uint64_t unlocked_balance_all() const;
+    uint64_t stablecoin_balance() const { return m_stablecoin_balance; }
+    void mint_stablecoin(uint64_t amount);
+    void burn_stablecoin(uint64_t amount);
+    void transfer_stablecoin(const cryptonote::account_public_address &addr, bool is_subaddress, uint64_t amount);
     template<typename T>
     void transfer(const std::vector<cryptonote::tx_destination_entry>& dsts, const size_t fake_outputs_count, const std::vector<size_t> &unused_transfers_indices, uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, T destination_split_strategy, const tx_dust_policy& dust_policy, bool trusted_daemon);
     template<typename T>
@@ -823,6 +827,9 @@ namespace tools
       if(ver < 24)
         return;
       a & m_ring_history_saved;
+      if(ver < 25)
+        return;
+      a & m_stablecoin_balance;
     }
 
     /*!
@@ -1226,6 +1233,7 @@ namespace tools
     bool m_light_wallet_connected;
     uint64_t m_light_wallet_balance;
     uint64_t m_light_wallet_unlocked_balance;
+    uint64_t m_stablecoin_balance;
     // Light wallet info needed to populate m_payment requires 2 separate api calls (get_address_txs and get_unspent_outs)
     // We save the info from the first call in m_light_wallet_address_txs for easier lookup.
     std::unordered_map<crypto::hash, address_tx> m_light_wallet_address_txs;
@@ -1237,7 +1245,7 @@ namespace tools
     std::unique_ptr<ringdb> m_ringdb;
   };
 }
-BOOST_CLASS_VERSION(tools::wallet2, 24)
+BOOST_CLASS_VERSION(tools::wallet2, 25)
 BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 9)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info::LR, 0)

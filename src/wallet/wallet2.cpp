@@ -679,6 +679,7 @@ wallet2::wallet2(network_type nettype, bool restricted):
   m_light_wallet_connected(false),
   m_light_wallet_balance(0),
   m_light_wallet_unlocked_balance(0),
+  m_stablecoin_balance(0),
   m_key_on_device(false),
   m_ring_history_saved(false),
   m_ringdb()
@@ -1116,6 +1117,8 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     // Extra may only be partially parsed, it's OK if tx_extra_fields contains public key
     LOG_PRINT_L0("Transaction extra has unsupported format: " << txid);
   }
+  tx_extra_stablecoin sc;
+  bool has_sc = find_tx_extra_field_by_type(tx_extra_fields, sc);
 
   // Don't try to extract tx public key if tx has no ouputs
   size_t pk_index = 0;
@@ -1539,6 +1542,22 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
       else
         m_payments.emplace(payment_id, payment);
       LOG_PRINT_L2("Payment found in " << (pool ? "pool" : "block") << ": " << payment_id << " / " << payment.m_tx_hash << " / " << payment.m_amount);
+    }
+  }
+
+  if (has_sc)
+  {
+    bool outgoing = tx_money_spent_in_ins > 0 && !pool;
+    bool incoming = !tx_money_got_in_outs.empty();
+    switch (sc.type)
+    {
+      case 0: m_stablecoin_balance += sc.amount; break;
+      case 1: if (m_stablecoin_balance >= sc.amount) m_stablecoin_balance -= sc.amount; break;
+      case 2:
+        if (outgoing && m_stablecoin_balance >= sc.amount) m_stablecoin_balance -= sc.amount;
+        else if (incoming) m_stablecoin_balance += sc.amount;
+        break;
+      default: break;
     }
   }
 }
@@ -2542,6 +2561,7 @@ bool wallet2::clear()
   m_scanned_pool_txs[0].clear();
   m_scanned_pool_txs[1].clear();
   m_address_book.clear();
+  m_stablecoin_balance = 0;
   m_local_bc_height = 1;
   m_subaddresses.clear();
   m_subaddress_labels.clear();
@@ -4154,6 +4174,89 @@ uint64_t wallet2::unlocked_balance_all() const
   for (uint32_t index_major = 0; index_major < get_num_subaddress_accounts(); ++index_major)
     r += unlocked_balance(index_major);
   return r;
+}
+//--------------------------------------------------------------
+void wallet2::mint_stablecoin(uint64_t amount)
+{
+  std::vector<uint8_t> extra;
+  cryptonote::add_stablecoin_to_tx_extra(extra, amount, 0);
+
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  cryptonote::tx_destination_entry de;
+  de.addr = m_account.get_keys().m_account_address;
+  de.is_subaddress = false;
+  de.amount = ::config::DEFAULT_DUST_THRESHOLD;
+  dsts.push_back(de);
+
+  try
+  {
+    std::vector<pending_tx> ptx = create_transactions_2(dsts, m_default_mixin, 0 /* unlock_time */, 0 /* priority */, extra, 0, {}, m_trusted_daemon);
+    commit_tx(ptx);
+    m_stablecoin_balance += amount;
+  }
+  catch (const std::exception &e)
+  {
+    LOG_ERROR("Failed to mint stablecoin: " << e.what());
+    throw;
+  }
+}
+//--------------------------------------------------------------
+void wallet2::burn_stablecoin(uint64_t amount)
+{
+  std::vector<uint8_t> extra;
+  cryptonote::add_stablecoin_to_tx_extra(extra, amount, 1);
+
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  cryptonote::tx_destination_entry de;
+  de.addr = m_account.get_keys().m_account_address;
+  de.is_subaddress = false;
+  de.amount = ::config::DEFAULT_DUST_THRESHOLD;
+  dsts.push_back(de);
+
+  try
+  {
+    std::vector<pending_tx> ptx = create_transactions_2(dsts, m_default_mixin, 0 /* unlock_time */, 0 /* priority */, extra, 0, {}, m_trusted_daemon);
+    commit_tx(ptx);
+    if (m_stablecoin_balance >= amount)
+      m_stablecoin_balance -= amount;
+    else
+      m_stablecoin_balance = 0;
+  }
+  catch (const std::exception &e)
+  {
+    LOG_ERROR("Failed to burn stablecoin: " << e.what());
+    throw;
+  }
+}
+//--------------------------------------------------------------
+void wallet2::transfer_stablecoin(const cryptonote::account_public_address &addr, bool is_subaddress, uint64_t amount)
+{
+  if (m_stablecoin_balance < amount)
+  {
+    throw std::runtime_error("Not enough stablecoin balance");
+  }
+
+  std::vector<uint8_t> extra;
+  cryptonote::add_stablecoin_to_tx_extra(extra, amount, 2);
+
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  cryptonote::tx_destination_entry de;
+  de.addr = addr;
+  de.is_subaddress = is_subaddress;
+  de.amount = ::config::DEFAULT_DUST_THRESHOLD;
+  dsts.push_back(de);
+
+  try
+  {
+    std::vector<pending_tx> ptx = create_transactions_2(dsts, m_default_mixin, 0 /* unlock_time */, 0 /* priority */, extra, 0, {}, m_trusted_daemon);
+    commit_tx(ptx);
+    m_stablecoin_balance -= amount;
+  }
+  catch (const std::exception &e)
+  {
+    LOG_ERROR("Failed to transfer stablecoin: " << e.what());
+    throw;
+  }
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::get_transfers(wallet2::transfer_container& incoming_transfers) const
