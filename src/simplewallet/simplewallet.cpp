@@ -1702,7 +1702,7 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
   // Serialize both into one extra blob
   std::vector<uint8_t> extra;
-  std::string payload = "evm:deploy:" + data;
+  std::string payload = data;
   
   extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG); // 0x05
   extra.push_back(static_cast<uint8_t>(payload.size()));
