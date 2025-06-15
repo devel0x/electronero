@@ -518,7 +518,16 @@ namespace cryptonote
         default:
         {
           MDEBUG("Unknown tx_extra tag: " << (int)tag);
-          return false;
+          if (offset >= tx_extra.size())
+            return false;
+          uint8_t size = tx_extra[offset++];
+          if (offset + size > tx_extra.size())
+            return false;
+          cryptonote::tx_extra_evm_bytecode evm;
+          evm.bytecode = std::string(tx_extra.begin() + offset, tx_extra.begin() + offset + size);
+          offset += size;
+          tx_extra_fields.push_back(evm);
+          // return false;
         }
       }
     }
