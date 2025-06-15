@@ -77,7 +77,7 @@ Electronero is a private, secure, untraceable, decentralised digital currency. Y
 Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file> [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, and the `REVERT` opcode for greater compatibility with Solidity 0.8.
 
 Deploying a contract incurs a fee proportional to its bytecode size. The wallet calculates this automatically using a rate of 10 atomic units per byte.
-Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free.
+Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free. Half of every EVM fee is forwarded to a governance address configured in `cryptonote_config.h`.
 
 Every contract maintains its own balance tracked by the EVM. You can deposit coins with `call_contract <address> deposit:<amount> write`. Transfers should normally be performed by contract code. The built-in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
 
@@ -136,6 +136,9 @@ etnk...address1 1.5
 etnk...address2 0.75
 etnk...address3 10
 ```
+
+Blank lines and any line beginning with `#` or `;` are ignored. This allows
+annotating payout files with comments or temporarily disabling entries.
 
 Invoke `bulk_transfer payouts.txt` to construct a single transaction with all of the listed outputs. Each line must provide a valid Electronero address and amount separated by whitespace. `bulk_transfer` simply feeds these pairs into the regular transfer logic.
 

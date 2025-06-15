@@ -1645,6 +1645,8 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
   const uint64_t byte_size = data.size() / 2; // bytecode is hex encoded
   const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
+  const uint64_t gov_fee = evm_fee / 2;
+  const uint64_t net_fee = evm_fee - gov_fee;
   std::vector<uint8_t> extra;
   std::string extra_nonce = std::string("evm:deploy:") + data;
   if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
@@ -1658,13 +1660,22 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   de.amount = 1;
   de.is_subaddress = false;
   std::vector<cryptonote::tx_destination_entry> dsts{de};
+  cryptonote::address_parse_info gov_info;
+  if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+  {
+    cryptonote::tx_destination_entry gov;
+    gov.addr = gov_info.address;
+    gov.amount = gov_fee;
+    gov.is_subaddress = gov_info.is_subaddress;
+    dsts.push_back(gov);
+  }
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
   uint32_t priority = m_wallet->adjust_priority(0);
   std::set<uint32_t> subaddr_indices;
   std::vector<wallet2::pending_tx> ptx_vector;
   try {
     ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
-                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, evm_fee);
+                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, net_fee);
   }
   catch (const std::exception &e) {
     fail_msg_writer() << tr("failed to create transaction: ") << e.what();
@@ -1730,6 +1741,8 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
   const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
   const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
+  const uint64_t gov_fee = evm_fee / 2;
+  const uint64_t net_fee = evm_fee - gov_fee;
 
   std::vector<uint8_t> extra;
   std::string extra_nonce = std::string("evm:call:") + account + ":" + data;
@@ -1744,13 +1757,22 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   de.amount = 1;
   de.is_subaddress = false;
   std::vector<cryptonote::tx_destination_entry> dsts{de};
+  cryptonote::address_parse_info gov_info;
+  if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+  {
+    cryptonote::tx_destination_entry gov;
+    gov.addr = gov_info.address;
+    gov.amount = gov_fee;
+    gov.is_subaddress = gov_info.is_subaddress;
+    dsts.push_back(gov);
+  }
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
   uint32_t priority = m_wallet->adjust_priority(0);
   std::set<uint32_t> subaddr_indices;
   std::vector<wallet2::pending_tx> ptx_vector;
   try {
     ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra,
-                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, evm_fee);
+                                                m_current_subaddress_account, subaddr_indices, m_trusted_daemon, net_fee);
   }
   catch (const std::exception &e) {
     fail_msg_writer() << tr("failed to create transaction: ") << e.what();
@@ -1846,11 +1868,19 @@ bool simple_wallet::bulk_transfer(const std::vector<std::string>& args)
 
   std::istringstream iss(content);
   std::vector<std::string> transfer_args;
-  std::string addr, amount;
-  while (iss >> addr >> amount)
+  std::string line;
+  while (std::getline(iss, line))
   {
-    transfer_args.push_back(addr);
-    transfer_args.push_back(amount);
+    boost::algorithm::trim(line);
+    if (line.empty() || line[0] == '#' || line[0] == ';')
+      continue;
+    std::istringstream line_ss(line);
+    std::string addr, amount;
+    if (line_ss >> addr >> amount)
+    {
+      transfer_args.push_back(addr);
+      transfer_args.push_back(amount);
+    }
   }
 
   if (transfer_args.empty())
