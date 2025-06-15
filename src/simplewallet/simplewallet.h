@@ -222,6 +222,7 @@ namespace cryptonote
     bool version(const std::vector<std::string>& args);
     bool deploy_contract(const std::vector<std::string>& args);
     bool call_contract(const std::vector<std::string>& args);
+    bool contract_balance(const std::vector<std::string>& args);
     bool compile_contract(const std::vector<std::string>& args);
     bool bulk_transfer(const std::vector<std::string>& args);
 
