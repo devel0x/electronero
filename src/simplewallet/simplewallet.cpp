@@ -606,7 +606,8 @@ bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector
 
   for (const auto &field : fields)
   {
-    if (!::serialization::serialize(oar, field))
+    auto f = field;
+    if (!::serialization::serialize(oar, f))
       return false;
   }
 
