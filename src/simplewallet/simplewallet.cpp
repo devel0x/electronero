@@ -1680,8 +1680,14 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     fail_msg_writer() << tr("failed to read contract file") << ' ' << file_path.string();
     return true;
   }
+  std::string bin;
+  if (!epee::string_tools::parse_hexstr_to_binbuff(data, bin))
+  {
+    fail_msg_writer() << tr("invalid bytecode: ") << file_path.string();
+    return true;
+  }
 
-  const uint64_t byte_size = data.size() / 2; // bytecode is hex encoded
+  const uint64_t byte_size = bin.size(); // bytecode is hex encoded
   const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
   const uint64_t gov_fee = evm_fee / 2;
   const uint64_t net_fee = evm_fee - gov_fee;
@@ -1702,11 +1708,11 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
   // Serialize both into one extra blob
   std::vector<uint8_t> extra;
-  std::string payload = data;
-  
+  std::vector<uint8_t> payload(bin.begin(), bin.end());
+
   extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG); // 0x05
   extra.push_back(static_cast<uint8_t>(payload.size()));
-  extra.insert(extra.end(), payload.begin(), payload.end());
+  extra.insert(extra.end(), payload.begin(), payload.end())
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
