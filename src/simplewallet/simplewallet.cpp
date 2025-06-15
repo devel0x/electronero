@@ -1699,25 +1699,15 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     fail_msg_writer() << tr("transaction cancelled.");
     return true;
   }
-  
-  std::vector<tx_extra_field> fields;
-
-  // Add a nonce (optional, can help tools recognize intent)
-  cryptonote::tx_extra_nonce nonce_field;
-  nonce_field.nonce = "evm:deploy";
-  fields.push_back(nonce_field);
-
-  // Add the actual EVM bytecode
-  cryptonote::tx_extra_evm_bytecode evm;
-  evm.bytecode = data; // hex or raw string
-  fields.push_back(evm);
 
   // Serialize both into one extra blob
   std::vector<uint8_t> extra;
-  if (!add_extra_fields_to_tx_extra(extra, fields)) {
-    fail_msg_writer() << tr("Failed to construct tx extra with EVM bytecode and nonce");
-    return true;
-  };
+  extra.push_back(0x05); // tag = 0x05
+
+  std::string payload = "evm:deploy:" + data;
+
+  extra.push_back(static_cast<uint8_t>(payload.size())); // length
+  extra.insert(extra.end(), payload.begin(), payload.end());
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
