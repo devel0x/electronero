@@ -1,6 +1,7 @@
 #include "evm.h"
 
 #include <stdexcept>
+#include "misc_log_ex.h"
 #include "common/boost_serialization_helper.h"
 #include <boost/filesystem.hpp>
 
