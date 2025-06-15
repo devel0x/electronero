@@ -338,28 +338,6 @@ namespace
     }
   }
 
-  bool compile_solidity(const std::string& file, std::string& hex)
-  {
-    std::string cmd = "solc --optimize --bin \"" + file + "\" 2>/dev/null";
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if (!pipe)
-      return false;
-    char buffer[256];
-    std::string last_line;
-    while (fgets(buffer, sizeof(buffer), pipe))
-    {
-      std::string line = buffer;
-      boost::algorithm::trim(line);
-      if (!line.empty())
-        last_line = line;
-    }
-    int status = pclose(pipe);
-    if (status != 0 || last_line.empty())
-      return false;
-    hex = last_line;
-    return true;
-  }
-
   std::string get_version_string(uint32_t version)
   {
     return boost::lexical_cast<std::string>(version >> 16) + "." + boost::lexical_cast<std::string>(version & 0xffff);
