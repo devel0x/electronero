@@ -49,6 +49,15 @@ bool EVM::is_owner(const std::string& contract, const std::string& address) cons
   return it != contracts.end() && it->second.owner == address;
 }
 
+uint64_t EVM::storage_at(const std::string& address, uint64_t key) const
+{
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return 0;
+  auto jt = it->second.storage.find(key);
+  return jt == it->second.storage.end() ? 0 : jt->second;
+}
+
 int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input) {
   auto it = contracts.find(address);
   if (it == contracts.end()) {
