@@ -599,16 +599,28 @@ std::string simple_wallet::get_command_usage(const std::vector<std::string> &arg
   return ss.str();
 }
 
+struct serialize_tx_extra_visitor : public boost::static_visitor<bool>
+{
+  binary_archive<true> &oar;
+
+  serialize_tx_extra_visitor(tools::binary_archive<true> &oar_) : oar(oar_) {}
+
+  template <typename T>
+  bool operator()(T &f) const
+  {
+    return ::serialization::serialize(oar, f);
+  }
+};
+
 bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector<cryptonote::tx_extra_field> &fields)
 {
   std::ostringstream oss;
-  tools::binary_archive<true> oar(oss);
+  binary_archive<true> oar(oss);
+  serialize_tx_extra_visitor visitor(oar);
 
   for (const auto &field : fields)
   {
-    if (!boost::apply_visitor([&](auto &f) {
-          return ::serialization::serialize(oar, f);
-        }, const_cast<cryptonote::tx_extra_field &>(field)))
+    if (!boost::apply_visitor(visitor, const_cast<cryptonote::tx_extra_field &>(field)))
     {
       return false;
     }
