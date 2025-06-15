@@ -34,9 +34,12 @@ public:
   std::string deploy(const std::string& owner, const std::vector<uint8_t>& bytecode);
   int64_t call(const std::string& address, const std::vector<uint8_t>& input);
   bool transfer(const std::string& from, const std::string& to, uint64_t amount, const std::string& caller);
+  bool destroy(const std::string& address, const std::string& dest, const std::string& caller);
   bool deposit(const std::string& address, uint64_t amount);
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;
+  std::string owner_of(const std::string& address) const;
+  uint64_t storage_at(const std::string& address, uint64_t key) const;
   bool save(const std::string& path) const;
   bool load(const std::string& path);
 
@@ -53,7 +56,7 @@ private:
     }
   };
 
-  int64_t execute(Contract& c, const std::vector<uint8_t>& input);
+  int64_t execute(const std::string& self, Contract& c, const std::vector<uint8_t>& input);
 
   std::unordered_map<std::string, Contract> contracts;
   uint64_t next_id = 0;
