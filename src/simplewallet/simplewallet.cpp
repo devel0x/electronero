@@ -1708,11 +1708,18 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
   // Serialize both into one extra blob
   std::vector<uint8_t> extra;
+  std::string extra_nonce = std::string("evm:deploy:") + data;
+  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+  {
+    fail_msg_writer() << tr("failed to construct tx extra");
+    return true;
+  }
   std::vector<uint8_t> payload(bin.begin(), bin.end());
 
   extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG); // 0x05
   extra.push_back(static_cast<uint8_t>(payload.size()));
   extra.insert(extra.end(), payload.begin(), payload.end());
+	
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
