@@ -1,3 +1,4 @@
+#include "string_tools.h"
 #include "gtest/gtest.h"
 #include "evm/evm.h"
 
