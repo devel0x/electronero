@@ -115,6 +115,11 @@ namespace cryptonote
       MAP_URI_AUTO_JON2_IF("/deploy_contract", on_deploy_contract, COMMAND_RPC_DEPLOY_CONTRACT, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/call_contract", on_call_contract, COMMAND_RPC_CALL_CONTRACT, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contract_balance", on_get_contract_balance, COMMAND_RPC_GET_CONTRACT_BALANCE, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_contract_owner", on_get_contract_owner, COMMAND_RPC_GET_CONTRACT_OWNER, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_contract_storage", on_get_contract_storage, COMMAND_RPC_GET_CONTRACT_STORAGE, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_contract_logs", on_get_contract_logs, COMMAND_RPC_GET_CONTRACT_LOGS, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_contract_code", on_get_contract_code, COMMAND_RPC_GET_CONTRACT_CODE, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/verify_contract", on_verify_contract, COMMAND_RPC_VERIFY_CONTRACT, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contracts", on_get_contracts, COMMAND_RPC_GET_CONTRACTS, !m_restricted)
       else if(std::string::npos != query_info.m_URI.find("/get_coins")) return on_get_coins(response_info);
       else if(std::string::npos != query_info.m_URI.find("/getcoins")) return on_get_coins(response_info);
@@ -226,6 +231,11 @@ namespace cryptonote
     bool on_deploy_contract(const COMMAND_RPC_DEPLOY_CONTRACT::request& req, COMMAND_RPC_DEPLOY_CONTRACT::response& res);
     bool on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res);
     bool on_get_contract_balance(const COMMAND_RPC_GET_CONTRACT_BALANCE::request& req, COMMAND_RPC_GET_CONTRACT_BALANCE::response& res);
+    bool on_get_contract_owner(const COMMAND_RPC_GET_CONTRACT_OWNER::request& req, COMMAND_RPC_GET_CONTRACT_OWNER::response& res);
+    bool on_get_contract_storage(const COMMAND_RPC_GET_CONTRACT_STORAGE::request& req, COMMAND_RPC_GET_CONTRACT_STORAGE::response& res);
+    bool on_get_contract_logs(const COMMAND_RPC_GET_CONTRACT_LOGS::request& req, COMMAND_RPC_GET_CONTRACT_LOGS::response& res);
+    bool on_get_contract_code(const COMMAND_RPC_GET_CONTRACT_CODE::request& req, COMMAND_RPC_GET_CONTRACT_CODE::response& res);
+    bool on_verify_contract(const COMMAND_RPC_VERIFY_CONTRACT::request& req, COMMAND_RPC_VERIFY_CONTRACT::response& res);
     bool on_get_contracts(const COMMAND_RPC_GET_CONTRACTS::request& req, COMMAND_RPC_GET_CONTRACTS::response& res);
     //-----------------------
 
