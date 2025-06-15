@@ -1661,9 +1661,18 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     fail_msg_writer() << tr("transaction cancelled.");
     return true;
   }
+  std::vector<tx_extra_field> extra_fields;
+
+  tx_extra_evm_bytecode evm_extra;
+  evm_extra.bytecode = std::string(data.begin(), data.end()); // bytecode is std::vector<uint8_t> or string
+
+  extra_fields.push_back(evm_extra);
+
   std::vector<uint8_t> extra;
-  extra.push_back(0x80); // Your custom EVM opcode
-  extra.insert(extra.end(), data.begin(), data.end());
+  if (!add_extra_fields_to_tx_extra(extra, extra_fields)) {
+      LOG_ERROR("Failed to serialize EVM bytecode to tx extra");
+      return false;
+  }
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
