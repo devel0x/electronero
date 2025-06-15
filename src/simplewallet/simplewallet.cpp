@@ -599,11 +599,13 @@ std::string simple_wallet::get_command_usage(const std::vector<std::string> &arg
   return ss.str();
 }
 
+#include "serialization/binary_archive.h"
+
 struct serialize_tx_extra_visitor : public boost::static_visitor<bool>
 {
   binary_archive<true> &oar;
 
-  serialize_tx_extra_visitor(tools::binary_archive<true> &oar_) : oar(oar_) {}
+  explicit serialize_tx_extra_visitor(binary_archive<true> &oar_ref) : oar(oar_ref) {}
 
   template <typename T>
   bool operator()(T &f) const
@@ -630,6 +632,7 @@ bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector
   extra.insert(extra.end(), extra_str.begin(), extra_str.end());
   return true;
 }
+
 
 bool simple_wallet::viewkey(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
