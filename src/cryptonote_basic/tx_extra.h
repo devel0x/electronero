@@ -206,6 +206,19 @@ namespace cryptonote
 
 }
 
+// Provide external `do_serialize` functions, required for variant usage:
+template <template <bool> class Archive>
+inline bool do_serialize(Archive<false>& ar, cryptonote::tx_extra_evm_bytecode& x)
+{
+  return ::serialization::serialize(ar, x);
+}
+
+template <template <bool> class Archive>
+inline bool do_serialize(Archive<true>& ar, cryptonote::tx_extra_evm_bytecode& x)
+{
+  return ::serialization::serialize(ar, x);
+}
+
 VARIANT_TAG(binary_archive, cryptonote::tx_extra_padding, TX_EXTRA_TAG_PADDING);
 VARIANT_TAG(binary_archive, cryptonote::tx_extra_pub_key, TX_EXTRA_TAG_PUBKEY);
 VARIANT_TAG(binary_archive, cryptonote::tx_extra_nonce, TX_EXTRA_NONCE);
