@@ -2262,7 +2262,9 @@ namespace cryptonote
           return false;
         }
       }
-      res.result = m_core.get_evm().call(req.account, data);
+      uint64_t height = m_core.get_current_blockchain_height();
+      uint64_t ts = static_cast<uint64_t>(time(nullptr));
+      res.result = m_core.get_evm().call(req.account, data, height, ts);
       res.status = CORE_RPC_STATUS_OK;
       return true;
     }
@@ -2272,6 +2274,47 @@ namespace cryptonote
   bool core_rpc_server::on_get_contract_balance(const COMMAND_RPC_GET_CONTRACT_BALANCE::request& req, COMMAND_RPC_GET_CONTRACT_BALANCE::response& res)
   {
     res.balance = m_core.get_evm().balance_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_owner(const COMMAND_RPC_GET_CONTRACT_OWNER::request& req, COMMAND_RPC_GET_CONTRACT_OWNER::response& res)
+  {
+    res.owner = m_core.get_evm().owner_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_storage(const COMMAND_RPC_GET_CONTRACT_STORAGE::request& req, COMMAND_RPC_GET_CONTRACT_STORAGE::response& res)
+  {
+    res.value = m_core.get_evm().storage_at(req.address, req.key);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_logs(const COMMAND_RPC_GET_CONTRACT_LOGS::request& req, COMMAND_RPC_GET_CONTRACT_LOGS::response& res)
+  {
+    res.logs = m_core.get_evm().logs_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_code(const COMMAND_RPC_GET_CONTRACT_CODE::request& req, COMMAND_RPC_GET_CONTRACT_CODE::response& res)
+  {
+    const auto& code = m_core.get_evm().code_of(req.address);
+    res.bytecode = epee::string_tools::buff_to_hex_nodelimer(std::string(code.begin(), code.end()));
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_verify_contract(const COMMAND_RPC_VERIFY_CONTRACT::request& req, COMMAND_RPC_VERIFY_CONTRACT::response& res)
+  {
+    const auto& code = m_core.get_evm().code_of(req.address);
+    std::string deployed = epee::string_tools::buff_to_hex_nodelimer(std::string(code.begin(), code.end()));
+    std::string want = req.bytecode;
+    boost::algorithm::to_lower(deployed);
+    boost::algorithm::to_lower(want);
+    res.valid = deployed == want;
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
@@ -2288,6 +2331,20 @@ namespace cryptonote
       ce.bytecode = epee::string_tools::buff_to_hex_nodelimer(std::string(kv.second.code.begin(), kv.second.code.end()));
       res.contracts.push_back(std::move(ce));
     }
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contracts_by_owner(const COMMAND_RPC_GET_CONTRACTS_BY_OWNER::request& req, COMMAND_RPC_GET_CONTRACTS_BY_OWNER::response& res)
+  {
+    res.addresses = m_core.get_evm().contracts_of_owner(req.owner);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_addresses(const COMMAND_RPC_GET_CONTRACT_ADDRESSES::request& req, COMMAND_RPC_GET_CONTRACT_ADDRESSES::response& res)
+  {
+    res.addresses = m_core.get_evm().all_addresses();
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }

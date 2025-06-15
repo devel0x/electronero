@@ -37,10 +37,61 @@ bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amou
   return true;
 }
 
+bool EVM::destroy(const std::string& address, const std::string& dest, const std::string& caller)
+{
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return false;
+  if (it->second.owner != caller)
+    return false;
+  contracts[dest].balance += it->second.balance;
+  contracts.erase(it);
+  return true;
+}
+
 uint64_t EVM::balance_of(const std::string& address) const
 {
   auto it = contracts.find(address);
   return it == contracts.end() ? 0 : it->second.balance;
+}
+
+std::string EVM::owner_of(const std::string& address) const
+{
+  auto it = contracts.find(address);
+  return it == contracts.end() ? std::string() : it->second.owner;
+}
+
+const std::vector<uint64_t>& EVM::logs_of(const std::string& address) const
+{
+  static const std::vector<uint64_t> empty;
+  auto it = contracts.find(address);
+  return it == contracts.end() ? empty : it->second.logs;
+}
+
+const std::vector<uint8_t>& EVM::code_of(const std::string& address) const
+{
+  static const std::vector<uint8_t> empty;
+  auto it = contracts.find(address);
+  return it == contracts.end() ? empty : it->second.code;
+}
+
+std::vector<std::string> EVM::contracts_of_owner(const std::string& owner) const
+{
+  std::vector<std::string> out;
+  for (const auto& kv : contracts)
+  {
+    if (kv.second.owner == owner)
+      out.push_back(kv.first);
+  }
+  return out;
+}
+
+std::vector<std::string> EVM::all_addresses() const
+{
+  std::vector<std::string> out;
+  for (const auto& kv : contracts)
+    out.push_back(kv.first);
+  return out;
 }
 
 bool EVM::is_owner(const std::string& contract, const std::string& address) const
@@ -49,15 +100,26 @@ bool EVM::is_owner(const std::string& contract, const std::string& address) cons
   return it != contracts.end() && it->second.owner == address;
 }
 
-int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input) {
+uint64_t EVM::storage_at(const std::string& address, uint64_t key) const
+{
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return 0;
+  auto jt = it->second.storage.find(key);
+  return jt == it->second.storage.end() ? 0 : jt->second;
+}
+
+int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
+                  uint64_t block_height, uint64_t timestamp) {
   auto it = contracts.find(address);
   if (it == contracts.end()) {
     return 0;
   }
-  return execute(it->second, input);
+  return execute(address, it->second, input, block_height, timestamp);
 }
 
-int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) {
+int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& input,
+                     uint64_t block_height, uint64_t timestamp) {
   std::vector<uint64_t> stack;
   std::unordered_map<uint64_t, uint64_t> memory;
   const auto& code = contract.code;
@@ -94,6 +156,41 @@ int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) 
         stack.push_back(b == 0 ? 0 : a / b);
         break;
       }
+      case 0x35: { // CALLDATALOAD
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint64_t off = stack.back(); stack.pop_back();
+        uint64_t v = 0;
+        for (unsigned i = 0; i < 8 && off < input.size(); ++i, ++off) {
+          v = (v << 8) | input[off];
+        }
+        stack.push_back(v);
+        break;
+      }
+      case 0x36: { // CALLDATASIZE
+        stack.push_back(input.size());
+        break;
+      }
+      case 0x30: { // ADDRESS
+        // push the current contract id onto the stack
+        uint64_t id = std::stoull(self.substr(1));
+        stack.push_back(id);
+        break;
+      }
+      case 0x31: { // BALANCE
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint64_t id = stack.back(); stack.pop_back();
+        std::string addr = std::string("c") + std::to_string(id);
+        stack.push_back(balance_of(addr));
+        break;
+      }
+      case 0x42: { // TIMESTAMP
+        stack.push_back(timestamp);
+        break;
+      }
+      case 0x43: { // NUMBER
+        stack.push_back(block_height);
+        break;
+      }
       case 0x50: { // POP
         if (stack.empty()) throw std::runtime_error("stack underflow");
         stack.pop_back();
@@ -124,6 +221,27 @@ int64_t EVM::execute(Contract& contract, const std::vector<uint8_t>& /*input*/) 
         uint64_t value = stack.back(); stack.pop_back();
         contract.storage[key] = value;
         break;
+      }
+      case 0xa0: { // TRANSFER
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t dest_id = stack.back(); stack.pop_back();
+        uint64_t amount = stack.back(); stack.pop_back();
+        std::string dest = std::string("c") + std::to_string(dest_id);
+        transfer(self, dest, amount, contract.owner);
+        break;
+      }
+      case 0xa1: { // LOG
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint64_t value = stack.back(); stack.pop_back();
+        contract.logs.push_back(value);
+        break;
+      }
+      case 0xff: { // SELFDESTRUCT
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint64_t dest_id = stack.back(); stack.pop_back();
+        std::string dest = std::string("c") + std::to_string(dest_id);
+        destroy(self, dest, contract.owner);
+        return 0;
       }
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
         unsigned push_bytes = op - 0x5f;
