@@ -1662,17 +1662,14 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     return true;
   }
   std::vector<uint8_t> extra;
-  std::string extra_nonce = std::string("evm:deploy:") + data;
-  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-  {
-    fail_msg_writer() << tr("failed to construct tx extra");
-    return true;
-  }
+  extra.push_back(0x80); // Your custom EVM opcode
+  extra.insert(extra.end(), data.begin(), data.end());
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
   de.amount = 1;
   de.is_subaddress = false;
+	
   std::vector<cryptonote::tx_destination_entry> dsts{de};
   cryptonote::address_parse_info gov_info;
   if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
