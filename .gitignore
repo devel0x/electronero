@@ -6,7 +6,6 @@
 /tags
 log/
 *.tar.gz
-# vim swap files
 *.swp
 *.swo
 TAGS
