@@ -606,7 +606,8 @@ bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector
 
   for (const auto &field : fields)
   {
-    if (!::serialization::serialize(oar, fields))
+    auto f = field;
+    if (!::serialization::serialize(oar, f))
       return false;
   }
 
@@ -1687,12 +1688,6 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   {
     fail_msg_writer() << tr("failed to construct tx extra");
     return true;
-  }
-
-  std::vector<uint8_t> extra;
-  if (!add_extra_fields_to_tx_extra(extra, extra_fields)) {
-      LOG_ERROR("Failed to serialize EVM bytecode to tx extra");
-      return false;
   }
 
   cryptonote::tx_destination_entry de;
