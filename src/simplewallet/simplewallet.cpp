@@ -602,13 +602,16 @@ std::string simple_wallet::get_command_usage(const std::vector<std::string> &arg
 bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector<cryptonote::tx_extra_field> &fields)
 {
   std::ostringstream oss;
-  binary_archive<true> oar(oss);
+  tools::binary_archive<true> oar(oss);
 
   for (const auto &field : fields)
   {
-    auto f = field;
-    if (!::serialization::serialize(oar, f))
+    if (!boost::apply_visitor([&](auto &f) {
+          return ::serialization::serialize(oar, f);
+        }, const_cast<cryptonote::tx_extra_field &>(field)))
+    {
       return false;
+    }
   }
 
   std::string extra_str = oss.str();
@@ -1682,13 +1685,24 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     return true;
   }
   
+  std::vector<tx_extra_field> fields;
+
+  // Add a nonce (optional, can help tools recognize intent)
+  cryptonote::tx_extra_nonce nonce_field;
+  nonce_field.nonce = "evm:deploy";
+  fields.push_back(nonce_field);
+
+  // Add the actual EVM bytecode
+  cryptonote::tx_extra_evm_bytecode evm;
+  evm.bytecode = data; // hex or raw string
+  fields.push_back(evm);
+
+  // Serialize both into one extra blob
   std::vector<uint8_t> extra;
-  std::string extra_nonce = std::string("evm:deploy:") + data;
-  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-  {
-    fail_msg_writer() << tr("failed to construct tx extra");
+  if (!add_extra_fields_to_tx_extra(extra, fields)) {
+    fail_msg_writer() << tr("Failed to construct tx extra with EVM bytecode and nonce");
     return true;
-  }
+  };
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
