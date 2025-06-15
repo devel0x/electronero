@@ -2308,4 +2308,62 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_GET_CONTRACT_BALANCE
+  {
+    struct request
+    {
+      std::string address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      uint64_t balance;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(balance)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_GET_CONTRACTS
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct contract_entry
+    {
+      std::string address;
+      std::string owner;
+      uint64_t balance;
+      std::string bytecode;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+        KV_SERIALIZE(owner)
+        KV_SERIALIZE(balance)
+        KV_SERIALIZE(bytecode)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string status;
+      std::vector<contract_entry> contracts;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(status)
+        KV_SERIALIZE(contracts)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
 }

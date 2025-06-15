@@ -1772,6 +1772,28 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   return true;
 }
 
+bool simple_wallet::contract_balance(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: contract_balance <address>");
+    return true;
+  }
+  if (!try_connect_to_daemon())
+    return true;
+
+  cryptonote::COMMAND_RPC_GET_CONTRACT_BALANCE::request req;
+  cryptonote::COMMAND_RPC_GET_CONTRACT_BALANCE::response res;
+  req.address = args[0];
+  bool r = m_wallet->invoke_http_json("/get_contract_balance", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Balance: ") << print_money(res.balance);
+  else
+    fail_msg_writer() << tr("failed to get contract balance: ") << err;
+  return true;
+}
+
 bool simple_wallet::compile_contract(const std::vector<std::string>& args)
 {
   if (args.size() != 1)
@@ -2610,6 +2632,10 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::call_contract, this, _1),
                            tr("call_contract <address> <file> [write]"),
                            tr("Call deployed contract at <address> with input from <file>. Append 'write' to pay the data fee and modify state"));
+  m_cmd_binder.set_handler("contract_balance",
+                           boost::bind(&simple_wallet::contract_balance, this, _1),
+                           tr("contract_balance <address>"),
+                           tr("Show the balance of a deployed smart contract"));
   m_cmd_binder.set_handler("bulk_transfer",
                            boost::bind(&simple_wallet::bulk_transfer, this, _1),
                            tr("bulk_transfer <file>"),

@@ -2269,6 +2269,29 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
 
+  bool core_rpc_server::on_get_contract_balance(const COMMAND_RPC_GET_CONTRACT_BALANCE::request& req, COMMAND_RPC_GET_CONTRACT_BALANCE::response& res)
+  {
+    res.balance = m_core.get_evm().balance_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_get_contracts(const COMMAND_RPC_GET_CONTRACTS::request& req, COMMAND_RPC_GET_CONTRACTS::response& res)
+  {
+    for (const auto& kv : m_core.get_evm().get_contracts())
+    {
+      COMMAND_RPC_GET_CONTRACTS::contract_entry ce;
+      ce.address = kv.first;
+      ce.owner = kv.second.owner;
+      ce.balance = kv.second.balance;
+      ce.bytecode = epee::string_tools::buff_to_hex_nodelimer(std::string(kv.second.code.begin(), kv.second.code.end()));
+      res.contracts.push_back(std::move(ce));
+    }
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
 
   const command_line::arg_descriptor<std::string, false, true, 2> core_rpc_server::arg_rpc_bind_port = {
       "rpc-bind-port"
