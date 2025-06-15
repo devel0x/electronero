@@ -602,7 +602,7 @@ std::string simple_wallet::get_command_usage(const std::vector<std::string> &arg
 bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector<cryptonote::tx_extra_field> &fields)
 {
   std::ostringstream oss;
-  ::serialization::binary_archive<true> oar(oss);
+  binary_archive<true> oar(oss);
 
   for (const auto &field : fields)
   {
