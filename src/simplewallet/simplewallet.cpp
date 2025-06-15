@@ -338,6 +338,28 @@ namespace
     }
   }
 
+  bool compile_solidity(const std::string& file, std::string& hex)
+  {
+    std::string cmd = "solc --optimize --bin \"" + file + "\" 2>/dev/null";
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe)
+      return false;
+    char buffer[256];
+    std::string last_line;
+    while (fgets(buffer, sizeof(buffer), pipe))
+    {
+      std::string line = buffer;
+      boost::algorithm::trim(line);
+      if (!line.empty())
+        last_line = line;
+    }
+    int status = pclose(pipe);
+    if (status != 0 || last_line.empty())
+      return false;
+    hex = last_line;
+    return true;
+  }
+
   std::string get_version_string(uint32_t version)
   {
     return boost::lexical_cast<std::string>(version >> 16) + "." + boost::lexical_cast<std::string>(version & 0xffff);
@@ -1609,6 +1631,7 @@ bool simple_wallet::save_known_rings(const std::vector<std::string> &args)
   }
   return true;
 }
+
 bool simple_wallet::version(const std::vector<std::string> &args)
 {
   message_writer() << "Electronero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";
@@ -1768,6 +1791,7 @@ bool simple_wallet::bulk_transfer(const std::vector<std::string>& args)
 
   return transfer_main(TransferNew, transfer_args);
 }
+
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -6836,7 +6860,7 @@ void simple_wallet::print_accounts()
 {
   const std::pair<std::map<std::string, std::string>, std::vector<std::string>>& account_tags = m_wallet->get_account_tags();
   size_t num_untagged_accounts = m_wallet->get_num_subaddress_accounts();
-  for (const std::pair<std::string, std::string>& p : account_tags.first)
+  for (const std::pair<const std::string, std::string>& p : account_tags.first)
   {
     const std::string& tag = p.first;
     print_accounts(tag);

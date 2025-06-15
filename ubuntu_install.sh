@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-set -e
-
 apt-get update
 apt-get install --yes \
   build-essential cmake pkg-config libssl-dev libzmq3-dev \
@@ -16,4 +14,3 @@ apt-get install --yes \
 git submodule update --init --recursive
 
 echo "Dependencies and submodules ready"
-

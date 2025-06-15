@@ -2366,6 +2366,8 @@ bool Blockchain::get_blocks(const t_ids_container& block_ids, t_blocks_container
 //------------------------------------------------------------------
 //TODO: return type should be void, throw on exception
 //       alternatively, return true only if no transactions missed
+// blockchain.cpp
+
 template<class t_ids_container, class t_tx_container, class t_missed_container>
 bool Blockchain::get_transactions_blobs(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs) const
 {
@@ -2389,6 +2391,18 @@ bool Blockchain::get_transactions_blobs(const t_ids_container& txs_ids, t_tx_con
   }
   return true;
 }
+
+// Explicit instantiation to avoid linker errors
+template bool Blockchain::get_transactions_blobs<
+  std::vector<crypto::hash>,
+  std::list<std::string>,
+  std::list<crypto::hash>
+>(
+  const std::vector<crypto::hash>&,
+  std::list<std::string>&,
+  std::list<crypto::hash>&
+) const;
+
 //------------------------------------------------------------------
 template<class t_ids_container, class t_tx_container, class t_missed_container>
 bool Blockchain::get_transactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs) const

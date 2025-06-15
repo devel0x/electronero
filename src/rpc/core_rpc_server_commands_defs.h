@@ -40,7 +40,7 @@ namespace cryptonote
 #define CORE_RPC_STATUS_OK   "OK"
 #define CORE_RPC_STATUS_BUSY   "BUSY"
 #define CORE_RPC_STATUS_NOT_MINING "NOT MINING"
-
+#define CORE_RPC_STATUS_FAILED "FAILED" 
 // When making *any* change here, bump minor
 // If the change is incompatible, then bump major and set minor to 0
 // This ensures CORE_RPC_VERSION always increases, that every change
@@ -2246,6 +2246,64 @@ namespace cryptonote
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(distributions)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_DEPLOY_CONTRACT
+  {
+    struct request
+    {
+      std::string account;
+      std::string bytecode;
+      uint64_t fee;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(account)
+        KV_SERIALIZE(bytecode)
+        KV_SERIALIZE(fee)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string address;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_CALL_CONTRACT
+  {
+    struct request
+    {
+      std::string account;
+      std::string caller;
+      std::string data;
+      bool write;
+      uint64_t fee;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(account)
+        KV_SERIALIZE(caller)
+        KV_SERIALIZE(data)
+        KV_SERIALIZE_OPT(write, false)
+        KV_SERIALIZE_OPT(fee, (uint64_t)0)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      int64_t result;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(result)
+        KV_SERIALIZE(status)
       END_KV_SERIALIZE_MAP()
     };
   };
