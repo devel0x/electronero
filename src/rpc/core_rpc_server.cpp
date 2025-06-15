@@ -2276,6 +2276,20 @@ namespace cryptonote
     return true;
   }
 
+  bool core_rpc_server::on_get_contract_owner(const COMMAND_RPC_GET_CONTRACT_OWNER::request& req, COMMAND_RPC_GET_CONTRACT_OWNER::response& res)
+  {
+    res.owner = m_core.get_evm().owner_of(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_contract_storage(const COMMAND_RPC_GET_CONTRACT_STORAGE::request& req, COMMAND_RPC_GET_CONTRACT_STORAGE::response& res)
+  {
+    res.value = m_core.get_evm().storage_at(req.address, req.key);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
   //------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_contracts(const COMMAND_RPC_GET_CONTRACTS::request& req, COMMAND_RPC_GET_CONTRACTS::response& res)
   {
