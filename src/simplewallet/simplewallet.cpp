@@ -67,6 +67,9 @@
 #include "version.h"
 #include <stdexcept>
 
+#include "serialization/binary_utils.h"
+#include "cryptonote_basic/tx_extra.h"
+
 #ifdef WIN32
 #include <boost/locale.hpp>
 #include <boost/filesystem.hpp>
@@ -594,6 +597,22 @@ std::string simple_wallet::get_command_usage(const std::vector<std::string> &arg
     ss << tr("Command description: ") << ENDL << description << ENDL;
   }
   return ss.str();
+}
+
+bool add_extra_fields_to_tx_extra(std::vector<uint8_t> &extra, const std::vector<cryptonote::tx_extra_field> &fields)
+{
+  std::ostringstream oss;
+  cryptonote::binary_archive<true> oar(oss);
+
+  for (const auto &field : fields)
+  {
+    if (!::serialization::serialize(oar, field))
+      return false;
+  }
+
+  std::string extra_str = oss.str();
+  extra.insert(extra.end(), extra_str.begin(), extra_str.end());
+  return true;
 }
 
 bool simple_wallet::viewkey(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
