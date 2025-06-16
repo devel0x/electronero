@@ -5606,6 +5606,25 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     else
     {
       commit_or_save(ptx_vector, m_do_not_relay);
+      if (!m_do_not_relay)
+      {
+        for (const auto &cd : contract_dests)
+        {
+          cryptonote::COMMAND_RPC_CALL_CONTRACT::request creq;
+          cryptonote::COMMAND_RPC_CALL_CONTRACT::response cres;
+          creq.account = cd.first;
+          creq.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+          creq.data = std::string("deposit:") + std::to_string(cd.second);
+          creq.write = true;
+          creq.fee = creq.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+          bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
+          std::string err = interpret_rpc_response(ok, cres.status);
+          if (err.empty())
+            success_msg_writer() << tr("Contract deposit processed for ") << cd.first;
+          else
+            fail_msg_writer() << tr("failed to deposit to contract: ") << err;
+        }
+      }
     }
   }
   catch (const std::exception &e)
