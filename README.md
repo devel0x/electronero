@@ -74,7 +74,7 @@ Electronero is a private, secure, untraceable, decentralised digital currency. Y
 
 ## Smart Contracts
 
-Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file> [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, the equality check `EQ` (0x14) opcode, and the `REVERT` opcode for greater compatibility with Solidity 0.8.
+Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file|method> [params...] [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, the equality check `EQ` (0x14) opcode, and the `REVERT` opcode for greater compatibility with Solidity 0.8.
 
 Deploying a contract incurs a fee proportional to its bytecode size. The wallet calculates this automatically using a rate of 10 atomic units per byte.
 When you run `deploy_contract` the CLI displays the byte count and fee split between the network and governance address and asks for confirmation before submitting. The wallet RPC method `/deploy_contract` mirrors this behaviour by sending the deployment transaction and registering the contract under your wallet address.
@@ -82,6 +82,79 @@ Calls that modify contract state require a fee as well. The wallet uses 5 atomic
 
 Every contract maintains its own balance tracked by the EVM. You can deposit coins with `deposit_contract <address> <amount>` or `call_contract <address> deposit:<amount> write`. Deposits send the amount to a deterministic wallet address derived from the contract so the funds remain spendable. The full per‑byte call fee is forwarded to the governance wallet so you pay the normal network fee plus the EVM fee. Transfers between contracts or to regular addresses automatically craft a transaction using `create_transactions_2` and validate a transaction proof. The built‑in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
 Sending coins directly to a contract address with the normal `transfer` command will perform the same deposit logic automatically.
+### Interacting with a contract
+
+A basic workflow compiles, deploys and invokes Solidity contracts using
+`electronero-wallet-cli`. Below is a minimal counter contract followed by the
+commands needed to operate it.
+
+```solidity
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 private value;
+
+    function increment(uint256 v) public {
+        value += v;
+    }
+
+    function read() public view returns (uint256) {
+        return value;
+    }
+}
+```
+
+Compile the source in your wallet directory:
+
+```bash
+electronero-wallet-cli compile_contract Counter.sol
+```
+
+Deploy the resulting bytecode:
+
+```bash
+electronero-wallet-cli deploy_contract Counter.bin
+```
+
+The wallet prints the new contract address (for example `c1`). You can invoke
+functions by name without preparing the ABI payload yourself. The following
+command increments the counter by `5` and automatically encodes
+`increment(uint256)`:
+
+```bash
+electronero-wallet-cli call_contract c1 increment 5 write
+```
+
+If you prefer manual control, encode function calls with any Ethereum tool such
+as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
+payload `d09de08a0000000000000000000000000000000000000000000000000000000000000005`.
+Save this string to a file named `inc.data` next to your wallet and invoke the
+contract:
+
+```bash
+electronero-wallet-cli call_contract c1 inc.data write
+```
+
+Read the counter value by calling the `read()` function using its encoded data
+stored in `read.data`:
+
+```bash
+electronero-wallet-cli call_contract c1 read.data
+```
+
+The CLI prints the returned integer. The same payload can be sent over RPC:
+
+```json
+{"jsonrpc":"2.0","id":"0","method":"call_contract","params":{"account":"c1","caller":"<your address>","data":"d09de08a0000000000000000000000000000000000000000000000000000000000000005","write":true}}
+```
+
+Use `electronero-wallet-cli encode_call increment 5` to print the same hex
+payload when crafting custom RPC requests.
+Alternatively, call the RPC method `encode_call` with `{ "call": "increment(5)" }`
+to receive the encoded payload for use with `call_contract`.
+
+This request performs the same state-changing call through the wallet RPC
+server.
 
 Regular Solidity code works on the embedded EVM. Inline `assembly` is only required for direct access to custom opcodes.
 

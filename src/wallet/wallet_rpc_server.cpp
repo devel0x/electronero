@@ -33,6 +33,7 @@
 #include <boost/algorithm/string.hpp>
 #include <sstream>
 #include <cstdint>
+#include <cstdio>
 #include "include_base_utils.h"
 using namespace epee;
 
@@ -49,6 +50,7 @@ using namespace epee;
 #include "string_coding.h"
 #include "string_tools.h"
 #include "crypto/hash.h"
+#include "crypto/keccak.h"
 #include "mnemonics/electrum-words.h"
 #include "rpc/rpc_args.h"
 #include "rpc/core_rpc_server_commands_defs.h"
@@ -3064,8 +3066,8 @@ namespace tools
     return true;
   }
 
-  bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er)
-  {
+bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er)
+{
     if (!m_wallet) return not_open(er);
     if (m_wallet->restricted())
     {
@@ -3155,10 +3157,83 @@ namespace tools
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
       res.tx_metadata = ptx_to_string(ptx_vector[0]);
-    res.status = CORE_RPC_STATUS_OK;
-    return true;
+  res.status = CORE_RPC_STATUS_OK;
+  return true;
+ }
+
+  namespace
+  {
+    bool encode_simple_call(const std::string &method, const std::vector<std::string> &params, std::string &hex)
+    {
+      std::string sig = method + "(";
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        if (i) sig += ",";
+        sig += "uint256";
+      }
+      sig += ")";
+
+      uint8_t hash[32];
+      keccak(reinterpret_cast<const uint8_t*>(sig.data()), sig.size(), hash, 32);
+      hex = epee::string_tools::buff_to_hex_nodelimer(std::string((char*)hash, 4));
+
+      for (const std::string &p : params)
+      {
+        unsigned long long val = 0;
+        try { val = std::stoull(p); }
+        catch (const std::exception&) { return false; }
+        char buf[17];
+        snprintf(buf, sizeof(buf), "%016llx", val);
+        hex.append(64 - 16, '0');
+        hex += buf;
+      }
+      return true;
+    }
+
+    bool parse_call_string(const std::string &in, std::string &method, std::vector<std::string> &params)
+    {
+      auto open = in.find('(');
+      auto close = in.rfind(')');
+      if (open == std::string::npos || close == std::string::npos || close < open)
+        return false;
+      method = in.substr(0, open);
+      boost::algorithm::trim(method);
+      std::string inside = in.substr(open + 1, close - open - 1);
+      boost::algorithm::trim(inside);
+      params.clear();
+      if (!inside.empty())
+        boost::split(params, inside, boost::is_any_of(","), boost::token_compress_on);
+      for (std::string &p : params)
+        boost::algorithm::trim(p);
+      return true;
+    }
   }
 
+bool wallet_rpc_server::on_encode_call(const wallet_rpc::COMMAND_RPC_ENCODE_CALL::request& req, wallet_rpc::COMMAND_RPC_ENCODE_CALL::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if (m_wallet->restricted())
+  {
+    er.code = WALLET_RPC_ERROR_CODE_DENIED;
+    er.message = "Command unavailable in restricted mode.";
+    return false;
+  }
+
+  std::string method;
+  std::vector<std::string> params;
+  if (!parse_call_string(req.call, method, params))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_BAD_HEX;
+    er.message = "Invalid call string";
+    return false;
+  }
+  if (!encode_simple_call(method, params, res.data))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_BAD_HEX;
+    er.message = "Failed to encode";
+    return false;
+  }
+  return true;
 }
 
 int main(int argc, char** argv) {
