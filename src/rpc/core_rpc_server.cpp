@@ -2315,6 +2315,19 @@ namespace cryptonote
     return true;
   }
 
+  bool core_rpc_server::on_get_contract_deposit_address(const COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::request& req, COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::response& res)
+  {
+    cryptonote::account_public_address addr = m_core.get_evm().deposit_address(req.address);
+    if (addr.m_spend_public_key == crypto::null_pkey)
+    {
+      res.status = CORE_RPC_STATUS_FAILED;
+      return false;
+    }
+    res.deposit_address = get_account_address_as_str(m_core.get_nettype(), false, addr);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
   bool core_rpc_server::on_verify_contract(const COMMAND_RPC_VERIFY_CONTRACT::request& req, COMMAND_RPC_VERIFY_CONTRACT::response& res)
   {
     const auto& code = m_core.get_evm().code_of(req.address);
