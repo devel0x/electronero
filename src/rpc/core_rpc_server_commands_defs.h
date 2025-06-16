@@ -2452,6 +2452,29 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS
+  {
+    struct request
+    {
+      std::string address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string deposit_address;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(deposit_address)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_VERIFY_CONTRACT
   {
     struct request

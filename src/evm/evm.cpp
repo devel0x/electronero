@@ -34,6 +34,12 @@ std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& by
   c.code = bytecode;
   c.owner = owner;
   c.id = id;
+  crypto::hash secret;
+  crypto::generate_random_bytes_not_thread_safe(sizeof(secret), &secret);
+  c.secret_enc = secret;
+  for (size_t i = 0; i < sizeof(secret.data); ++i)
+    c.secret_enc.data[i] ^= config::EVM_SECRET_XOR[i % config::EVM_SECRET_XOR.size()];
+  memwipe(&secret, sizeof(secret));
   contracts[address] = c;
   id_map[id] = address;
   return address;
@@ -106,6 +112,43 @@ const std::vector<uint8_t>& EVM::code_of(const std::string& address) const
   static const std::vector<uint8_t> empty;
   auto it = contracts.find(address);
   return it == contracts.end() ? empty : it->second.code;
+}
+
+cryptonote::account_public_address EVM::deposit_address(const std::string& address) const
+{
+  cryptonote::account_public_address out{crypto::null_pkey, crypto::null_pkey};
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return out;
+
+  crypto::hash secret = it->second.secret_enc;
+  for (size_t i = 0; i < sizeof(secret.data); ++i)
+    secret.data[i] ^= config::EVM_SECRET_XOR[i % config::EVM_SECRET_XOR.size()];
+
+  crypto::hash mix;
+  crypto::cn_fast_hash(address.data(), address.size(), mix);
+  for (size_t i = 0; i < sizeof(mix.data); ++i)
+    mix.data[i] ^= secret.data[i];
+  crypto::hash h2;
+  crypto::cn_fast_hash(&mix, sizeof(mix), h2);
+
+  crypto::secret_key spend_key, view_key;
+  memcpy(spend_key.data, &mix, sizeof(spend_key.data));
+  memcpy(view_key.data, &h2, sizeof(view_key.data));
+  sc_reduce32(reinterpret_cast<unsigned char*>(spend_key.data));
+  sc_reduce32(reinterpret_cast<unsigned char*>(view_key.data));
+
+  crypto::public_key spend_pub, view_pub;
+  crypto::secret_key_to_public_key(spend_key, spend_pub);
+  crypto::secret_key_to_public_key(view_key, view_pub);
+
+  out.m_spend_public_key = spend_pub;
+  out.m_view_public_key  = view_pub;
+
+  memwipe(&spend_key, sizeof(spend_key));
+  memwipe(&view_key, sizeof(view_key));
+  memwipe(&secret, sizeof(secret));
+  return out;
 }
 
 std::vector<std::string> EVM::contracts_of_owner(const std::string& owner) const
