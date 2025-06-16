@@ -187,6 +187,8 @@ namespace config
   uint64_t const DEFAULT_DUST_THRESHOLD = ((uint64_t)5000); //
   uint64_t const EVM_DEPLOY_FEE_PER_BYTE = 10; // fee in atomic units per byte of contract bytecode
   uint64_t const EVM_CALL_FEE_PER_BYTE = 5; // fee in atomic units per byte of call data when writing
+  //! Key used to obfuscate contract secrets
+  std::string const EVM_SECRET_XOR = "evm_secret_xor_key_for_contracts";
   uint64_t const BASE_REWARD_CLAMP_THRESHOLD = ((uint64_t)100000000); // pow(10, 8)
   std::string const P2P_REMOTE_DEBUG_TRUSTED_PUB_KEY = "0000000000000000000000000000000000000000000000000000000000000000";
   //! Address receiving the governance portion of EVM fees

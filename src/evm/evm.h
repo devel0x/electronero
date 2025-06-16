@@ -7,6 +7,9 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/string.hpp>
+#include "crypto/crypto.h"
+#include "cryptonote_basic/account.h"
+#include "memwipe.h"
 
 namespace CryptoNote {
 
@@ -19,6 +22,7 @@ public:
     std::unordered_map<uint64_t, uint64_t> storage;
     std::vector<uint64_t> logs;
     uint64_t id = 0;
+    crypto::hash secret_enc;
 
     template<class Archive>
     void serialize(Archive& ar, const unsigned int /*version*/)
@@ -29,6 +33,7 @@ public:
       ar & storage;
       ar & logs;
       ar & id;
+      ar & secret_enc;
     }
   };
 
@@ -48,6 +53,7 @@ public:
   uint64_t storage_at(const std::string& address, uint64_t key) const;
   const std::vector<uint64_t>& logs_of(const std::string& address) const;
   const std::vector<uint8_t>& code_of(const std::string& address) const;
+  cryptonote::account_public_address deposit_address(const std::string& address) const;
   std::vector<std::string> contracts_of_owner(const std::string& owner) const;
   std::vector<std::string> all_addresses() const;
   bool save(const std::string& path) const;

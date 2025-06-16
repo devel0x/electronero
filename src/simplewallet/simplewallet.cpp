@@ -65,6 +65,7 @@
 #include "multisig/multisig.h"
 #include "wallet/wallet_args.h"
 #include "version.h"
+#include "memwipe.h"
 #include <stdexcept>
 
 #include "serialization/binary_utils.h"
@@ -142,7 +143,7 @@ namespace
   const command_line::arg_descriptor<bool> arg_use_english_language_names = {"use-english-language-names", sw::tr("Display English language names"), false};
 
   // Helpers defined later in the file
-  cryptonote::account_public_address contract_deposit_address(const std::string &addr);
+  bool contract_deposit_address(tools::wallet2* wallet, const std::string &addr, cryptonote::account_public_address &out);
   bool is_contract_address(const std::string &addr);
 
   const command_line::arg_descriptor< std::vector<std::string> > arg_command = {"command", ""};
@@ -1874,7 +1875,13 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     }
     if (is_contract_address(dest))
     {
-      transfer_de.addr = contract_deposit_address(dest);
+      cryptonote::account_public_address caddr;
+      if (!contract_deposit_address(m_wallet.get(), dest, caddr))
+      {
+        fail_msg_writer() << tr("failed to obtain contract deposit address");
+        return true;
+      }
+      transfer_de.addr = caddr;
       transfer_de.is_subaddress = false;
     }
     else
@@ -1956,30 +1963,19 @@ namespace
 {
   // deterministically derive a deposit address from a contract id so funds are
   // removed from circulation yet traceable to the contract
-  cryptonote::account_public_address contract_deposit_address(const std::string &addr)
+  bool contract_deposit_address(tools::wallet2* wallet, const std::string &addr, cryptonote::account_public_address &out)
   {
-    // hash the contract id twice to generate deterministic keys
-    crypto::hash h1;
-    crypto::cn_fast_hash(addr.data(), addr.size(), h1);
-    crypto::hash h2;
-    crypto::cn_fast_hash(&h1, sizeof(h1), h2);
-
-    // interpret hashes as secret keys and reduce to valid scalars
-    crypto::secret_key spend_key, view_key;
-    memcpy(spend_key.data, &h1, sizeof(spend_key.data));
-    memcpy(view_key.data, &h2, sizeof(view_key.data));
-    sc_reduce32(reinterpret_cast<unsigned char*>(spend_key.data));
-    sc_reduce32(reinterpret_cast<unsigned char*>(view_key.data));
-
-    // convert the secret keys to public keys
-    crypto::public_key spend_pub, view_pub;
-    crypto::secret_key_to_public_key(spend_key, spend_pub);
-    crypto::secret_key_to_public_key(view_key, view_pub);
-
-    cryptonote::account_public_address out;
-    out.m_spend_public_key = spend_pub;
-    out.m_view_public_key = view_pub;
-    return out;
+    cryptonote::COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::request req;
+    cryptonote::COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::response res;
+    req.address = addr;
+    bool r = wallet->invoke_http_json("/get_contract_deposit_address", req, res);
+    if (!r || res.status != CORE_RPC_STATUS_OK)
+      return false;
+    cryptonote::address_parse_info info;
+    if (!cryptonote::get_account_address_from_str(info, wallet->nettype(), res.deposit_address))
+      return false;
+    out = info.address;
+    return true;
   }
 
   bool is_contract_address(const std::string &addr)
@@ -2033,7 +2029,13 @@ bool simple_wallet::deposit_contract(const std::vector<std::string>& args)
   }
 
   cryptonote::tx_destination_entry dep_de;
-  dep_de.addr = contract_deposit_address(args[0]);
+  cryptonote::account_public_address caddr;
+  if (!contract_deposit_address(m_wallet.get(), args[0], caddr))
+  {
+    fail_msg_writer() << tr("failed to obtain contract deposit address");
+    return true;
+  }
+  dep_de.addr = caddr;
   dep_de.amount = amount;
   dep_de.is_subaddress = false;
 
@@ -5289,7 +5291,13 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     {
       if (is_contract_address(local_args[i]))
       {
-        de.addr = contract_deposit_address(local_args[i]);
+        cryptonote::account_public_address caddr;
+        if (!contract_deposit_address(m_wallet.get(), local_args[i], caddr))
+        {
+          fail_msg_writer() << tr("failed to obtain contract deposit address");
+          return true;
+        }
+        de.addr = caddr;
         de.is_subaddress = false;
         contract_dests.emplace_back(local_args[i], 0);
       }
@@ -6044,7 +6052,13 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
   cryptonote::address_parse_info info;
   if (is_contract_address(local_args[1]))
   {
-    info.address = contract_deposit_address(local_args[1]);
+    cryptonote::account_public_address caddr;
+    if (!contract_deposit_address(m_wallet.get(), local_args[1], caddr))
+    {
+      fail_msg_writer() << tr("failed to obtain contract deposit address");
+      return true;
+    }
+    info.address = caddr;
     info.is_subaddress = false;
     contract_dests.emplace_back(local_args[1], 0);
   }
