@@ -38,6 +38,7 @@
 #include <sstream>
 #include <fstream>
 #include <ctype.h>
+#include <cstdio>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -47,6 +48,7 @@
 #include "include_base_utils.h"
 #include "common/i18n.h"
 #include "common/command_line.h"
+#include "string_tools.h"
 #include "common/util.h"
 #include "common/dns_utils.h"
 #include "common/base58.h"
@@ -57,6 +59,7 @@
 #include "storages/http_abstract_invoke.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "crypto/crypto.h"  // for crypto::secret_key definition
+#include "crypto/keccak.h"
 #include "mnemonics/electrum-words.h"
 #include "cryptonote_config.h"
 #include "rapidjson/document.h"
@@ -343,6 +346,33 @@ namespace
     {
       return false;
     }
+  }
+
+  bool encode_simple_call(const std::string &method, const std::vector<std::string> &params, std::string &hex)
+  {
+    std::string sig = method + "(";
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (i) sig += ",";
+      sig += "uint256";
+    }
+    sig += ")";
+
+    uint8_t hash[32];
+    keccak(reinterpret_cast<const uint8_t*>(sig.data()), sig.size(), hash, 32);
+    hex = epee::string_tools::buff_to_hex_nodelimer(std::string((char*)hash, 4));
+
+    for (const std::string &p : params)
+    {
+      unsigned long long val = 0;
+      try { val = std::stoull(p); }
+      catch (const std::exception&) { return false; }
+      char buf[17];
+      snprintf(buf, sizeof(buf), "%016llx", val);
+      hex.append(64 - 16, '0');
+      hex += buf;
+    }
+    return true;
   }
 
   std::string get_version_string(uint32_t version)
@@ -1786,27 +1816,45 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
 bool simple_wallet::call_contract(const std::vector<std::string>& args)
 {
-  if (args.size() != 2 && args.size() != 3)
+  if (args.size() < 2)
   {
-    fail_msg_writer() << tr("usage: call_contract <address> <file> [write]");
+    fail_msg_writer() << tr("usage: call_contract <address> <file|method> [params...] [write]");
     return true;
   }
   if (!try_connect_to_daemon())
     return true;
 
   const std::string account = args[0];
-  // input data is loaded from a file residing next to the wallet.
-  // The file should contain a hex string with ABI encoded function data,
-  // such as produced by solc or other Ethereum tooling.
-  const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[1];
-  std::string data;
-  if (!epee::file_io_utils::load_file_to_string(file_path.string(), data))
-  {
-    fail_msg_writer() << tr("failed to read input file") << ' ' << file_path.string();
-    return true;
-  }
+  bool write = args.size() > 2 && args.back() == "write";
 
-  bool write = args.size() == 3 && args[2] == "write";
+  const boost::filesystem::path maybe_file = boost::filesystem::path(m_wallet_file).parent_path() / args[1];
+  std::string data;
+  std::vector<std::string> params;
+  if (boost::filesystem::exists(maybe_file))
+  {
+    if (args.size() != 2 + (write ? 1 : 0))
+    {
+      fail_msg_writer() << tr("usage: call_contract <address> <file> [write]");
+      return true;
+    }
+    if (!epee::file_io_utils::load_file_to_string(maybe_file.string(), data))
+    {
+      fail_msg_writer() << tr("failed to read input file") << ' ' << maybe_file.string();
+      return true;
+    }
+  }
+  else
+  {
+    if (write)
+      params.assign(args.begin() + 2, args.end() - 1);
+    else if (args.size() > 2)
+      params.assign(args.begin() + 2, args.end());
+    if (!encode_simple_call(args[1], params, data))
+    {
+      fail_msg_writer() << tr("failed to encode call data");
+      return true;
+    }
+  }
   if (!write)
   {
     COMMAND_RPC_CALL_CONTRACT::request req;
@@ -1927,6 +1975,26 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   catch (const std::exception &e) {
     fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
   }
+  return true;
+}
+
+bool simple_wallet::encode_call(const std::vector<std::string>& args)
+{
+  if (args.empty())
+  {
+    fail_msg_writer() << tr("usage: encode_call <method> [params...]");
+    return true;
+  }
+  std::vector<std::string> params;
+  if (args.size() > 1)
+    params.assign(args.begin() + 1, args.end());
+  std::string hex;
+  if (!encode_simple_call(args[0], params, hex))
+  {
+    fail_msg_writer() << tr("failed to encode call data");
+    return true;
+  }
+  success_msg_writer() << hex;
   return true;
 }
 
@@ -3146,8 +3214,12 @@ simple_wallet::simple_wallet()
                            tr("Deploy a smart contract from <file> located in the wallet directory"));
   m_cmd_binder.set_handler("call_contract",
                            boost::bind(&simple_wallet::call_contract, this, _1),
-                           tr("call_contract <address> <file> [write]"),
-                           tr("Call deployed contract at <address> with input from <file>. Append 'write' to pay the data fee and modify state"));
+                           tr("call_contract <address> <file|method> [params...] [write]"),
+                           tr("Call deployed contract at <address> using input from <file> or encode <method> with integer parameters. Append 'write' to pay the data fee and modify state"));
+  m_cmd_binder.set_handler("encode_call",
+                           boost::bind(&simple_wallet::encode_call, this, _1),
+                           tr("encode_call <method> [params...]"),
+                           tr("Print ABI encoded payload for calling <method> with integer parameters"));
   m_cmd_binder.set_handler("contract_balance",
                            boost::bind(&simple_wallet::contract_balance, this, _1),
                            tr("contract_balance <address>"),
