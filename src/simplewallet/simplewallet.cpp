@@ -1958,13 +1958,27 @@ namespace
   // removed from circulation yet traceable to the contract
   cryptonote::account_public_address contract_deposit_address(const std::string &addr)
   {
+    // hash the contract id twice to generate deterministic keys
     crypto::hash h1;
     crypto::cn_fast_hash(addr.data(), addr.size(), h1);
     crypto::hash h2;
     crypto::cn_fast_hash(&h1, sizeof(h1), h2);
+
+    // interpret hashes as secret keys and reduce to valid scalars
+    crypto::secret_key spend_key, view_key;
+    memcpy(&spend_key, &h1, sizeof(spend_key));
+    memcpy(&view_key, &h2, sizeof(view_key));
+    sc_reduce32(reinterpret_cast<unsigned char*>(spend_key.data));
+    sc_reduce32(reinterpret_cast<unsigned char*>(view_key.data));
+
+    // convert the secret keys to public keys
+    crypto::public_key spend_pub, view_pub;
+    crypto::secret_key_to_public_key(spend_key, spend_pub);
+    crypto::secret_key_to_public_key(view_key, view_pub);
+
     cryptonote::account_public_address out;
-    memcpy(&out.m_spend_public_key, &h1, sizeof(crypto::public_key));
-    memcpy(&out.m_view_public_key, &h2, sizeof(crypto::public_key));
+    out.m_spend_public_key = spend_pub;
+    out.m_view_public_key = view_pub;
     return out;
   }
 
