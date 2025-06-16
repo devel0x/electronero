@@ -171,6 +171,8 @@ namespace net_utils
     bool m_local;
     bool m_ready_to_close;
     std::string m_host;
+    mutable std::atomic<bool> m_shutdown_in_progress{false}; // ensures shutdown() runs only once
+
 
 	public:
 			void setRpcStation();
