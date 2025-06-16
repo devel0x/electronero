@@ -414,6 +414,7 @@ namespace cryptonote
       {
         case TX_EXTRA_TAG_PADDING:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           size_t count = 1;
           while (offset < tx_extra.size() && tx_extra[offset] == 0 && count <= TX_EXTRA_PADDING_MAX_COUNT)
           {
@@ -428,6 +429,7 @@ namespace cryptonote
   
         case TX_EXTRA_TAG_PUBKEY:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset + sizeof(crypto::public_key) > tx_extra.size())
             return false;
           cryptonote::tx_extra_pub_key pk;
@@ -439,6 +441,7 @@ namespace cryptonote
   
         case TX_EXTRA_NONCE:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset >= tx_extra.size())
             return false;
           uint8_t size = tx_extra[offset++];
@@ -453,6 +456,7 @@ namespace cryptonote
   
         case TX_EXTRA_MERGE_MINING_TAG:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset >= tx_extra.size())
             return false;
           uint8_t size = tx_extra[offset++];
@@ -471,6 +475,7 @@ namespace cryptonote
   
         case TX_EXTRA_TAG_ADDITIONAL_PUBKEYS:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset >= tx_extra.size())
             return false;
           uint8_t size = tx_extra[offset++];
@@ -489,6 +494,7 @@ namespace cryptonote
   
         case TX_EXTRA_MYSTERIOUS_MINERGATE_TAG:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset >= tx_extra.size())
             return false;
           uint8_t size = tx_extra[offset++];
@@ -503,6 +509,7 @@ namespace cryptonote
   
         case TX_EXTRA_EVM_BYTECODE_TAG:
         {
+          MDEBUG("Found tx_extra tag: " << (int)tag);
           if (offset >= tx_extra.size())
             return false;
           uint8_t size = tx_extra[offset++];
