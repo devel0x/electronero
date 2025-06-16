@@ -3049,7 +3049,18 @@ namespace tools
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
       res.tx_metadata = ptx_to_string(ptx_vector[0]);
-    res.address = epee::string_tools::pod_to_hex(txid);
+
+    // register the contract with the daemon like the CLI command does
+    cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::request daemon_req;
+    cryptonote::COMMAND_RPC_DEPLOY_CONTRACT::response daemon_res;
+    daemon_req.account = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    daemon_req.bytecode = req.bytecode;
+    daemon_req.fee = evm_fee + net_fee;
+    bool r = m_wallet->invoke_http_json("/deploy_contract", daemon_req, daemon_res);
+    if (r && daemon_res.status == CORE_RPC_STATUS_OK)
+      res.address = daemon_res.address;
+    else
+      res.address = epee::string_tools::pod_to_hex(txid);
     return true;
   }
 
