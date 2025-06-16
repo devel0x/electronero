@@ -1966,8 +1966,8 @@ namespace
 
     // interpret hashes as secret keys and reduce to valid scalars
     crypto::secret_key spend_key, view_key;
-    memcpy(&spend_key, &h1, sizeof(spend_key));
-    memcpy(&view_key, &h2, sizeof(view_key));
+    memcpy(spend_key.data, &h1, sizeof(spend_key.data));
+    memcpy(view_key.data, &h2, sizeof(view_key.data));
     sc_reduce32(reinterpret_cast<unsigned char*>(spend_key.data));
     sc_reduce32(reinterpret_cast<unsigned char*>(view_key.data));
 
