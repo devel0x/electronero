@@ -652,17 +652,28 @@ PRAGMA_WARNING_DISABLE_VS(4355)
   template<class t_protocol_handler>
   bool connection<t_protocol_handler>::shutdown()
   {
-    // Initiate graceful connection closure.
+    static boost::mutex shutdown_mutex;
+    CRITICAL_REGION_LOCAL(shutdown_mutex);
+
+    if (m_was_shutdown)
+      return false; // already shut down
+
+    m_was_shutdown = true;
     m_timer.cancel();
+
     boost::system::error_code ignored_ec;
     socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored_ec);
-    m_was_shutdown = true;
+
     m_protocol_handler.release_protocol();
-    if (!m_host.empty())
-    {
-      try { host_count(m_host, -1); } catch (...) { /* ignore */ }
-      m_host = "";
-    }
+
+    try {
+      if (!m_host.empty()) {
+        host_count(m_host, -1);
+      }
+    } catch (...) { /* ignore */ }
+
+    m_host.clear(); // safer than assignment
+
     return true;
   }
   //---------------------------------------------------------------------------------
