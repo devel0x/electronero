@@ -82,6 +82,66 @@ Calls that modify contract state require a fee as well. The wallet uses 5 atomic
 
 Every contract maintains its own balance tracked by the EVM. You can deposit coins with `deposit_contract <address> <amount>` or `call_contract <address> deposit:<amount> write`. Deposits send the amount to a deterministic wallet address derived from the contract so the funds remain spendable. The full per‑byte call fee is forwarded to the governance wallet so you pay the normal network fee plus the EVM fee. Transfers between contracts or to regular addresses automatically craft a transaction using `create_transactions_2` and validate a transaction proof. The built‑in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
 Sending coins directly to a contract address with the normal `transfer` command will perform the same deposit logic automatically.
+### Interacting with a contract
+
+A basic workflow compiles, deploys and invokes Solidity contracts using
+`electronero-wallet-cli`. Below is a minimal counter contract followed by the
+commands needed to operate it.
+
+```solidity
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 private value;
+
+    function increment(uint256 v) public {
+        value += v;
+    }
+
+    function read() public view returns (uint256) {
+        return value;
+    }
+}
+```
+
+Compile the source in your wallet directory:
+
+```bash
+electronero-wallet-cli compile_contract Counter.sol
+```
+
+Deploy the resulting bytecode:
+
+```bash
+electronero-wallet-cli deploy_contract Counter.bin
+```
+
+The wallet prints the new contract address (for example `c1`). Encode function
+calls with any Ethereum tool such as `solc --abi` or `ethers.js`. The call
+`increment(5)` yields the hexadecimal payload
+`d09de08a0000000000000000000000000000000000000000000000000000000000000005`.
+Save this string to a file named `inc.data` next to your wallet and invoke the
+contract:
+
+```bash
+electronero-wallet-cli call_contract c1 inc.data write
+```
+
+Read the counter value by calling the `read()` function using its encoded data
+stored in `read.data`:
+
+```bash
+electronero-wallet-cli call_contract c1 read.data
+```
+
+The CLI prints the returned integer. The same payload can be sent over RPC:
+
+```json
+{"jsonrpc":"2.0","id":"0","method":"call_contract","params":{"account":"c1","caller":"<your address>","data":"d09de08a0000000000000000000000000000000000000000000000000000000000000005","write":true}}
+```
+
+This request performs the same state-changing call through the wallet RPC
+server.
 
 Regular Solidity code works on the embedded EVM. Inline `assembly` is only required for direct access to custom opcodes.
 
