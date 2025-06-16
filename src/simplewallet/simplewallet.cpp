@@ -1716,7 +1716,10 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   }
 
   std::string payload = std::string("evm:deploy:") + data;
-
+  if (payload.size() > 4096) {
+      fail_msg_writer() << "Payload too large for tx_extra field";
+      return true;
+  }
   extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG); // 0x05
   extra.push_back(static_cast<uint8_t>(payload.size()));
   extra.insert(extra.end(), payload.begin(), payload.end());
