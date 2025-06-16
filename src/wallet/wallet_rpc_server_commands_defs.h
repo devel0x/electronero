@@ -1981,5 +1981,26 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_ENCODE_CALL
+  {
+    struct request
+    {
+      std::string call;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(call)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(data)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
 }
 }
