@@ -6026,8 +6026,15 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
     return true;
   }
 
+  std::vector<std::pair<std::string, uint64_t>> contract_dests;
   cryptonote::address_parse_info info;
-  if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), local_args[1], oa_prompter))
+  if (is_contract_address(local_args[1]))
+  {
+    info.address = contract_deposit_address(local_args[1]);
+    info.is_subaddress = false;
+    contract_dests.emplace_back(local_args[1], 0);
+  }
+  else if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), local_args[1], oa_prompter))
   {
     fail_msg_writer() << tr("failed to parse address");
     return true;
@@ -6086,6 +6093,15 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
     {
       fail_msg_writer() << tr("The transaction uses multiple or no inputs, which is not supposed to happen");
       return true;
+    }
+
+    if (!contract_dests.empty())
+    {
+      uint64_t amount = 0;
+      for (const auto &d : ptx_vector[0].dests)
+        if (d.addr == info.address)
+          amount += d.amount;
+      contract_dests.back().second = amount;
     }
 
     // give user total and fee, and prompt to confirm
