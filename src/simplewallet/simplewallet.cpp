@@ -1958,13 +1958,27 @@ namespace
   // removed from circulation yet traceable to the contract
   cryptonote::account_public_address contract_deposit_address(const std::string &addr)
   {
+    // hash the contract id twice to generate deterministic keys
     crypto::hash h1;
     crypto::cn_fast_hash(addr.data(), addr.size(), h1);
     crypto::hash h2;
     crypto::cn_fast_hash(&h1, sizeof(h1), h2);
+
+    // interpret hashes as secret keys and reduce to valid scalars
+    crypto::secret_key spend_key, view_key;
+    memcpy(spend_key.data, &h1, sizeof(spend_key.data));
+    memcpy(view_key.data, &h2, sizeof(view_key.data));
+    sc_reduce32(reinterpret_cast<unsigned char*>(spend_key.data));
+    sc_reduce32(reinterpret_cast<unsigned char*>(view_key.data));
+
+    // convert the secret keys to public keys
+    crypto::public_key spend_pub, view_pub;
+    crypto::secret_key_to_public_key(spend_key, spend_pub);
+    crypto::secret_key_to_public_key(view_key, view_pub);
+
     cryptonote::account_public_address out;
-    memcpy(&out.m_spend_public_key, &h1, sizeof(crypto::public_key));
-    memcpy(&out.m_view_public_key, &h2, sizeof(crypto::public_key));
+    out.m_spend_public_key = spend_pub;
+    out.m_view_public_key = view_pub;
     return out;
   }
 
@@ -5520,6 +5534,25 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     else
     {
       commit_or_save(ptx_vector, m_do_not_relay);
+      if (!m_do_not_relay)
+      {
+        for (const auto &cd : contract_dests)
+        {
+          cryptonote::COMMAND_RPC_CALL_CONTRACT::request creq;
+          cryptonote::COMMAND_RPC_CALL_CONTRACT::response cres;
+          creq.account = cd.first;
+          creq.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+          creq.data = std::string("deposit:") + std::to_string(cd.second);
+          creq.write = true;
+          creq.fee = creq.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+          bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
+          std::string err = interpret_rpc_response(ok, cres.status);
+          if (err.empty())
+            success_msg_writer() << tr("Contract deposit processed for ") << cd.first;
+          else
+            fail_msg_writer() << tr("failed to deposit to contract: ") << err;
+        }
+      }
     }
   }
   catch (const std::exception &e)
