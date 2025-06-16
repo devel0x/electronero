@@ -652,11 +652,8 @@ PRAGMA_WARNING_DISABLE_VS(4355)
   template<class t_protocol_handler>
   bool connection<t_protocol_handler>::shutdown()
   {
-    static boost::mutex shutdown_mutex;
-    CRITICAL_REGION_LOCAL(shutdown_mutex);
-
-    if (m_was_shutdown)
-      return false; // already shut down
+    if (m_shutdown_in_progress.exchange(true))
+      return false; // Already being or already shut down
 
     m_was_shutdown = true;
     m_timer.cancel();
@@ -672,7 +669,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
       }
     } catch (...) { /* ignore */ }
 
-    m_host.clear(); // safer than assignment
+    m_host.clear(); // now safe
 
     return true;
   }
