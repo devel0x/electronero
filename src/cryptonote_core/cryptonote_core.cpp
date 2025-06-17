@@ -1568,7 +1568,14 @@ namespace cryptonote
       epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
       std::vector<uint8_t> code(bin.begin(), bin.end());
       std::string account = epee::string_tools::pod_to_hex(get_transaction_hash(tx));
-      m_evm.deploy(account, code);
+      try
+      {
+        m_evm.deploy(account, code);
+      }
+      catch (const std::exception &e)
+      {
+        MERROR("EVM deploy failed: " << e.what());
+      }
     }
     else if (nonce_field.nonce.compare(0, call_prefix.size(), call_prefix) == 0)
     {
@@ -1583,7 +1590,14 @@ namespace cryptonote
       std::vector<uint8_t> data(bin.begin(), bin.end());
       uint64_t height = m_blockchain_storage.get_current_blockchain_height();
       uint64_t ts = static_cast<uint64_t>(time(nullptr));
-      m_evm.call(account, data, height, ts);
+      try
+      {
+        m_evm.call(account, data, height, ts);
+      }
+      catch (const std::exception &e)
+      {
+        MERROR("EVM call failed in block tx: " << e.what());
+      }
     }
   }
   //-----------------------------------------------------------------------------------------------
