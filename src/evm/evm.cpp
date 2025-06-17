@@ -370,8 +370,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t shift = stack.back(); stack.pop_back();
         int64_t value = static_cast<int64_t>(stack.back()); stack.pop_back();
-        if (shift >= 64) stack.push_back(value < 0 ? static_cast<uint64_t>(-1) : 0);
-        else stack.push_back(static_cast<uint64_t>(value >> shift));
+        if (shift >= 64)
+          stack.push_back(value < 0 ? static_cast<uint64_t>(-1) : 0);
+        else
+          stack.push_back(static_cast<uint64_t>(value >> shift));
         break;
       }
       case 0x20: { // KECCAK256
@@ -592,11 +594,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         return -1;
       }
       case 0xf3: { // RETURN
-        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        if (stack.empty())
+          return 0;
+        if (stack.size() == 1)
+          return static_cast<int64_t>(stack.back());
         uint64_t offset = stack.back(); stack.pop_back();
-        uint64_t size = stack.back(); stack.pop_back();
-        if (size == 0) return 0;
-        return memory.count(offset) ? static_cast<int64_t>(memory[offset]) : 0;
+        stack.pop_back(); // size
+        return static_cast<int64_t>(memory[offset]);
       }
       default:
         throw std::runtime_error("unsupported opcode");

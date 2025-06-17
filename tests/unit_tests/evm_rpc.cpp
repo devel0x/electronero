@@ -140,3 +140,29 @@ TEST(EVM_RPC, DupAndSwap)
   std::string c = evm.deploy("owner", code);
   EXPECT_EQ(0, evm.call(c, {}));
 }
+
+TEST(EVM_RPC, ShiftAndReturn)
+{
+  EVM evm;
+  // 2 << 1 = 4
+  std::vector<uint8_t> code = {
+    0x60,0x02, // PUSH1 2 (value)
+    0x60,0x01, // PUSH1 1 (shift)
+    0x1b,      // SHL
+    0xf3       // RETURN
+  };
+  std::string c = evm.deploy("owner", code);
+  EXPECT_EQ(4, evm.call(c, {}));
+
+  // memory return
+  code = {
+    0x60,0x2a, // PUSH1 42
+    0x60,0x00, // PUSH1 0
+    0x52,      // MSTORE
+    0x60,0x20, // PUSH1 32
+    0x60,0x00, // PUSH1 0
+    0xf3       // RETURN
+  };
+  c = evm.deploy("owner", code);
+  EXPECT_EQ(42, evm.call(c, {}));
+}
