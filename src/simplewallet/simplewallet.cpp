@@ -1741,15 +1741,8 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
     return true;
   }
 
-  // Serialize both into one extra blob
+  // Serialize EVM bytecode into tx_extra
   std::vector<uint8_t> extra;
-  std::string extra_nonce = std::string("evm:deploy:") + data;
-  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-  {
-    fail_msg_writer() << tr("failed to construct tx extra");
-    return true;
-  }
-
   std::string payload = std::string("evm:deploy:") + data;
   if (payload.size() > 4096) {
       fail_msg_writer() << "Payload too large for tx_extra field";
@@ -1878,13 +1871,14 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   const uint64_t net_fee = evm_fee - gov_fee;
 
   std::vector<uint8_t> extra;
-  std::string extra_nonce = std::string("evm:call:") + account + ":" + data;
-  MDEBUG("call_contract extra_nonce:" << extra_nonce);
-  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-  {
-    fail_msg_writer() << tr("failed to construct tx extra");
+  std::string payload = std::string("evm:call:") + account + ":" + data;
+  if (payload.size() > 4096) {
+    fail_msg_writer() << "Payload too large for tx_extra field";
     return true;
   }
+  extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+  extra.push_back(static_cast<uint8_t>(payload.size()));
+  extra.insert(extra.end(), payload.begin(), payload.end());
 
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
@@ -2088,12 +2082,14 @@ bool simple_wallet::deposit_contract(const std::vector<std::string>& args)
   const uint64_t evm_fee = data.size() * config::EVM_CALL_FEE_PER_BYTE;
 
   std::vector<uint8_t> extra;
-  std::string extra_nonce = std::string("evm:call:") + args[0] + ":" + data;
-  if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-  {
-    fail_msg_writer() << tr("failed to construct tx extra");
+  std::string payload = std::string("evm:call:") + args[0] + ":" + data;
+  if (payload.size() > 4096) {
+    fail_msg_writer() << "Payload too large for tx_extra field";
     return true;
   }
+  extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+  extra.push_back(static_cast<uint8_t>(payload.size()));
+  extra.insert(extra.end(), payload.begin(), payload.end());
 
   cryptonote::tx_destination_entry self_de;
   self_de.addr = m_wallet->get_account().get_keys().m_account_address;
