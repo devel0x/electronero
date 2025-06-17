@@ -40,6 +40,7 @@ using namespace epee;
 #include "common/download.h"
 #include "common/util.h"
 #include "common/perf_timer.h"
+#include <boost/algorithm/string.hpp>
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -2186,6 +2187,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
   {
+    MDEBUG("on_call_contract account:" << req.account << " caller:" << req.caller << " write:" << std::boolalpha << req.write << " fee:" << req.fee << " data:" << req.data);
     if (boost::algorithm::starts_with(req.data, "deposit:"))
     {
       if (!req.write)
@@ -2246,9 +2248,12 @@ namespace cryptonote
     }
     else
     {
+      std::string data_hex = req.data;
+      boost::algorithm::trim(data_hex);
       std::string bin;
-      if (!epee::string_tools::parse_hexstr_to_binbuff(req.data, bin))
+      if (!epee::string_tools::parse_hexstr_to_binbuff(data_hex, bin))
       {
+        MERROR("on_call_contract: failed to parse hex data '" << data_hex << "'");
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }

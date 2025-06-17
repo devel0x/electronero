@@ -3068,6 +3068,7 @@ namespace tools
 
 bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er)
 {
+    MDEBUG("wallet_rpc_server::on_call_contract account:" << req.account << " write:" << std::boolalpha << req.write << " data:" << req.data);
     if (!m_wallet) return not_open(er);
     if (m_wallet->restricted())
     {
@@ -3088,6 +3089,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
       if (!r)
       {
+        MERROR("wallet_rpc_server::on_call_contract RPC request failed");
         er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
         er.message = "RPC request failed";
         return false;
