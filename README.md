@@ -150,11 +150,10 @@ The CLI prints the returned integer. The same payload can be sent over RPC:
 
 Use `electronero-wallet-cli encode_call increment 5` to print the same hex
 payload when crafting custom RPC requests.
-<<<<<<< viwzn1-codex/expose-smart-contract-functions-over-cli-and-rpc
+
 Alternatively, call the RPC method `encode_call` with `{ "call": "increment(5)" }`
 to receive the encoded payload for use with `call_contract`.
-=======
->>>>>>> master
+
 
 This request performs the same state-changing call through the wallet RPC
 server.
