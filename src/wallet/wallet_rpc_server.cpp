@@ -3069,6 +3069,8 @@ namespace tools
 bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er)
 {
     MDEBUG("wallet_rpc_server::on_call_contract account:" << req.account << " write:" << std::boolalpha << req.write << " data:" << req.data);
+    std::string data = req.data;
+    boost::algorithm::trim(data);
     if (!m_wallet) return not_open(er);
     if (m_wallet->restricted())
     {
@@ -3083,7 +3085,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       cryptonote::COMMAND_RPC_CALL_CONTRACT::response daemon_res;
       daemon_req.account = req.account;
       daemon_req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
-      daemon_req.data = req.data;
+      daemon_req.data = data;
       daemon_req.write = false;
       daemon_req.fee = 0;
       bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
@@ -3099,8 +3101,6 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       return daemon_res.status == CORE_RPC_STATUS_OK;
     }
 
-    std::string data = req.data;
-    boost::algorithm::trim(data);
     bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
     const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
