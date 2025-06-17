@@ -96,3 +96,73 @@ TEST(EVM_RPC, TransferOwner)
   EXPECT_EQ("bob", evm.owner_of(c));
   EXPECT_FALSE(evm.transfer_owner(c, "carol", "alice"));
 }
+
+TEST(EVM_RPC, JumpAndCompare)
+{
+  EVM evm;
+  std::vector<uint8_t> code = {
+    0x60,0x01, // PUSH1 1
+    0x60,0x02, // PUSH1 2
+    0x10,      // LT
+    0x60,0x0b, // PUSH1 11
+    0x57,      // JUMPI
+    0x60,0x00, // PUSH1 0
+    0xf3,      // RETURN
+    0x5b,      // JUMPDEST
+    0x60,0x01, // PUSH1 1
+    0xf3       // RETURN
+  };
+  std::string c = evm.deploy("owner", code);
+  EXPECT_EQ(1, evm.call(c, {}));
+}
+
+TEST(EVM_RPC, BadJump)
+{
+  EVM evm;
+  std::vector<uint8_t> code = {0x60,0x05,0x56};
+  std::string c = evm.deploy("owner", code);
+  EXPECT_THROW(evm.call(c, {}), std::runtime_error);
+}
+
+TEST(EVM_RPC, DupAndSwap)
+{
+  EVM evm;
+  // ((1 + 1) - 2) = 0
+  std::vector<uint8_t> code = {
+    0x60,0x01,      // PUSH1 1
+    0x80,           // DUP1 -> [1,1]
+    0x01,           // ADD   -> [2]
+    0x60,0x02,      // PUSH1 2 -> [2,2]
+    0x90,           // SWAP1 -> [2,2]
+    0x03,           // SUB   -> [0]
+    0xf3            // RETURN
+  };
+  std::string c = evm.deploy("owner", code);
+  EXPECT_EQ(0, evm.call(c, {}));
+}
+
+TEST(EVM_RPC, ShiftAndReturn)
+{
+  EVM evm;
+  // 2 << 1 = 4
+  std::vector<uint8_t> code = {
+    0x60,0x02, // PUSH1 2 (value)
+    0x60,0x01, // PUSH1 1 (shift)
+    0x1b,      // SHL
+    0xf3       // RETURN
+  };
+  std::string c = evm.deploy("owner", code);
+  EXPECT_EQ(4, evm.call(c, {}));
+
+  // memory return
+  code = {
+    0x60,0x2a, // PUSH1 42
+    0x60,0x00, // PUSH1 0
+    0x52,      // MSTORE
+    0x60,0x20, // PUSH1 32
+    0x60,0x00, // PUSH1 0
+    0xf3       // RETURN
+  };
+  c = evm.deploy("owner", code);
+  EXPECT_EQ(42, evm.call(c, {}));
+}
