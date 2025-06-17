@@ -2,8 +2,7 @@
 
 This document collects simple smart contracts that work with the integrated Electronero EVM. All examples use Solidity **0.8** or later.
 
-
-While some snippets below rely on inline `assembly` to demonstrate custom opcodes, contracts do **not** need assembly to run on the EVM. Standard Solidity code compiles and executes just fine. 
+While some snippets below rely on inline `assembly` to demonstrate custom opcodes, contracts do **not** need assembly to run on the EVM. Standard Solidity code compiles and executes just fine. Opcode coverage now spans arithmetic, modular math, shifts, keccak hashing, caller introspection, push operations including `PUSH0`, event logging and conditional jumps so contracts built for Solidity 0.8 run unmodified.
 
 ## Faucet
 ```solidity

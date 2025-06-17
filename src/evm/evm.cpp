@@ -237,6 +237,21 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         stack.push_back(b == 0 ? 0 : a / b);
         break;
       }
+      case 0x06: { // MOD
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t b = stack.back(); stack.pop_back();
+        uint64_t a = stack.back(); stack.pop_back();
+        stack.push_back(b == 0 ? 0 : a % b);
+        break;
+      }
+      case 0x07: { // SMOD
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        int64_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
+        int64_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
+        if (b == 0) stack.push_back(0);
+        else stack.push_back(a % b);
+        break;
+      }
       case 0x05: { // SDIV
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         int64_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
@@ -246,11 +261,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x08: { // ADDMOD
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        uint64_t m = stack.back(); stack.pop_back();
+        uint64_t c = stack.back(); stack.pop_back();
         uint64_t b = stack.back(); stack.pop_back();
         uint64_t a = stack.back(); stack.pop_back();
-        if (m == 0) { stack.push_back(0); break; }
-        stack.push_back((a + b) % m);
+        stack.push_back(c == 0 ? 0 : (a + b) % c);
         break;
       }
       case 0x09: { // MULMOD
@@ -338,29 +352,45 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         else stack.push_back((word >> ((31 - pos) * 8)) & 0xff);
         break;
       }
-      case 0x34: { // CALLVALUE
-        stack.push_back(0);
-        break;
-      }
       case 0x1b: { // SHL
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t shift = stack.back(); stack.pop_back();
         uint64_t value = stack.back(); stack.pop_back();
-        stack.push_back(value << shift);
+        stack.push_back(shift >= 64 ? 0 : (value << shift));
         break;
       }
       case 0x1c: { // SHR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t shift = stack.back(); stack.pop_back();
         uint64_t value = stack.back(); stack.pop_back();
-        stack.push_back(value >> shift);
+        stack.push_back(shift >= 64 ? 0 : (value >> shift));
         break;
       }
       case 0x1d: { // SAR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t shift = stack.back(); stack.pop_back();
         int64_t value = static_cast<int64_t>(stack.back()); stack.pop_back();
-        stack.push_back(static_cast<uint64_t>(value >> shift));
+        if (shift >= 64) stack.push_back(value < 0 ? static_cast<uint64_t>(-1) : 0);
+        else stack.push_back(static_cast<uint64_t>(value >> shift));
+        break;
+      }
+      case 0x20: { // KECCAK256
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t offset = stack.back(); stack.pop_back();
+        uint64_t len = stack.back(); stack.pop_back();
+        std::vector<uint8_t> buf;
+        buf.reserve(len);
+        for (uint64_t i = 0; i < len; ++i)
+          buf.push_back(memory[offset + i]);
+        crypto::hash h;
+        crypto::cn_fast_hash(buf.data(), buf.size(), h);
+        uint64_t v;
+        memcpy(&v, &h, sizeof(uint64_t));
+        stack.push_back(v);
+        break;
+      }
+      case 0x34: { // CALLVALUE
+        stack.push_back(0);
         break;
       }
       case 0x35: { // CALLDATALOAD
@@ -418,6 +448,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         stack.push_back(balance_of(it->second));
         break;
       }
+      case 0x33: { // CALLER
+        stack.push_back(0);
+        break;
+      }
       case 0x42: { // TIMESTAMP
         stack.push_back(timestamp);
         break;
@@ -456,6 +490,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x5a: { // GAS
         stack.push_back(0);
+        break;
+      }
+      case 0x5b: { // JUMPDEST
         break;
       }
       case 0x51: { // MLOAD
@@ -518,6 +555,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         contract.logs.push_back(value);
         break;
       }
+      case 0xa2: // LOG2
+      case 0xa3: // LOG3
+      case 0xa4: { // LOG4
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint64_t value = stack.back(); stack.pop_back();
+        contract.logs.push_back(value);
+        break;
+      }
       case 0xff: { // SELFDESTRUCT
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t dest_id = stack.back(); stack.pop_back();
@@ -526,8 +571,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           destroy(self, it->second, contract.owner);
         return 0;
       }
-      case 0x5b: // JUMPDEST
+      case 0x5f: { // PUSH0
+        stack.push_back(0);
         break;
+      }
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
         unsigned push_bytes = op - 0x5f;
         if (pc + push_bytes > code.size()) throw std::runtime_error("unexpected EOF");
