@@ -3159,8 +3159,25 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
       res.tx_metadata = ptx_to_string(ptx_vector[0]);
-  res.status = CORE_RPC_STATUS_OK;
-  return true;
+
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::request daemon_req;
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::response daemon_res;
+    daemon_req.account = req.account;
+    daemon_req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    daemon_req.data = req.data;
+    daemon_req.write = true;
+    daemon_req.fee = evm_fee;
+    bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
+    if (!r)
+    {
+      MERROR("wallet_rpc_server::on_call_contract RPC request failed");
+      er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+      er.message = "RPC request failed";
+      return false;
+    }
+    res.result = daemon_res.result;
+    res.status = daemon_res.status;
+    return daemon_res.status == CORE_RPC_STATUS_OK;
  }
 namespace
 {
