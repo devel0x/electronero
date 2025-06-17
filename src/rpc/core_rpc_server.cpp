@@ -2184,9 +2184,10 @@ namespace cryptonote
   }
 
   //------------------------------------------------------------------------------------------------------------------------------
+
   bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
   {
-    MDEBUG("on_call_contract account:" << req.account << " caller:" << req.caller << " write:" << std::boolalpha << req.write << " fee:" << req.fee << " data:" << req.data);
+    MDEBUG("on_call_contract account:" << req.account << " caller:" << req.caller << " write:" << std::boolalpha << req.write << " fee:" << req.fee << " data:" << req.data); data='" << req.data << "'");
     if (boost::algorithm::starts_with(req.data, "deposit:"))
     {
       if (!req.write)
@@ -2207,6 +2208,7 @@ namespace cryptonote
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
+      MDEBUG("deposit " << amount << " fee " << req.fee << " required " << required_fee);
       bool ok = m_core.get_evm().deposit(req.account, amount);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
       res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
@@ -2240,6 +2242,7 @@ namespace cryptonote
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
+      MDEBUG("transfer to " << dest << " amount " << amount << " fee " << req.fee << " required " << required_fee);
       bool ok = m_core.get_evm().transfer(req.account, dest, amount, req.caller);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
       res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
@@ -2250,7 +2253,7 @@ namespace cryptonote
       std::string bin;
       if (!epee::string_tools::parse_hexstr_to_binbuff(req.data, bin))
       {
-        MERROR("on_call_contract: failed to parse hex data " << req.data);
+        MERROR("on_call_contract: invalid hex data: '" << req.data << "'");
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
@@ -2263,6 +2266,11 @@ namespace cryptonote
           res.status = CORE_RPC_STATUS_FAILED;
           return false;
         }
+        MDEBUG("call write data_len " << data.size() << " fee " << req.fee << " required " << required_fee);
+      }
+      else
+      {
+        MDEBUG("call read data_len " << data.size());
       }
       uint64_t height = m_core.get_current_blockchain_height();
       uint64_t ts = static_cast<uint64_t>(time(nullptr));
@@ -2270,6 +2278,7 @@ namespace cryptonote
       {
         res.result = m_core.get_evm().call(req.account, data, height, ts);
         res.status = CORE_RPC_STATUS_OK;
+        MDEBUG("call result " << res.result);
         return true;
       }
       catch (const std::exception &e)
