@@ -60,6 +60,7 @@
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "crypto/keccak.h"
+#include <boost/multiprecision/cpp_int.hpp>
 #include "mnemonics/electrum-words.h"
 #include "cryptonote_config.h"
 #include "rapidjson/document.h"
@@ -365,13 +366,36 @@ namespace
 
     for (const std::string &p : params)
     {
-      unsigned long long val = 0;
-      try { val = std::stoull(p); }
-      catch (const std::exception&) { return false; }
-      char buf[17];
-      snprintf(buf, sizeof(buf), "%016llx", val);
-      hex.append(64 - 16, '0');
-      hex += buf;
+      boost::multiprecision::uint256_t val = 0;
+      unsigned base = 10;
+      std::string s = p;
+      if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+      {
+        base = 16;
+        s = s.substr(2);
+      }
+      for (char c : s)
+      {
+        unsigned digit;
+        if (c >= '0' && c <= '9') digit = c - '0';
+        else if (base == 16 && c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+        else if (base == 16 && c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+        else return false;
+        val *= base;
+        val += digit;
+      }
+      std::string param_hex;
+      boost::multiprecision::uint256_t tmp = val;
+      while (tmp > 0)
+      {
+        unsigned digit = static_cast<unsigned>(tmp & 0xf);
+        param_hex.insert(param_hex.begin(), "0123456789abcdef"[digit]);
+        tmp >>= 4;
+      }
+      if (param_hex.empty()) param_hex = "0";
+      if (param_hex.size() > 64) return false;
+      hex.append(64 - param_hex.size(), '0');
+      hex += param_hex;
     }
     return true;
   }
