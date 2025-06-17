@@ -1967,6 +1967,15 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     m_wallet->commit_tx(ptx_vector[0]);
     crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     success_msg_writer() << tr("Contract call transaction submitted: ") << txid;
+    // automatically refresh so the user doesn't need to run the command manually
+    try
+    {
+      m_wallet->refresh();
+    }
+    catch(const std::exception &e)
+    {
+      MERROR("Failed to refresh after contract call: " << e.what());
+    }
     if (is_transfer)
     {
       std::string addr_str = cryptonote::get_account_address_as_str(m_wallet->nettype(), transfer_de.is_subaddress, transfer_de.addr);
