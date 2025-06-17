@@ -42,7 +42,7 @@ TEST(EVM_RPC, LogOpcode)
   evm.call(c, {});
   auto logs = evm.logs_of(c);
   ASSERT_EQ(1u, logs.size());
-  EXPECT_EQ(42u, logs[0]);
+  EXPECT_EQ(42u, static_cast<uint64_t>(logs[0]));
 }
 
 TEST(EVM_RPC, CalldataOpcodes)

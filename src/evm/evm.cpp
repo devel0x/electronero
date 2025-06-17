@@ -9,6 +9,7 @@
 #include <ctime>
 #include <boost/multiprecision/cpp_int.hpp>
 #include "cryptonote_config.h"
+#include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
 
@@ -103,9 +104,9 @@ std::string EVM::owner_of(const std::string& address) const
   return it == contracts.end() ? std::string() : it->second.owner;
 }
 
-const std::vector<mp::uint256_t>& EVM::logs_of(const std::string& address) const
+const std::vector<uint256>& EVM::logs_of(const std::string& address) const
 {
-  static const std::vector<mp::uint256_t> empty;
+  static const std::vector<uint256> empty;
   auto it = contracts.find(address);
   return it == contracts.end() ? empty : it->second.logs;
 }
@@ -179,13 +180,13 @@ bool EVM::is_owner(const std::string& contract, const std::string& address) cons
   return it != contracts.end() && it->second.owner == address;
 }
 
-mp::uint256_t EVM::storage_at(const std::string& address, uint64_t key) const
+uint256 EVM::storage_at(const std::string& address, uint256 key) const
 {
   auto it = contracts.find(address);
   if (it == contracts.end())
     return 0;
   auto jt = it->second.storage.find(key);
-  return jt == it->second.storage.end() ? mp::uint256_t{0} : jt->second;
+  return jt == it->second.storage.end() ? uint256(0) : jt->second;
 }
 
 int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
@@ -199,8 +200,8 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
 
 int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& input,
                      uint64_t block_height, uint64_t timestamp) {
-  std::vector<mp::uint256_t> stack;
-  std::unordered_map<uint64_t, mp::uint256_t> memory;
+  std::vector<uint256> stack;
+  std::unordered_map<uint64_t, uint256> memory;
   const auto& code = contract.code;
   std::unordered_set<size_t> jumpdests;
   for (size_t i = 0; i < code.size(); ++i)
@@ -214,183 +215,187 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         return stack.empty() ? 0 : static_cast<int64_t>(stack.back());
       case 0x01: { // ADD
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a + b);
         break;
       }
       case 0x02: { // MUL
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a * b);
         break;
       }
       case 0x03: { // SUB
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a - b);
         break;
       }
       case 0x04: { // DIV
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(b == 0 ? 0 : a / b);
         break;
       }
       case 0x06: { // MOD
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(b == 0 ? 0 : a % b);
         break;
       }
       case 0x07: { // SMOD
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::int256_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
-        mp::int256_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
+        int256 b = static_cast<int256>(stack.back()); stack.pop_back();
+        int256 a = static_cast<int256>(stack.back()); stack.pop_back();
         if (b == 0) stack.push_back(0);
-        else stack.push_back(a % b);
+        else stack.push_back(static_cast<uint256>(a % b));
         break;
       }
       case 0x05: { // SDIV
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::int256_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
-        mp::int256_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
-        stack.push_back(b == 0 ? 0 : static_cast<uint64_t>(a / b));
+        int256 b = static_cast<int256>(stack.back()); stack.pop_back();
+        int256 a = static_cast<int256>(stack.back()); stack.pop_back();
+        stack.push_back(b == 0 ? 0 : static_cast<uint256>(a / b));
         break;
       }
       case 0x08: { // ADDMOD
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        mp::uint256_t c = stack.back(); stack.pop_back();
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 c = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(c == 0 ? 0 : (a + b) % c);
         break;
       }
       case 0x09: { // MULMOD
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        mp::uint256_t m = stack.back(); stack.pop_back();
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 m = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         if (m == 0) { stack.push_back(0); break; }
         stack.push_back((a * b) % m);
         break;
       }
       case 0x10: { // LT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a < b);
         break;
       }
       case 0x11: { // GT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a > b);
         break;
       }
       case 0x12: { // SLT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::int256_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
-        mp::int256_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
+        int256 b = static_cast<int256>(stack.back()); stack.pop_back();
+        int256 a = static_cast<int256>(stack.back()); stack.pop_back();
         stack.push_back(a < b);
         break;
       }
       case 0x13: { // SGT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::int256_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
-        mp::int256_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
+        int256 b = static_cast<int256>(stack.back()); stack.pop_back();
+        int256 a = static_cast<int256>(stack.back()); stack.pop_back();
         stack.push_back(a > b);
         break;
       }
       case 0x14: { // EQ
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a == b);
         break;
       }
       case 0x15: { // ISZERO
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a == 0);
         break;
       }
       case 0x16: { // AND
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a & b);
         break;
       }
       case 0x17: { // OR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a | b);
         break;
       }
       case 0x18: { // XOR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t b = stack.back(); stack.pop_back();
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 b = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(a ^ b);
         break;
       }
       case 0x19: { // NOT
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t a = stack.back(); stack.pop_back();
+        uint256 a = stack.back(); stack.pop_back();
         stack.push_back(~a);
         break;
       }
       case 0x1a: { // BYTE
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t pos = stack.back(); stack.pop_back();
-        mp::uint256_t word = stack.back(); stack.pop_back();
+        uint256 pos = stack.back(); stack.pop_back();
+        uint256 word = stack.back(); stack.pop_back();
         if (pos >= 32) stack.push_back(0);
         else stack.push_back((word >> ((31 - pos) * 8)) & 0xff);
         break;
       }
       case 0x1b: { // SHL
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t shift = stack.back(); stack.pop_back();
-        mp::uint256_t value = stack.back(); stack.pop_back();
-        stack.push_back(shift >= 256 ? 0 : (value << shift.convert_to<unsigned>()));
+        uint256 shift = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
+        stack.push_back(shift >= 64 ? 0 : (value << shift));
         break;
       }
       case 0x1c: { // SHR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t shift = stack.back(); stack.pop_back();
-        mp::uint256_t value = stack.back(); stack.pop_back();
-        stack.push_back(shift >= 256 ? 0 : (value >> shift.convert_to<unsigned>()));
+        uint256 shift = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
+        stack.push_back(shift >= 64 ? 0 : (value >> shift));
         break;
       }
       case 0x1d: { // SAR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t shift = stack.back(); stack.pop_back();
-        mp::int256_t value = static_cast<int64_t>(stack.back()); stack.pop_back();
-        if (shift >= 256)
-          stack.push_back(value < 0 ? mp::uint256_t(-1) : mp::uint256_t(0));
+        uint256 shift = stack.back(); stack.pop_back();
+        int256 value = static_cast<int256>(stack.back()); stack.pop_back();
+        if (shift >= 64)
+          stack.push_back(value < 0 ? static_cast<uint256>(-1) : 0);
         else
-          stack.push_back(mp::uint256_t(value >> shift.convert_to<unsigned>()));
+          stack.push_back(static_cast<uint256>(value >> shift));
         break;
       }
       case 0x20: { // KECCAK256
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t offset = stack.back(); stack.pop_back();
-        mp::uint256_t len = stack.back(); stack.pop_back();
+        uint256 offset = stack.back(); stack.pop_back();
+        uint256 len = stack.back(); stack.pop_back();
         std::vector<uint8_t> buf;
-        buf.reserve(len.convert_to<size_t>());
-        for (mp::uint256_t i = 0; i < len; ++i)
-          buf.push_back(memory[(offset + i).convert_to<uint64_t>()]);
+        buf.reserve(len);
+        for (uint64_t i = 0; i < len; ++i)
+          buf.push_back(memory[static_cast<uint64_t>(offset + i)]);
         crypto::hash h;
         crypto::cn_fast_hash(buf.data(), buf.size(), h);
-        mp::uint256_t v;
-        memcpy(&v, &h, sizeof(uint64_t));
+        uint256 v = 0;
+        for (int i = 0; i < 32; ++i)
+        {
+          v <<= 8;
+          v |= ((const unsigned char*)&h)[i];
+        }
         stack.push_back(v);
         break;
       }
@@ -400,10 +405,11 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x35: { // CALLDATALOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t off = stack.back(); stack.pop_back();
+        uint256 off = stack.back(); stack.pop_back();
         // Solidity passes arguments as 32-byte big-endian words. Load the
-        // entire word but support up to 256-bit values.
-        mp::uint256_t v = 0;
+        // entire word and truncate to 64 bits so typical uint256 arguments
+        // work correctly.
+        uint256 v = 0;
         for (unsigned i = 0; i < 32; ++i, ++off) {
           v <<= 8;
           size_t pos = off.convert_to<size_t>();
@@ -419,14 +425,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x37: { // CALLDATACOPY
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest = stack.back(); stack.pop_back();
-        mp::uint256_t src = stack.back(); stack.pop_back();
-        mp::uint256_t len = stack.back(); stack.pop_back();
-        for (mp::uint256_t i = 0; i < len; ++i)
+        uint256 dest = stack.back(); stack.pop_back();
+        uint256 src = stack.back(); stack.pop_back();
+        uint256 len = stack.back(); stack.pop_back();
+        for (uint64_t i = 0; i < static_cast<uint64_t>(len); ++i)
         {
-          size_t pos = (src + i).convert_to<size_t>();
-          mp::uint256_t b = pos < input.size() ? input[pos] : 0;
-          memory[(dest + i).convert_to<uint64_t>()] = b;
+          uint256 b = src + i < input.size() ? input[src + i] : 0;
+          memory[static_cast<uint64_t>(dest + i)] = b;
         }
         break;
       }
@@ -436,14 +441,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x39: { // CODECOPY
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest = stack.back(); stack.pop_back();
-        mp::uint256_t src = stack.back(); stack.pop_back();
-        mp::uint256_t len = stack.back(); stack.pop_back();
-        for (mp::uint256_t i = 0; i < len; ++i)
+        uint256 dest = stack.back(); stack.pop_back();
+        uint256 src = stack.back(); stack.pop_back();
+        uint256 len = stack.back(); stack.pop_back();
+        for (uint64_t i = 0; i < static_cast<uint64_t>(len); ++i)
         {
-          size_t pos = (src + i).convert_to<size_t>();
-          mp::uint256_t b = pos < code.size() ? code[pos] : 0;
-          memory[(dest + i).convert_to<uint64_t>()] = b;
+          uint256 b = src + i < code.size() ? code[src + i] : 0;
+          memory[static_cast<uint64_t>(dest + i)] = b;
         }
         break;
       }
@@ -454,8 +458,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x31: { // BALANCE
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t id = stack.back(); stack.pop_back();
-        auto it = id_map.find(id.convert_to<uint64_t>());
+        uint256 id = stack.back(); stack.pop_back();
+        auto it = id_map.find(id);
         if (it == id_map.end()) { stack.push_back(0); break; }
         stack.push_back(balance_of(it->second));
         break;
@@ -479,7 +483,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x56: { // JUMP
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest = stack.back(); stack.pop_back();
+        uint256 dest = stack.back(); stack.pop_back();
         if (dest >= code.size() || !jumpdests.count(dest))
           throw std::runtime_error("bad jump dest");
         pc = dest;
@@ -487,8 +491,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x57: { // JUMPI
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest = stack.back(); stack.pop_back();
-        mp::uint256_t cond = stack.back(); stack.pop_back();
+        uint256 dest = stack.back(); stack.pop_back();
+        uint256 cond = stack.back(); stack.pop_back();
         if (cond != 0) {
           if (dest >= code.size() || !jumpdests.count(dest))
             throw std::runtime_error("bad jump dest");
@@ -509,35 +513,35 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x51: { // MLOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t offset = stack.back(); stack.pop_back();
-        stack.push_back(memory[offset.convert_to<uint64_t>()]);
+        uint256 offset = stack.back(); stack.pop_back();
+        stack.push_back(memory[static_cast<uint64_t>(offset)]);
         break;
       }
       case 0x52: { // MSTORE
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t offset = stack.back(); stack.pop_back();
-        mp::uint256_t value = stack.back(); stack.pop_back();
-        memory[offset.convert_to<uint64_t>()] = value;
+        uint256 offset = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
+        memory[static_cast<uint64_t>(offset)] = value;
         break;
       }
       case 0x53: { // MSTORE8
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t offset = stack.back(); stack.pop_back();
-        mp::uint256_t value = stack.back(); stack.pop_back();
-        memory[offset.convert_to<uint64_t>()] = value & 0xff;
+        uint256 offset = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
+        memory[static_cast<uint64_t>(offset)] = value & 0xff;
         break;
       }
       case 0x54: { // SLOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t key = stack.back(); stack.pop_back();
-        stack.push_back(contract.storage[key.convert_to<uint64_t>()]);
+        uint256 key = stack.back(); stack.pop_back();
+        stack.push_back(contract.storage[key]);
         break;
       }
       case 0x55: { // SSTORE
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t key = stack.back(); stack.pop_back();
-        mp::uint256_t value = stack.back(); stack.pop_back();
-        contract.storage[key.convert_to<uint64_t>()] = value;
+        uint256 key = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
+        contract.storage[key] = value;
         break;
       }
       case 0x80 ... 0x8f: { // DUP1 through DUP16
@@ -554,16 +558,16 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0xa0: { // TRANSFER
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest_id = stack.back(); stack.pop_back();
-        mp::uint256_t amount = stack.back(); stack.pop_back();
-        auto it = id_map.find(dest_id.convert_to<uint64_t>());
+        uint256 dest_id = stack.back(); stack.pop_back();
+        uint256 amount = stack.back(); stack.pop_back();
+        auto it = id_map.find(dest_id);
         if (it != id_map.end())
           transfer(self, it->second, amount.convert_to<uint64_t>(), contract.owner);
         break;
       }
       case 0xa1: { // LOG
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t value = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
         contract.logs.push_back(value);
         break;
       }
@@ -571,14 +575,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0xa3: // LOG3
       case 0xa4: { // LOG4
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t value = stack.back(); stack.pop_back();
+        uint256 value = stack.back(); stack.pop_back();
         contract.logs.push_back(value);
         break;
       }
       case 0xff: { // SELFDESTRUCT
         if (stack.empty()) throw std::runtime_error("stack underflow");
-        mp::uint256_t dest_id = stack.back(); stack.pop_back();
-        auto it = id_map.find(dest_id.convert_to<uint64_t>());
+        uint256 dest_id = stack.back(); stack.pop_back();
+        auto it = id_map.find(dest_id);
         if (it != id_map.end())
           destroy(self, it->second, contract.owner);
         return 0;
@@ -590,7 +594,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
         unsigned push_bytes = op - 0x5f;
         if (pc + push_bytes > code.size()) throw std::runtime_error("unexpected EOF");
-        mp::uint256_t v = 0;
+        uint256 v = 0;
         for (unsigned i = 0; i < push_bytes; ++i) {
           v = (v << 8) | code[pc++];
         }
@@ -608,9 +612,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return 0;
         if (stack.size() == 1)
           return static_cast<int64_t>(stack.back());
-        mp::uint256_t offset = stack.back(); stack.pop_back();
+        uint256 offset = stack.back(); stack.pop_back();
         stack.pop_back(); // size
-        return static_cast<int64_t>(memory[offset.convert_to<uint64_t>()]);
+        return static_cast<int64_t>(memory[static_cast<uint64_t>(offset)]);
       }
       default:
         throw std::runtime_error("unsupported opcode");
