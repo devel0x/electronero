@@ -3207,7 +3207,7 @@ namespace
     return true;
   }
 }
-d
+
 bool wallet_rpc_server::on_encode_call(const wallet_rpc::COMMAND_RPC_ENCODE_CALL::request& req, wallet_rpc::COMMAND_RPC_ENCODE_CALL::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
