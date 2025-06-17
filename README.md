@@ -140,14 +140,6 @@ Make sure to include the numeric argument. Calling `increment` without a value
 produces the signature `increment()` instead and will revert, leaving the state
 unchanged.
 
-Make sure to include the numeric argument. Calling `increment` without a value
-produces the signature `increment()` instead and will revert, leaving the state
-unchanged.
-
-If you prefer manual control, encode function calls with any Ethereum tool such
-as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
-payload `7cf5dab000000000000000000000000000000000000000000000000000000000000005`.
-
 Save this string to a file named `inc.data` next to your wallet and invoke the
 contract:
 
