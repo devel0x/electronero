@@ -7,13 +7,10 @@
 
 #include <unordered_map>
 #include <ctime>
-#include <boost/multiprecision/cpp_int.hpp>
 #include "cryptonote_config.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
-
-namespace mp = boost::multiprecision;
 
 namespace CryptoNote {
 
