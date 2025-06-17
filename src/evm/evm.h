@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/string.hpp>
@@ -11,6 +12,8 @@
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
 #include "memwipe.h"
+
+namespace mp = boost::multiprecision;
 
 namespace CryptoNote {
 
@@ -20,8 +23,8 @@ public:
     std::vector<uint8_t> code;
     uint64_t balance = 0;
     std::string owner;
-    std::unordered_map<uint64_t, uint64_t> storage;
-    std::vector<uint64_t> logs;
+    std::unordered_map<uint64_t, mp::uint256_t> storage;
+    std::vector<mp::uint256_t> logs;
     uint64_t id = 0;
     crypto::hash secret_enc;
 
@@ -51,8 +54,8 @@ public:
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;
   std::string owner_of(const std::string& address) const;
-  uint64_t storage_at(const std::string& address, uint64_t key) const;
-  const std::vector<uint64_t>& logs_of(const std::string& address) const;
+  mp::uint256_t storage_at(const std::string& address, uint64_t key) const;
+  const std::vector<mp::uint256_t>& logs_of(const std::string& address) const;
   const std::vector<uint8_t>& code_of(const std::string& address) const;
   cryptonote::account_public_address deposit_address(const std::string& address) const;
   std::vector<std::string> contracts_of_owner(const std::string& owner) const;
