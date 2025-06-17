@@ -1886,6 +1886,15 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     return true;
   }
 
+  std::string payload = std::string("evm:call:") + account + ":" + data;
+  if (payload.size() > 4096) {
+      fail_msg_writer() << "Payload too large for tx_extra field";
+      return true;
+  }
+  extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+  extra.push_back(static_cast<uint8_t>(payload.size()));
+  extra.insert(extra.end(), payload.begin(), payload.end());
+
   cryptonote::tx_destination_entry de;
   de.addr = m_wallet->get_account().get_keys().m_account_address;
   de.amount = 1;
@@ -2094,6 +2103,15 @@ bool simple_wallet::deposit_contract(const std::vector<std::string>& args)
     fail_msg_writer() << tr("failed to construct tx extra");
     return true;
   }
+
+  std::string payload = std::string("evm:call:") + args[0] + ":" + data;
+  if (payload.size() > 4096) {
+      fail_msg_writer() << "Payload too large for tx_extra field";
+      return true;
+  }
+  extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+  extra.push_back(static_cast<uint8_t>(payload.size()));
+  extra.insert(extra.end(), payload.begin(), payload.end());
 
   cryptonote::tx_destination_entry self_de;
   self_de.addr = m_wallet->get_account().get_keys().m_account_address;
