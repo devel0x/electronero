@@ -327,7 +327,7 @@ namespace
     {
       namespace bp = boost::process;
       bp::ipstream out;
-      bp::child c(bp::search_path("solc"), "--optimize", "--bin", file, bp::std_out > out, bp::std_err > bp::null);
+      bp::child c(bp::search_path("solc"), "--optimize", "--bin-runtime", file, bp::std_out > out, bp::std_err > bp::null);
 
       std::string line, last_line;
       while (out && std::getline(out, line))
