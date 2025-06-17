@@ -3099,14 +3099,16 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       return daemon_res.status == CORE_RPC_STATUS_OK;
     }
 
-    bool text_op = boost::algorithm::starts_with(req.data, "deposit:") || boost::algorithm::starts_with(req.data, "transfer:");
-    const uint64_t byte_size = text_op ? req.data.size() : req.data.size() / 2;
+    std::string data = req.data;
+    boost::algorithm::trim(data);
+    bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
+    const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
     const uint64_t gov_fee = evm_fee / 2;
     const uint64_t net_fee = evm_fee - gov_fee;
 
     std::vector<uint8_t> extra;
-    std::string extra_nonce = std::string("evm:call:") + req.account + ":" + req.data;
+    std::string extra_nonce = std::string("evm:call:") + req.account + ":" + data;
     if (!cryptonote::add_extra_nonce_to_tx_extra(extra, extra_nonce))
     {
       er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
@@ -3159,8 +3161,25 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
     if (req.get_tx_metadata)
       res.tx_metadata = ptx_to_string(ptx_vector[0]);
-  res.status = CORE_RPC_STATUS_OK;
-  return true;
+
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::request daemon_req;
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::response daemon_res;
+    daemon_req.account = req.account;
+    daemon_req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    daemon_req.data = data;
+    daemon_req.write = true;
+    daemon_req.fee = evm_fee;
+    bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
+    if (!r)
+    {
+      MERROR("wallet_rpc_server::on_call_contract RPC request failed");
+      er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+      er.message = "RPC request failed";
+      return false;
+    }
+    res.result = daemon_res.result;
+    res.status = daemon_res.status;
+    return daemon_res.status == CORE_RPC_STATUS_OK;
  }
 namespace
 {
