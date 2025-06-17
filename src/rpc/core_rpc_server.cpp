@@ -2321,14 +2321,19 @@ namespace cryptonote
 
   bool core_rpc_server::on_get_contract_storage(const COMMAND_RPC_GET_CONTRACT_STORAGE::request& req, COMMAND_RPC_GET_CONTRACT_STORAGE::response& res)
   {
-    res.value = m_core.get_evm().storage_at(req.address, req.key);
+    res.value = static_cast<uint64_t>(m_core.get_evm().storage_at(req.address, req.key));
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
 
   bool core_rpc_server::on_get_contract_logs(const COMMAND_RPC_GET_CONTRACT_LOGS::request& req, COMMAND_RPC_GET_CONTRACT_LOGS::response& res)
   {
-    res.logs = m_core.get_evm().logs_of(req.address);
+    {
+      const auto& logs256 = m_core.get_evm().logs_of(req.address);
+      res.logs.clear();
+      for (const auto& l : logs256)
+        res.logs.push_back(static_cast<uint64_t>(l));
+    }
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }

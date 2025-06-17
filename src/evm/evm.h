@@ -7,6 +7,8 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/string.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/serialization/split_free.hpp>
 #include "cryptonote_basic/cryptonote_boost_serialization.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
@@ -14,14 +16,54 @@
 
 namespace CryptoNote {
 
+using uint256 = boost::multiprecision::uint256_t;
+using int256 = boost::multiprecision::int256_t;
+
+namespace detail {
+  template<class Archive>
+  void save(Archive& ar, const uint256& v)
+  {
+    std::string s = v.convert_to<std::string>();
+    ar & s;
+  }
+
+  template<class Archive>
+  void load(Archive& ar, uint256& v)
+  {
+    std::string s;
+    ar & s;
+    v = uint256(s);
+  }
+}
+
+template<class Archive>
+void serialize(Archive& ar, uint256& v, const unsigned int)
+{
+  boost::serialization::split_free(ar, v, 0);
+}
+
+namespace boost { namespace serialization {
+template<class Archive>
+void save(Archive& ar, const CryptoNote::uint256& v, const unsigned int)
+{
+  CryptoNote::detail::save(ar, v);
+}
+
+template<class Archive>
+void load(Archive& ar, CryptoNote::uint256& v, const unsigned int)
+{
+  CryptoNote::detail::load(ar, v);
+}
+} }
+
 class EVM {
 public:
   struct Contract {
     std::vector<uint8_t> code;
     uint64_t balance = 0;
     std::string owner;
-    std::unordered_map<uint64_t, uint64_t> storage;
-    std::vector<uint64_t> logs;
+    std::unordered_map<uint256, uint256> storage;
+    std::vector<uint256> logs;
     uint64_t id = 0;
     crypto::hash secret_enc;
 
@@ -51,8 +93,8 @@ public:
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;
   std::string owner_of(const std::string& address) const;
-  uint64_t storage_at(const std::string& address, uint64_t key) const;
-  const std::vector<uint64_t>& logs_of(const std::string& address) const;
+  uint256 storage_at(const std::string& address, uint256 key) const;
+  const std::vector<uint256>& logs_of(const std::string& address) const;
   const std::vector<uint8_t>& code_of(const std::string& address) const;
   cryptonote::account_public_address deposit_address(const std::string& address) const;
   std::vector<std::string> contracts_of_owner(const std::string& owner) const;
