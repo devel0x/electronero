@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/string.hpp>
@@ -13,6 +14,8 @@
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
 #include "memwipe.h"
+
+namespace mp = boost::multiprecision;
 
 namespace CryptoNote {
 

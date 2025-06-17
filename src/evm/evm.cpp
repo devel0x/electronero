@@ -7,10 +7,13 @@
 
 #include <unordered_map>
 #include <ctime>
+#include <boost/multiprecision/cpp_int.hpp>
 #include "cryptonote_config.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
+
+namespace mp = boost::multiprecision;
 
 namespace CryptoNote {
 
@@ -409,8 +412,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 v = 0;
         for (unsigned i = 0; i < 32; ++i, ++off) {
           v <<= 8;
-          if (off < input.size())
-            v |= input[off];
+          size_t pos = off.convert_to<size_t>();
+          if (pos < input.size())
+            v |= input[pos];
         }
         stack.push_back(v);
         break;
@@ -558,7 +562,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 amount = stack.back(); stack.pop_back();
         auto it = id_map.find(dest_id);
         if (it != id_map.end())
-          transfer(self, it->second, amount, contract.owner);
+          transfer(self, it->second, amount.convert_to<uint64_t>(), contract.owner);
         break;
       }
       case 0xa1: { // LOG
