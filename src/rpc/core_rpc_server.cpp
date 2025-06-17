@@ -2184,13 +2184,10 @@ namespace cryptonote
   }
 
   //------------------------------------------------------------------------------------------------------------------------------
-bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
-{
-    MDEBUG("on_call_contract: account=" << req.account
-           << " caller=" << req.caller
-           << " write=" << req.write
-           << " fee=" << req.fee
-           << " data='" << req.data << "'");
+
+  bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
+  {
+    MDEBUG("on_call_contract account:" << req.account << " caller:" << req.caller << " write:" << std::boolalpha << req.write << " fee:" << req.fee << " data:" << req.data); data='" << req.data << "'");
     if (boost::algorithm::starts_with(req.data, "deposit:"))
     {
       if (!req.write)
@@ -2256,7 +2253,7 @@ bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request&
       std::string bin;
       if (!epee::string_tools::parse_hexstr_to_binbuff(req.data, bin))
       {
-        MERROR("invalid hex data: '" << req.data << "'");
+        MERROR("on_call_contract: invalid hex data: '" << req.data << "'");
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
