@@ -1947,6 +1947,7 @@ namespace wallet_rpc
       std::string account;
       std::string data;
       bool write;
+      uint64_t call_value;
       bool do_not_relay;
       bool get_tx_hex;
       bool get_tx_metadata;
@@ -1955,6 +1956,7 @@ namespace wallet_rpc
         KV_SERIALIZE(account)
         KV_SERIALIZE(data)
         KV_SERIALIZE_OPT(write, false)
+        KV_SERIALIZE_OPT(call_value, (uint64_t)0)
         KV_SERIALIZE_OPT(do_not_relay, false)
         KV_SERIALIZE_OPT(get_tx_hex, false)
         KV_SERIALIZE_OPT(get_tx_metadata, false)

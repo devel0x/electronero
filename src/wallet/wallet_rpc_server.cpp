@@ -3088,6 +3088,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       daemon_req.data = data;
       daemon_req.write = false;
       daemon_req.fee = 0;
+      daemon_req.call_value = req.call_value;
       bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
       if (!r)
       {
@@ -3169,6 +3170,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
     daemon_req.data = data;
     daemon_req.write = true;
     daemon_req.fee = evm_fee;
+    daemon_req.call_value = req.call_value;
     bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
     if (!r)
     {

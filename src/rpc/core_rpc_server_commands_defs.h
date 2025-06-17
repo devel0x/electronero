@@ -2286,6 +2286,7 @@ namespace cryptonote
       std::string data;
       bool write;
       uint64_t fee;
+      uint64_t call_value;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(account)
@@ -2293,6 +2294,7 @@ namespace cryptonote
         KV_SERIALIZE(data)
         KV_SERIALIZE_OPT(write, false)
         KV_SERIALIZE_OPT(fee, (uint64_t)0)
+        KV_SERIALIZE_OPT(call_value, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
