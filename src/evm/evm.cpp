@@ -288,6 +288,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         int64_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
         int64_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
         stack.push_back(a > b);
+        break;  
       }
       case 0x14: { // EQ
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
