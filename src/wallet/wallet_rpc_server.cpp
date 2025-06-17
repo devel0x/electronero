@@ -3380,3 +3380,4 @@ just_dir:
   }
   return 0;
 }
+} // namespace tools
