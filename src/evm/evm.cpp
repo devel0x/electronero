@@ -526,18 +526,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x5b: // JUMPDEST
         break;
-      case 0x80 ... 0x8f: { // DUP1 - DUP16
-        unsigned n = op - 0x7f;
-        if (stack.size() < n) throw std::runtime_error("stack underflow");
-        stack.push_back(stack[stack.size() - n]);
-        break;
-      }
-      case 0x90 ... 0x9f: { // SWAP1 - SWAP16
-        unsigned n = op - 0x8f;
-        if (stack.size() < n + 1) throw std::runtime_error("stack underflow");
-        std::swap(stack[stack.size() - 1], stack[stack.size() - 1 - n]);
-        break;
-      }
       case 0x60 ... 0x7f: { // PUSH1 through PUSH32
         unsigned push_bytes = op - 0x5f;
         if (pc + push_bytes > code.size()) throw std::runtime_error("unexpected EOF");
@@ -546,18 +534,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           v = (v << 8) | code[pc++];
         }
         stack.push_back(v);
-        break;
-      }
-      case 0x80 ... 0x8f: { // DUP1 through DUP16
-        unsigned n = op - 0x7f; // 1-indexed depth
-        if (stack.size() < n) throw std::runtime_error("stack underflow");
-        stack.push_back(stack[stack.size() - n]);
-        break;
-      }
-      case 0x90 ... 0x9f: { // SWAP1 through SWAP16
-        unsigned n = op - 0x8f; // 1-indexed depth
-        if (stack.size() < n + 1) throw std::runtime_error("stack underflow");
-        std::swap(stack[stack.size() - 1], stack[stack.size() - 1 - n]);
         break;
       }
       case 0xfd: // REVERT
