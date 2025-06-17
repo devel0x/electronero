@@ -536,11 +536,12 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         stack.push_back(v);
         break;
       }
-      case 0xfd: // REVERT
+      case 0xfd: { // REVERT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         stack.pop_back(); // size
         stack.pop_back(); // offset
         return -1;
+      }
       case 0xf3: { // RETURN
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t offset = stack.back(); stack.pop_back();
