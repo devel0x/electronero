@@ -7,6 +7,7 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/string.hpp>
+#include "cryptonote_basic/cryptonote_boost_serialization.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
 #include "memwipe.h"
