@@ -7,6 +7,7 @@
 
 #include <unordered_map>
 #include <ctime>
+#include <cstring>
 #include "cryptonote_config.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
@@ -187,7 +188,8 @@ uint256 EVM::storage_at(const std::string& address, uint256 key) const
 }
 
 int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
-                  uint64_t block_height, uint64_t timestamp) {
+                  uint64_t block_height, uint64_t timestamp,
+                  const std::string& caller, uint64_t call_value) {
   auto it = contracts.find(address);
   if (it == contracts.end()) {
     return 0;
@@ -196,13 +198,14 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
          << " input:" << epee::string_tools::buff_to_hex_nodelimer(std::string(input.begin(), input.end()))
          << " height:" << block_height
          << " ts:" << timestamp);
-  int64_t res = execute(address, it->second, input, block_height, timestamp);
+  int64_t res = execute(address, it->second, input, block_height, timestamp, caller, call_value);
   MDEBUG("EVM::call result:" << res);
   return res;
 }
 
 int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& input,
-                     uint64_t block_height, uint64_t timestamp) {
+                     uint64_t block_height, uint64_t timestamp,
+                     const std::string& caller, uint64_t call_value) {
   std::vector<uint256> stack;
   std::unordered_map<uint64_t, uint256> memory;
   const auto& code = contract.code;
@@ -412,7 +415,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x34: { // CALLVALUE
-        stack.push_back(0);
+        stack.push_back(call_value);
         break;
       }
       case 0x35: { // CALLDATALOAD
@@ -479,7 +482,25 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x33: { // CALLER
-        stack.push_back(0);
+        if (caller.empty())
+        {
+          stack.push_back(0);
+        }
+        else
+        {
+          auto itc = contracts.find(caller);
+          if (itc != contracts.end())
+          {
+            stack.push_back(itc->second.id);
+          }
+          else
+          {
+            crypto::hash h = crypto::cn_fast_hash(caller.data(), caller.size());
+            uint64_t id;
+            memcpy(&id, h.data, sizeof(id));
+            stack.push_back(id);
+          }
+        }
         break;
       }
       case 0x42: { // TIMESTAMP

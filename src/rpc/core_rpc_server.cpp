@@ -2282,7 +2282,7 @@ namespace cryptonote
       uint64_t ts = static_cast<uint64_t>(time(nullptr));
       try
       {
-        res.result = m_core.get_evm().call(req.account, data, height, ts);
+        res.result = m_core.get_evm().call(req.account, data, height, ts, req.caller);
         res.status = CORE_RPC_STATUS_OK;
         MDEBUG("call result " << res.result);
         return true;
