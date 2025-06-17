@@ -1843,6 +1843,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       fail_msg_writer() << tr("failed to read input file") << ' ' << maybe_file.string();
       return true;
     }
+    boost::algorithm::trim(data);
   }
   else
   {
