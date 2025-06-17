@@ -125,6 +125,10 @@ command increments the counter by `5` and automatically encodes
 electronero-wallet-cli call_contract c1 increment 5 write
 ```
 
+Make sure to include the numeric argument. Calling `increment` without a value
+produces the signature `increment()` instead and will revert, leaving the state
+unchanged.
+
 If you prefer manual control, encode function calls with any Ethereum tool such
 as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
 payload `d09de08a0000000000000000000000000000000000000000000000000000000000000005`.
