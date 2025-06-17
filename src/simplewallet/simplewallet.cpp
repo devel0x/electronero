@@ -1861,6 +1861,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
     req.data = data;
     req.write = false;
+    req.call_value = 0;
     bool r = m_wallet->invoke_http_json("/call_contract", req, res);
     std::string err = interpret_rpc_response(r, res.status);
     if (err.empty())
@@ -1985,6 +1986,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     creq.data = data;
     creq.write = true;
     creq.fee = evm_fee;
+    creq.call_value = 0;
     bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
     std::string err = interpret_rpc_response(ok, cres.status);
     if (err.empty())
@@ -2156,6 +2158,7 @@ bool simple_wallet::deposit_contract(const std::vector<std::string>& args)
   req.data = data;
   req.write = true;
   req.fee = evm_fee;
+  req.call_value = 0;
   bool r = m_wallet->invoke_http_json("/call_contract", req, res);
   std::string err = interpret_rpc_response(r, res.status);
   if (err.empty())
@@ -5638,6 +5641,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
           creq.data = std::string("deposit:") + std::to_string(cd.second);
           creq.write = true;
           creq.fee = creq.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+          creq.call_value = 0;
           bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
           std::string err = interpret_rpc_response(ok, cres.status);
           if (err.empty())
@@ -6292,6 +6296,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
         creq.data = std::string("deposit:") + std::to_string(cd.second);
         creq.write = true;
         creq.fee = creq.data.size() * config::EVM_CALL_FEE_PER_BYTE;
+        creq.call_value = 0;
         bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
         std::string err = interpret_rpc_response(ok, cres.status);
         if (err.empty())

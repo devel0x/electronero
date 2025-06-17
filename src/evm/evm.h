@@ -88,7 +88,8 @@ public:
 
   std::string deploy(const std::string& owner, const std::vector<uint8_t>& bytecode);
   int64_t call(const std::string& address, const std::vector<uint8_t>& input,
-               uint64_t block_height = 0, uint64_t timestamp = 0);
+               uint64_t block_height = 0, uint64_t timestamp = 0,
+               const std::string& caller = std::string(), uint64_t call_value = 0);
   bool transfer(const std::string& from, const std::string& to, uint64_t amount, const std::string& caller);
   bool destroy(const std::string& address, const std::string& dest, const std::string& caller);
   bool deposit(const std::string& address, uint64_t amount);
@@ -122,7 +123,8 @@ private:
   };
 
   int64_t execute(const std::string& self, Contract& c, const std::vector<uint8_t>& input,
-                  uint64_t block_height, uint64_t timestamp);
+                  uint64_t block_height, uint64_t timestamp,
+                  const std::string& caller, uint64_t call_value);
 
   std::unordered_map<std::string, Contract> contracts;
   std::unordered_map<uint64_t, std::string> id_map;
