@@ -129,6 +129,10 @@ Make sure to include the numeric argument. Calling `increment` without a value
 produces the signature `increment()` instead and will revert, leaving the state
 unchanged.
 
+Make sure to include the numeric argument. Calling `increment` without a value
+produces the signature `increment()` instead and will revert, leaving the state
+unchanged.
+
 If you prefer manual control, encode function calls with any Ethereum tool such
 as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
 payload `d09de08a0000000000000000000000000000000000000000000000000000000000000005`.

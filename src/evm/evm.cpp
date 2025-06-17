@@ -398,9 +398,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0x35: { // CALLDATALOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t off = stack.back(); stack.pop_back();
+        // Solidity passes arguments as 32-byte big-endian words. Load the
+        // entire word and truncate to 64 bits so typical uint256 arguments
+        // work correctly.
         uint64_t v = 0;
-        for (unsigned i = 0; i < 8 && off < input.size(); ++i, ++off) {
-          v = (v << 8) | input[off];
+        for (unsigned i = 0; i < 32; ++i, ++off) {
+          v <<= 8;
+          if (off < input.size())
+            v |= input[off];
         }
         stack.push_back(v);
         break;
