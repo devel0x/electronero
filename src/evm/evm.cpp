@@ -340,6 +340,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x34: { // CALLVALUE
         stack.push_back(0);
+        break;
+      }
       case 0x1b: { // SHL
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint64_t shift = stack.back(); stack.pop_back();
