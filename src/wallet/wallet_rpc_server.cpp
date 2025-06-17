@@ -2993,13 +2993,16 @@ namespace tools
     }
 
     std::vector<uint8_t> extra;
-    std::string extra_nonce = std::string("evm:deploy:") + req.bytecode;
-    if (!cryptonote::add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    std::string payload = std::string("evm:deploy:") + req.bytecode;
+    if (payload.size() > 4096)
     {
       er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
       er.message = "failed to construct tx extra";
       return false;
     }
+    extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+    extra.push_back(static_cast<uint8_t>(payload.size()));
+    extra.insert(extra.end(), payload.begin(), payload.end());
 
     const uint64_t byte_size = req.bytecode.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
@@ -3108,13 +3111,16 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
     const uint64_t net_fee = evm_fee - gov_fee;
 
     std::vector<uint8_t> extra;
-    std::string extra_nonce = std::string("evm:call:") + req.account + ":" + data;
-    if (!cryptonote::add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    std::string payload = std::string("evm:call:") + req.account + ":" + data;
+    if (payload.size() > 4096)
     {
       er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
       er.message = "failed to construct tx extra";
       return false;
     }
+    extra.push_back(TX_EXTRA_EVM_BYTECODE_TAG);
+    extra.push_back(static_cast<uint8_t>(payload.size()));
+    extra.insert(extra.end(), payload.begin(), payload.end());
 
     cryptonote::tx_destination_entry de;
     de.addr = m_wallet->get_account().get_keys().m_account_address;
