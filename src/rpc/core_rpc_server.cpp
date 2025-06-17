@@ -2274,7 +2274,7 @@ namespace cryptonote
       {
         MERROR("EVM call failed: " << e.what());
         res.status = CORE_RPC_STATUS_FAILED;
-        return false;
+        return true;
       }
     }
   }
