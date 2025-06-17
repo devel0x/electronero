@@ -74,7 +74,7 @@ Electronero is a private, secure, untraceable, decentralised digital currency. Y
 
 ## Smart Contracts
 
-Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin`, then `deploy_contract <file.bin>` to deploy the resulting bytecode. The daemon returns the address of the new contract. `call_contract <address> <file|method> [params...] [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, equality/comparison opcodes (`EQ`, `LT`, `GT`), bitwise and shift operations (`AND`, `OR`, `XOR`, `NOT`, `SHL`, `SHR`, `SAR`), stack manipulation with `DUP` and `SWAP`, `CALLVALUE`, code access instructions (`CODESIZE`, `CODECOPY`), conditional jumps (`JUMP`, `JUMPI`), `REVERT` and memory-based `RETURN`. Solidity 0.8 contracts now run without modification.
+Electronero ships with a minimal Ethereum Virtual Machine implementation. Accounts can deploy bytecode and call simple contracts directly on-chain. Contract actions are submitted via standard transactions, RPC using the `/deploy_contract` and `/call_contract` endpoints, or from the command‑line wallet. In `electronero-wallet-cli` you may run `compile_contract <file.sol>` to compile Solidity source into `<file>.bin` using `solc --bin-runtime`, then `deploy_contract <file.bin>` to deploy the runtime bytecode. The daemon returns the address of the new contract. `call_contract <address> <file|method> [params...] [write]` invokes a deployed contract with hex‑encoded input. Append `write` to pay the per-byte call fee and modify state. Contract files must reside in the same directory as the wallet so the CLI can find them. The embedded EVM supports basic opcodes for experimentation and learning purposes. Recent updates added storage and memory operations (`SSTORE`, `SLOAD`, `MSTORE`, `MLOAD`), a generic `PUSH` handler, equality/comparison opcodes (`EQ`, `LT`, `GT`), bitwise and shift operations (`AND`, `OR`, `XOR`, `NOT`, `SHL`, `SHR`, `SAR`), stack manipulation with `DUP` and `SWAP`, `CALLVALUE`, code access instructions (`CODESIZE`, `CODECOPY`), conditional jumps (`JUMP`, `JUMPI`), `REVERT` and memory-based `RETURN`. Solidity 0.8 contracts now run without modification.
 
 Deploying a contract incurs a fee proportional to its bytecode size. The wallet calculates this automatically using a rate of 10 atomic units per byte.
 When you run `deploy_contract` the CLI displays the byte count and fee split between the network and governance address and asks for confirmation before submitting. The wallet RPC method `/deploy_contract` mirrors this behaviour by sending the deployment transaction and registering the contract under your wallet address.
@@ -110,7 +110,7 @@ Compile the source in your wallet directory:
 electronero-wallet-cli compile_contract Counter.sol
 ```
 
-Deploy the resulting bytecode:
+Deploy the resulting runtime bytecode:
 
 ```bash
 electronero-wallet-cli deploy_contract Counter.bin
@@ -124,6 +124,10 @@ command increments the counter by `5` and automatically encodes
 ```bash
 electronero-wallet-cli call_contract c1 increment 5 write
 ```
+
+Make sure to include the numeric argument. Calling `increment` without a value
+produces the signature `increment()` instead and will revert, leaving the state
+unchanged.
 
 Make sure to include the numeric argument. Calling `increment` without a value
 produces the signature `increment()` instead and will revert, leaving the state
