@@ -358,24 +358,24 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 shift = stack.back(); stack.pop_back();
         uint256 value = stack.back(); stack.pop_back();
-        const uint64_t s = shift.convert_to<uint64_t>();
-        stack.push_back(s >= 64 ? 0 : (value << s));
+        const unsigned s = shift.convert_to<unsigned>();
+        stack.push_back(s >= 256 ? 0 : (value << s));
         break;
       }
       case 0x1c: { // SHR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 shift = stack.back(); stack.pop_back();
         uint256 value = stack.back(); stack.pop_back();
-        const uint64_t s = shift.convert_to<uint64_t>();
-        stack.push_back(s >= 64 ? 0 : (value >> s));
+        const unsigned s = shift.convert_to<unsigned>();
+        stack.push_back(s >= 256 ? 0 : (value >> s));
         break;
       }
       case 0x1d: { // SAR
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 shift = stack.back(); stack.pop_back();
         int256 value = static_cast<int256>(stack.back()); stack.pop_back();
-        const uint64_t s = shift.convert_to<uint64_t>();
-        if (s >= 64)
+        const unsigned s = shift.convert_to<unsigned>();
+        if (s >= 256)
           stack.push_back(value < 0 ? static_cast<uint256>(-1) : 0);
         else
           stack.push_back(static_cast<uint256>(value >> s));
