@@ -385,6 +385,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 offset = stack.back(); stack.pop_back();
         uint256 len = stack.back(); stack.pop_back();
+        const uint64_t off = offset.convert_to<uint64_t>();
+        const uint64_t l = len.convert_to<uint64_t>();
         std::vector<uint8_t> buf;
         buf.reserve(len.convert_to<size_t>());
         for (uint64_t i = 0; i < len.convert_to<uint64_t>(); ++i)
