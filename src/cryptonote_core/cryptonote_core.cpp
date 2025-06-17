@@ -1554,18 +1554,28 @@ namespace cryptonote
     std::vector<tx_extra_field> fields;
     if (!parse_tx_extra(tx.extra, fields))
       return;
+    tx_extra_evm_bytecode evm_field;
     tx_extra_nonce nonce_field;
-    if (!find_tx_extra_field_by_type(fields, nonce_field, 0))
+    std::string payload;
+    if (find_tx_extra_field_by_type(fields, evm_field, 0))
+    {
+      payload = evm_field.bytecode;
+    }
+    else if (find_tx_extra_field_by_type(fields, nonce_field, 0))
+    {
+      payload = nonce_field.nonce;
+    }
+    else
       return;
 
-    MDEBUG("process_evm_tx nonce:" << nonce_field.nonce);
+    MDEBUG("process_evm_tx payload:" << payload);
 
     const std::string deploy_prefix = "evm:deploy:";
     const std::string call_prefix = "evm:call:";
 
-    if (nonce_field.nonce.compare(0, deploy_prefix.size(), deploy_prefix) == 0)
+    if (payload.compare(0, deploy_prefix.size(), deploy_prefix) == 0)
     {
-      std::string hex = nonce_field.nonce.substr(deploy_prefix.size());
+      std::string hex = payload.substr(deploy_prefix.size());
       std::string bin;
       epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
       std::vector<uint8_t> code(bin.begin(), bin.end());
@@ -1580,9 +1590,9 @@ namespace cryptonote
         MERROR("EVM deploy failed: " << e.what());
       }
     }
-    else if (nonce_field.nonce.compare(0, call_prefix.size(), call_prefix) == 0)
+    else if (payload.compare(0, call_prefix.size(), call_prefix) == 0)
     {
-      std::string rest = nonce_field.nonce.substr(call_prefix.size());
+      std::string rest = payload.substr(call_prefix.size());
       size_t pos = rest.find(':');
       if (pos == std::string::npos)
         return;
