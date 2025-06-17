@@ -252,6 +252,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         else stack.push_back(a % b);
         break;
       }
+      case 0x05: { // SDIV
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        int64_t b = static_cast<int64_t>(stack.back()); stack.pop_back();
+        int64_t a = static_cast<int64_t>(stack.back()); stack.pop_back();
+        stack.push_back(b == 0 ? 0 : static_cast<uint64_t>(a / b));
+        break;
+      }
       case 0x08: { // ADDMOD
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
         uint64_t c = stack.back(); stack.pop_back();
@@ -262,10 +269,11 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x09: { // MULMOD
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        uint64_t c = stack.back(); stack.pop_back();
+        uint64_t m = stack.back(); stack.pop_back();
         uint64_t b = stack.back(); stack.pop_back();
         uint64_t a = stack.back(); stack.pop_back();
-        stack.push_back(c == 0 ? 0 : (a * b) % c);
+        if (m == 0) { stack.push_back(0); break; }
+        stack.push_back((a * b) % m);
         break;
       }
       case 0x10: { // LT
@@ -577,10 +585,18 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         stack.push_back(v);
         break;
       }
-      case 0xfd: // REVERT
+      case 0xfd: { // REVERT
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        stack.pop_back(); // size
+        stack.pop_back(); // offset
         return -1;
+      }
       case 0xf3: { // RETURN
-        return stack.empty() ? 0 : static_cast<int64_t>(stack.back());
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint64_t offset = stack.back(); stack.pop_back();
+        uint64_t size = stack.back(); stack.pop_back();
+        if (size == 0) return 0;
+        return memory.count(offset) ? static_cast<int64_t>(memory[offset]) : 0;
       }
       default:
         throw std::runtime_error("unsupported opcode");
