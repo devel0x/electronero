@@ -1843,6 +1843,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       fail_msg_writer() << tr("failed to read input file") << ' ' << maybe_file.string();
       return true;
     }
+    boost::algorithm::trim(data);
   }
   else
   {
@@ -1855,6 +1856,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       fail_msg_writer() << tr("failed to encode call data");
       return true;
     }
+    boost::algorithm::trim(data);
   }
   if (!write)
   {
@@ -1978,6 +1980,21 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       else
         fail_msg_writer() << tr("Failed to validate transfer proof");
     }
+
+    // update daemon-side EVM state
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::request creq;
+    cryptonote::COMMAND_RPC_CALL_CONTRACT::response cres;
+    creq.account = account;
+    creq.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    creq.data = data;
+    creq.write = true;
+    creq.fee = evm_fee;
+    bool ok = m_wallet->invoke_http_json("/call_contract", creq, cres);
+    std::string err = interpret_rpc_response(ok, cres.status);
+    if (err.empty())
+      success_msg_writer() << tr("Call result: ") << cres.result;
+    else
+      fail_msg_writer() << tr("failed to execute call on daemon: ") << err;
   }
   catch (const std::exception &e) {
     fail_msg_writer() << tr("Failed to send transaction: ") << e.what();
