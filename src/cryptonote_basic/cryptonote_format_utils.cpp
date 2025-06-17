@@ -648,8 +648,7 @@ namespace cryptonote
     {
       tx_extra_field field;
       bool r = ::do_serialize(ar, field);
-      if (!r)
-        return false;
+      CHECK_AND_NO_ASSERT_MES_L1(r, false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
       if (field.type() != type)
         ::do_serialize(newar, field);
 
@@ -657,8 +656,7 @@ namespace cryptonote
       eof = (EOF == iss.peek());
       iss.clear(state);
     }
-    if (!::serialization::check_stream_state(ar))
-      return false;
+    CHECK_AND_NO_ASSERT_MES_L1(::serialization::check_stream_state(ar), false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
     tx_extra.clear();
     std::string s = oss.str();
     tx_extra.reserve(s.size());
