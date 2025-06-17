@@ -1558,6 +1558,8 @@ namespace cryptonote
     if (!find_tx_extra_field_by_type(fields, nonce_field, 0))
       return;
 
+    MDEBUG("process_evm_tx nonce:" << nonce_field.nonce);
+
     const std::string deploy_prefix = "evm:deploy:";
     const std::string call_prefix = "evm:call:";
 
@@ -1568,6 +1570,7 @@ namespace cryptonote
       epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
       std::vector<uint8_t> code(bin.begin(), bin.end());
       std::string account = epee::string_tools::pod_to_hex(get_transaction_hash(tx));
+      MDEBUG("process_evm_tx deploy account:" << account << " code_len:" << code.size());
       try
       {
         m_evm.deploy(account, code);
@@ -1590,6 +1593,7 @@ namespace cryptonote
       std::vector<uint8_t> data(bin.begin(), bin.end());
       uint64_t height = m_blockchain_storage.get_current_blockchain_height();
       uint64_t ts = static_cast<uint64_t>(time(nullptr));
+      MDEBUG("process_evm_tx call account:" << account << " data_len:" << data.size());
       try
       {
         m_evm.call(account, data, height, ts);
