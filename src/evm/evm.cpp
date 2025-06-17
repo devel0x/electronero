@@ -399,24 +399,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         pc = dest;
         break;
       }
-      case 0x57: { // JUMPI
-        if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint64_t dest = stack.back(); stack.pop_back();
-        uint64_t cond = stack.back(); stack.pop_back();
-        if (cond != 0) {
-          if (dest >= code.size() || !jumpdests.count(dest))
-            throw std::runtime_error("bad jump dest");
-          pc = dest;
-        }
-        break;
-      }
-      case 0x58: { // PC
-        stack.push_back(pc - 1);
-        break;
-      }
-      case 0x5b: { // JUMPDEST
-        break;
-      }
       case 0x51: { // MLOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint64_t offset = stack.back(); stack.pop_back();
@@ -472,13 +454,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (it != id_map.end())
           destroy(self, it->second, contract.owner);
         return 0;
-      }
-      case 0x56: { // JUMP
-        if (stack.empty()) throw std::runtime_error("stack underflow");
-        uint64_t dest = stack.back(); stack.pop_back();
-        if (dest >= code.size()) throw std::runtime_error("bad jump");
-        pc = dest;
-        continue;
       }
       case 0x57: { // JUMPI
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
