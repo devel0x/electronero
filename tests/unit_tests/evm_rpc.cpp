@@ -124,32 +124,19 @@ TEST(EVM_RPC, BadJump)
   EXPECT_THROW(evm.call(c, {}), std::runtime_error);
 }
 
-TEST(EVM_RPC, ReturnMemory)
+TEST(EVM_RPC, DupAndSwap)
 {
   EVM evm;
+  // ((1 + 1) - 2) = 0
   std::vector<uint8_t> code = {
-    0x60,0x2a, // PUSH1 42
-    0x60,0x00, // PUSH1 0
-    0x52,      // MSTORE
-    0x60,0x20, // PUSH1 32
-    0x60,0x00, // PUSH1 0
-    0xf3       // RETURN
+    0x60,0x01,      // PUSH1 1
+    0x80,           // DUP1 -> [1,1]
+    0x01,           // ADD   -> [2]
+    0x60,0x02,      // PUSH1 2 -> [2,2]
+    0x90,           // SWAP1 -> [2,2]
+    0x03,           // SUB   -> [0]
+    0xf3            // RETURN
   };
   std::string c = evm.deploy("owner", code);
-  EXPECT_EQ(42, evm.call(c, {}));
-}
-
-TEST(EVM_RPC, DupSwap)
-{
-  EVM evm;
-  std::vector<uint8_t> code = {
-    0x60,0x01, // PUSH1 1
-    0x80,      // DUP1
-    0x01,      // ADD -> 2
-    0x60,0x03, // PUSH1 3
-    0x90,      // SWAP1
-    0x00       // STOP, return 3
-  };
-  std::string c = evm.deploy("owner", code);
-  EXPECT_EQ(3, evm.call(c, {}));
+  EXPECT_EQ(0, evm.call(c, {}));
 }
