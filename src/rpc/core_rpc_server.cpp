@@ -2187,7 +2187,11 @@ namespace cryptonote
 
   bool core_rpc_server::on_call_contract(const COMMAND_RPC_CALL_CONTRACT::request& req, COMMAND_RPC_CALL_CONTRACT::response& res)
   {
-    MDEBUG("on_call_contract account:" << req.account << " caller:" << req.caller << " write:" << std::boolalpha << req.write << " fee:" << req.fee << " data:" << req.data); data='" << req.data << "'");
+    MDEBUG("on_call_contract account:" << req.account
+       << " caller:" << req.caller
+       << " write:" << std::boolalpha << req.write
+       << " fee:" << req.fee
+       << " data:" << req.data);
     if (boost::algorithm::starts_with(req.data, "deposit:"))
     {
       if (!req.write)
