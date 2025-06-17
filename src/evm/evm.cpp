@@ -192,7 +192,13 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
   if (it == contracts.end()) {
     return 0;
   }
-  return execute(address, it->second, input, block_height, timestamp);
+  MDEBUG("EVM::call address:" << address
+         << " input:" << epee::string_tools::buff_to_hex_nodelimer(std::string(input.begin(), input.end()))
+         << " height:" << block_height
+         << " ts:" << timestamp);
+  int64_t res = execute(address, it->second, input, block_height, timestamp);
+  MDEBUG("EVM::call result:" << res);
+  return res;
 }
 
 int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& input,

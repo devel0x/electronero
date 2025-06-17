@@ -1882,6 +1882,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
 
   std::vector<uint8_t> extra;
   std::string extra_nonce = std::string("evm:call:") + account + ":" + data;
+  MDEBUG("call_contract extra_nonce:" << extra_nonce);
   if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
   {
     fail_msg_writer() << tr("failed to construct tx extra");
