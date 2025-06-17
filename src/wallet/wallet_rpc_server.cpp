@@ -3160,52 +3160,54 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
   res.status = CORE_RPC_STATUS_OK;
   return true;
  }
-
-bool encode_simple_call(const std::string &method, const std::vector<std::string> &params, std::string &hex)
+namespace
 {
-  std::string sig = method + "(";
-  for (size_t i = 0; i < params.size(); ++i)
+  bool encode_simple_call(const std::string &method, const std::vector<std::string> &params, std::string &hex)
   {
-    if (i) sig += ",";
-    sig += "uint256";
+    std::string sig = method + "(";
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (i) sig += ",";
+      sig += "uint256";
+    }
+    sig += ")";
+
+    uint8_t hash[32];
+    keccak(reinterpret_cast<const uint8_t*>(sig.data()), sig.size(), hash, 32);
+    hex = epee::string_tools::buff_to_hex_nodelimer(std::string((char*)hash, 4));
+
+    for (const std::string &p : params)
+    {
+      unsigned long long val = 0;
+      try { val = std::stoull(p); }
+      catch (const std::exception&) { return false; }
+      char buf[17];
+      snprintf(buf, sizeof(buf), "%016llx", val);
+      hex.append(64 - 16, '0');
+      hex += buf;
+    }
+    return true;
   }
-  sig += ")";
 
-  uint8_t hash[32];
-  keccak(reinterpret_cast<const uint8_t*>(sig.data()), sig.size(), hash, 32);
-  hex = epee::string_tools::buff_to_hex_nodelimer(std::string((char*)hash, 4));
-
-  for (const std::string &p : params)
+  bool parse_call_string(const std::string &in, std::string &method, std::vector<std::string> &params)
   {
-    unsigned long long val = 0;
-    try { val = std::stoull(p); }
-    catch (const std::exception&) { return false; }
-    char buf[17];
-    snprintf(buf, sizeof(buf), "%016llx", val);
-    hex.append(64 - 16, '0');
-    hex += buf;
+    auto open = in.find('(');
+    auto close = in.rfind(')');
+    if (open == std::string::npos || close == std::string::npos || close < open)
+      return false;
+    method = in.substr(0, open);
+    boost::algorithm::trim(method);
+    std::string inside = in.substr(open + 1, close - open - 1);
+    boost::algorithm::trim(inside);
+    params.clear();
+    if (!inside.empty())
+      boost::split(params, inside, boost::is_any_of(","), boost::token_compress_on);
+    for (std::string &p : params)
+      boost::algorithm::trim(p);
+    return true;
   }
-  return true;
 }
-
-bool parse_call_string(const std::string &in, std::string &method, std::vector<std::string> &params)
-{
-  auto open = in.find('(');
-  auto close = in.rfind(')');
-  if (open == std::string::npos || close == std::string::npos || close < open)
-    return false;
-  method = in.substr(0, open);
-  boost::algorithm::trim(method);
-  std::string inside = in.substr(open + 1, close - open - 1);
-  boost::algorithm::trim(inside);
-  params.clear();
-  if (!inside.empty())
-    boost::split(params, inside, boost::is_any_of(","), boost::token_compress_on);
-  for (std::string &p : params)
-    boost::algorithm::trim(p);
-  return true;
-}
-
+d
 bool wallet_rpc_server::on_encode_call(const wallet_rpc::COMMAND_RPC_ENCODE_CALL::request& req, wallet_rpc::COMMAND_RPC_ENCODE_CALL::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
