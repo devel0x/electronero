@@ -1853,6 +1853,45 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       return true;
     }
   }
+
+  // normalize textual operations to use atomic amounts when writing
+  std::string dest;
+  uint64_t parsed_amount = 0;
+  bool is_transfer = false;
+  bool is_deposit = false;
+  if (write)
+  {
+    if (boost::starts_with(data, "transfer:"))
+    {
+      is_transfer = true;
+      std::string rest = data.substr(9);
+      size_t pos = rest.find(':');
+      if (pos == std::string::npos)
+      {
+        fail_msg_writer() << tr("transfer data must be transfer:<dest>:<amount>");
+        return true;
+      }
+      dest = rest.substr(0, pos);
+      std::string amount_str = rest.substr(pos + 1);
+      if (!cryptonote::parse_amount(parsed_amount, amount_str))
+      {
+        fail_msg_writer() << tr("invalid amount");
+        return true;
+      }
+      data = std::string("transfer:") + dest + ":" + std::to_string(parsed_amount);
+    }
+    else if (boost::starts_with(data, "deposit:"))
+    {
+      is_deposit = true;
+      std::string amount_str = data.substr(8);
+      if (!cryptonote::parse_amount(parsed_amount, amount_str))
+      {
+        fail_msg_writer() << tr("invalid amount");
+        return true;
+      }
+      data = std::string("deposit:") + std::to_string(parsed_amount);
+    }
+  }
   if (!write)
   {
     COMMAND_RPC_CALL_CONTRACT::request req;
@@ -1871,8 +1910,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     return true;
   }
 
-  bool is_transfer = boost::starts_with(data, "transfer:");
-  bool text_op = boost::starts_with(data, "deposit:") || is_transfer;
+  bool text_op = is_deposit || is_transfer;
   const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
   const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
   const uint64_t gov_fee = evm_fee / 2;
@@ -1905,21 +1943,6 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
   cryptonote::tx_destination_entry transfer_de;
   if (is_transfer)
   {
-    std::string rest = data.substr(9);
-    size_t pos = rest.find(':');
-    if (pos == std::string::npos)
-    {
-      fail_msg_writer() << tr("transfer data must be transfer:<dest>:<amount>");
-      return true;
-    }
-    std::string dest = rest.substr(0, pos);
-    std::string amount_str = rest.substr(pos + 1);
-    uint64_t amount = 0;
-    if (!cryptonote::parse_amount(amount, amount_str))
-    {
-      fail_msg_writer() << tr("invalid amount");
-      return true;
-    }
     if (is_contract_address(dest))
     {
       cryptonote::account_public_address caddr;
@@ -1942,7 +1965,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       transfer_de.addr = info.address;
       transfer_de.is_subaddress = info.is_subaddress;
     }
-    transfer_de.amount = amount;
+    transfer_de.amount = parsed_amount;
     dsts.push_back(transfer_de);
   }
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
