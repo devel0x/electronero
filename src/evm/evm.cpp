@@ -314,6 +314,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
 
   for (size_t pc = 0; pc < code.size();) {
     uint8_t op = code[pc++];
+    MWARNING("EVM opcode 0x" << std::hex << (int)op << std::dec << " pc=" << (pc-1) << " stack=" << stack.size());
     switch (op) {
       case 0x00: // STOP
         if (stack.empty()) return 0;
@@ -744,6 +745,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num(0);
         break;
       }
+      case 0x47: { // SELFBALANCE
+        push_num(contract.balance);
+        break;
+      }
       case 0x50: { // POP
         if (stack.empty()) throw std::runtime_error("stack underflow");
         stack.pop_back();
@@ -779,7 +784,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x5a: { // GAS
-        push_num(0);
+        push_num(1000000);
         break;
       }
       case 0x5b: { // JUMPDEST
@@ -949,6 +954,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         pop_value(); // size
         pop_value(); // offset
+        MWARNING("EVM REVERT at pc with stack size " << stack.size());
+        return -1;
+      }
+      case 0xfe: { // INVALID
         return -1;
       }
       case 0xfe: { // INVALID
@@ -983,6 +992,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         return mv.num.convert_to<int64_t>();
       }
       default:
+        MWARNING("EVM unsupported opcode 0x" << std::hex << int(op) << std::dec);
         throw std::runtime_error("unsupported opcode");
     }
   }
