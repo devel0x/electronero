@@ -755,18 +755,18 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 dest = pop_num();
         size_t d = dest.convert_to<size_t>();
         if (d >= code.size() || !jumpdests.count(d))
-          throw std::runtime_error("bad jump dest");
+          throw std::runtime_error("bad jump dest 0x56");
         pc = d;
         break;
       }
       case 0x57: { // JUMPI
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 cond = pop_num();
         uint256 dest = pop_num();
+        uint256 cond = pop_num();
         if (cond != 0) {
           size_t d = dest.convert_to<size_t>();
           if (d >= code.size() || !jumpdests.count(d))
-            throw std::runtime_error("bad jump dest");
+            throw std::runtime_error("bad jump dest 0x57");
           pc = d;
         }
         break;
