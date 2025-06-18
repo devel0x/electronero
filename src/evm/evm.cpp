@@ -502,7 +502,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           buf.push_back(v.convert_to<uint8_t>());
         }
         crypto::hash h;
-        crypto::cn_fast_hash(buf.data(), buf.size(), h);
+        keccak(buf.data(), buf.size(), reinterpret_cast<uint8_t*>(&h), sizeof(h));
         uint256 v = 0;
         for (int i = 0; i < 32; ++i)
         {
@@ -855,6 +855,9 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         pop_value(); // size
         pop_value(); // offset
+        return -1;
+      }
+      case 0xfe: { // INVALID
         return -1;
       }
       case 0xf3: { // RETURN
