@@ -1941,6 +1941,10 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       transfer_de.addr = info.address;
       transfer_de.is_subaddress = info.is_subaddress;
     }
+    // reconstruct the call data using the parsed atomic amount so the daemon
+    // receives canonical units rather than the user's coin string
+    data = std::string("transfer:") + dest + ":" + std::to_string(amount);
+
     transfer_de.amount = amount;
     dsts.push_back(transfer_de);
   }
