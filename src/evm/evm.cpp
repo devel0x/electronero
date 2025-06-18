@@ -47,16 +47,23 @@ std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& by
   return address;
 }
 
-bool EVM::deposit(const std::string& address, uint64_t amount)
+bool EVM::deposit(const std::string& address, const std::string& amount_str)
 {
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, amount_str))
+    return false;
   auto it = contracts.find(address);
-  if (it == contracts.end()) return false;
+  if (it == contracts.end())
+    return false;
   it->second.balance += amount;
   return true;
 }
 
-bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amount, const std::string& caller)
+bool EVM::transfer(const std::string& from, const std::string& to, const std::string& amount_str, const std::string& caller)
 {
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, amount_str))
+    return false;
   auto it_from = contracts.find(from);
   if (it_from == contracts.end() || it_from->second.balance < amount)
     return false;

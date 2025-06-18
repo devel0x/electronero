@@ -2199,21 +2199,16 @@ namespace cryptonote
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
-      uint64_t amount = 0;
-      try {
-        amount = std::stoull(req.data.substr(8));
-      } catch (const std::exception&) {
-        res.status = CORE_RPC_STATUS_FAILED;
-        return false;
-      }
+      std::string amount_str = req.data.substr(8);
+      boost::algorithm::trim(amount_str);
       const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
       if (req.fee < required_fee)
       {
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
-      MDEBUG("deposit " << amount << " fee " << req.fee << " required " << required_fee);
-      bool ok = m_core.get_evm().deposit(req.account, amount);
+      MDEBUG("deposit " << amount_str << " fee " << req.fee << " required " << required_fee);
+      bool ok = m_core.get_evm().deposit(req.account, amount_str);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
       res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
       return ok;
@@ -2233,21 +2228,16 @@ namespace cryptonote
         return false;
       }
       std::string dest = rest.substr(0, pos);
-      uint64_t amount = 0;
-      try {
-        amount = std::stoull(rest.substr(pos + 1));
-      } catch (const std::exception&) {
-        res.status = CORE_RPC_STATUS_FAILED;
-        return false;
-      }
+      std::string amount_str = rest.substr(pos + 1);
+      boost::algorithm::trim(amount_str);
       const uint64_t required_fee = req.data.size() * config::EVM_CALL_FEE_PER_BYTE;
       if (req.fee < required_fee)
       {
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
-      MDEBUG("transfer to " << dest << " amount " << amount << " fee " << req.fee << " required " << required_fee);
-      bool ok = m_core.get_evm().transfer(req.account, dest, amount, req.caller);
+      MDEBUG("transfer to " << dest << " amount " << amount_str << " fee " << req.fee << " required " << required_fee);
+      bool ok = m_core.get_evm().transfer(req.account, dest, amount_str, req.caller);
       res.result = ok ? static_cast<int64_t>(m_core.get_evm().balance_of(req.account)) : -1;
       res.status = ok ? CORE_RPC_STATUS_OK : CORE_RPC_STATUS_FAILED;
       return ok;
