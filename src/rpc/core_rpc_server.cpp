@@ -2200,9 +2200,10 @@ namespace cryptonote
         return false;
       }
       uint64_t amount = 0;
-      try {
-        amount = std::stoull(req.data.substr(8));
-      } catch (const std::exception&) {
+      std::string amount_str = req.data.substr(8);
+      boost::algorithm::trim(amount_str);
+      if (!cryptonote::parse_amount(amount, amount_str))
+      {
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
@@ -2234,9 +2235,10 @@ namespace cryptonote
       }
       std::string dest = rest.substr(0, pos);
       uint64_t amount = 0;
-      try {
-        amount = std::stoull(rest.substr(pos + 1));
-      } catch (const std::exception&) {
+      std::string amount_str = rest.substr(pos + 1);
+      boost::algorithm::trim(amount_str);
+      if (!cryptonote::parse_amount(amount, amount_str))
+      {
         res.status = CORE_RPC_STATUS_FAILED;
         return false;
       }
