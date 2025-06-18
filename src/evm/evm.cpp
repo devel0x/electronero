@@ -729,7 +729,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x45: { // GASLIMIT
-        push_num(0);
+        push_num(100000000000000000000);
         break;
       }
       case 0x46: { // CHAINID
@@ -898,7 +898,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0xf4: // DELEGATECALL
       case 0xfa: { // STATICCALL
         if (stack.size() < 7) throw std::runtime_error("stack underflow");
-        uint256 gas = pop_num();
         uint256 to = pop_num();
         uint256 value = pop_num();
         uint256 in_off = pop_num();
