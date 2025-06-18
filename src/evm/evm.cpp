@@ -385,6 +385,30 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num((a * b) % m);
         break;
       }
+      case 0x0a: { // EXP
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint256 exp = pop_num();
+        uint256 base = pop_num();
+        uint256 res = 1;
+        for (uint256 i = 0; i < exp; ++i)
+          res *= base;
+        push_num(res);
+        break;
+      }
+      case 0x0b: { // SIGNEXTEND
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint256 b = pop_num();
+        uint256 x = pop_num();
+        const unsigned n = b.convert_to<unsigned>();
+        if (n >= 32) { push_num(x); break; }
+        uint256 mask = ((uint256(1) << 8*(n+1)) - 1);
+        uint256 sign_bit = uint256(1) << (8*(n+1)-1);
+        uint256 res = x & mask;
+        if (res & sign_bit)
+          res |= (~mask);
+        push_num(res);
+        break;
+      }
       case 0x10: { // LT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 b = pop_num();
@@ -502,7 +526,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           buf.push_back(v.convert_to<uint8_t>());
         }
         crypto::hash h;
-        crypto::cn_fast_hash(buf.data(), buf.size(), h);
+        keccak(buf.data(), buf.size(), reinterpret_cast<uint8_t*>(&h), sizeof(h));
         uint256 v = 0;
         for (int i = 0; i < 32; ++i)
         {
@@ -566,6 +590,64 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         }
         break;
       }
+      case 0x3a: { // GASPRICE
+        push_num(0);
+        break;
+      }
+      case 0x3b: { // EXTCODESIZE
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint256 id = pop_num();
+        auto it = id_map.find(id.convert_to<uint64_t>());
+        if (it == id_map.end()) { push_num(0); break; }
+        push_num(code_of(it->second).size());
+        break;
+      }
+      case 0x3c: { // EXTCODECOPY
+        if (stack.size() < 4) throw std::runtime_error("stack underflow");
+        uint256 dest_off = pop_num();
+        uint256 off = pop_num();
+        uint256 len = pop_num();
+        uint256 id = pop_num();
+        const std::vector<uint8_t>* ext = nullptr;
+        auto it = id_map.find(id.convert_to<uint64_t>());
+        if (it != id_map.end())
+          ext = &code_of(it->second);
+        for (uint64_t i = 0; i < len.convert_to<uint64_t>(); ++i)
+        {
+          size_t pos = (off + i).convert_to<size_t>();
+          uint256 b = (ext && pos < ext->size()) ? (*ext)[pos] : 0;
+          memory[(dest_off + i).convert_to<uint64_t>()] = Value(b);
+        }
+        break;
+      }
+      case 0x3d: { // RETURNDATASIZE
+        push_num(0);
+        break;
+      }
+      case 0x3e: { // RETURNDATACOPY
+        if (stack.size() < 3) throw std::runtime_error("stack underflow");
+        pop_num(); // dest offset
+        pop_num(); // offset
+        pop_num(); // length
+        break;
+      }
+      case 0x3f: { // EXTCODEHASH
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint256 id = pop_num();
+        auto it = id_map.find(id.convert_to<uint64_t>());
+        if (it == id_map.end()) { push_num(0); break; }
+        const auto& ext_code = code_of(it->second);
+        crypto::hash h;
+        crypto::cn_fast_hash(ext_code.data(), ext_code.size(), h);
+        uint256 v = 0;
+        for (int i = 0; i < 32; ++i)
+        {
+          v <<= 8;
+          v |= ((const unsigned char*)&h)[i];
+        }
+        push_num(v);
+        break;
+      }
       case 0x30: { // ADDRESS
         // push the current contract id onto the stack
         push_num(contract.id);
@@ -577,6 +659,19 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         auto it = id_map.find(id.convert_to<uint64_t>());
         if (it == id_map.end()) { push_num(0); break; }
         push_num(balance_of(it->second));
+        break;
+      }
+      case 0x32: { // ORIGIN
+        if (caller.empty())
+          push_num(0);
+        else
+        {
+          auto itc = contracts.find(caller);
+          if (itc != contracts.end())
+            push_num(itc->second.id);
+          else
+            push_str(caller);
+        }
         break;
       }
       case 0x33: { // CALLER
@@ -602,12 +697,32 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num(0);
         break;
       }
+      case 0x41: { // COINBASE
+        push_num(0);
+        break;
+      }
       case 0x42: { // TIMESTAMP
         push_num(timestamp);
         break;
       }
       case 0x43: { // NUMBER
         push_num(block_height);
+        break;
+      }
+      case 0x44: { // DIFFICULTY
+        push_num(0);
+        break;
+      }
+      case 0x45: { // GASLIMIT
+        push_num(0);
+        break;
+      }
+      case 0x46: { // CHAINID
+        push_num(0);
+        break;
+      }
+      case 0x47: { // SELFBALANCE
+        push_num(contract.balance);
         break;
       }
       case 0x48: { // BASEFEE
@@ -745,10 +860,45 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num(v);
         break;
       }
+      case 0xf0: { // CREATE
+        if (stack.size() < 3) throw std::runtime_error("stack underflow");
+        pop_num(); // size
+        pop_num(); // offset
+        pop_num(); // value
+        push_num(0); // failure
+        break;
+      }
+      case 0xf1: // CALL
+      case 0xf2: // CALLCODE
+      case 0xf4: // DELEGATECALL
+      case 0xfa: { // STATICCALL
+        if (stack.size() < 7) throw std::runtime_error("stack underflow");
+        pop_num(); // out size
+        pop_num(); // out offset
+        pop_num(); // in size
+        pop_num(); // in offset
+        pop_num(); // value or flags
+        pop_num(); // to
+        pop_num(); // gas
+        push_num(0); // indicate failure
+        break;
+      }
+      case 0xf5: { // CREATE2
+        if (stack.size() < 4) throw std::runtime_error("stack underflow");
+        pop_num(); // salt
+        pop_num(); // size
+        pop_num(); // offset
+        pop_num(); // value
+        push_num(0); // failure
+        break;
+      }
       case 0xfd: { // REVERT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         pop_value(); // size
         pop_value(); // offset
+        return -1;
+      }
+      case 0xfe: { // INVALID
         return -1;
       }
       case 0xf3: { // RETURN
