@@ -612,7 +612,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 amount = stack.back(); stack.pop_back();
         auto it = id_map.find(dest_id.convert_to<uint64_t>());
         if (it != id_map.end())
-          transfer(self, it->second, amount.convert_to<uint64_t>(), contract.owner);
+          transfer(self, it->second, std::to_string(amount.convert_to<uint64_t>()), contract.owner);
         break;
       }
       case 0xa1: { // LOG
