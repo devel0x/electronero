@@ -3071,6 +3071,46 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
     MDEBUG("wallet_rpc_server::on_call_contract account:" << req.account << " write:" << std::boolalpha << req.write << " data:" << req.data);
     std::string data = req.data;
     boost::algorithm::trim(data);
+    std::string dest;
+    uint64_t parsed_amount = 0;
+    bool is_transfer = false;
+    bool is_deposit = false;
+    if (req.write)
+    {
+      if (boost::algorithm::starts_with(data, "transfer:"))
+      {
+        is_transfer = true;
+        std::string rest = data.substr(9);
+        size_t pos = rest.find(':');
+        if (pos == std::string::npos)
+        {
+          er.code = WALLET_RPC_ERROR_CODE_WRONG_PARAM;
+          er.message = "transfer data must be transfer:<dest>:<amount>";
+          return false;
+        }
+        dest = rest.substr(0, pos);
+        std::string amount_str = rest.substr(pos + 1);
+        if (!cryptonote::parse_amount(parsed_amount, amount_str))
+        {
+          er.code = WALLET_RPC_ERROR_CODE_WRONG_PARAM;
+          er.message = "invalid amount";
+          return false;
+        }
+        data = std::string("transfer:") + dest + ":" + std::to_string(parsed_amount);
+      }
+      else if (boost::algorithm::starts_with(data, "deposit:"))
+      {
+        is_deposit = true;
+        std::string amount_str = data.substr(8);
+        if (!cryptonote::parse_amount(parsed_amount, amount_str))
+        {
+          er.code = WALLET_RPC_ERROR_CODE_WRONG_PARAM;
+          er.message = "invalid amount";
+          return false;
+        }
+        data = std::string("deposit:") + std::to_string(parsed_amount);
+      }
+    }
     if (!m_wallet) return not_open(er);
     if (m_wallet->restricted())
     {
@@ -3101,7 +3141,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       return daemon_res.status == CORE_RPC_STATUS_OK;
     }
 
-    bool text_op = boost::algorithm::starts_with(data, "deposit:") || boost::algorithm::starts_with(data, "transfer:");
+    bool text_op = is_deposit || is_transfer;
     const uint64_t byte_size = text_op ? data.size() : data.size() / 2;
     const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
     const uint64_t gov_fee = evm_fee / 2;
