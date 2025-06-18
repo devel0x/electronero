@@ -6,6 +6,7 @@
 #include "wallet/wallet2.h"
 #include "wipeable_string.h"
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include <unordered_map>
 #include <set>
@@ -18,6 +19,13 @@
 #include "string_tools.h"
 
 namespace CryptoNote {
+
+static bool is_contract_address(const std::string &addr)
+{
+  return boost::starts_with(addr, config::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX) ||
+         boost::starts_with(addr, config::testnet::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX) ||
+         boost::starts_with(addr, config::stagenet::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX);
+}
 
 void EVM::rebuild_id_map()
 {
@@ -80,7 +88,8 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
   cryptonote::account_public_address from_addr = deposit_address(from);
   tools::wallet2 w(cryptonote::MAINNET);
   epee::wipeable_string pwd;
-  w.generate(from, pwd, from_addr, spend_key, view_key, false);
+  // generate an in-memory wallet using the contract keys
+  w.generate("", pwd, from_addr, spend_key, view_key, false);
   w.init("localhost:11882"); 
   // todo programatically determine localhost port based on cryptonote_config or console arguments 
 
@@ -107,7 +116,8 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
   }
 
   it_from->second.balance -= amount_parsed;
-  contracts[to].balance += amount_parsed;
+  if (is_contract_address(to))
+    contracts[to].balance += amount_parsed;
   return true;
 }
 
