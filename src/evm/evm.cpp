@@ -9,6 +9,7 @@
 #include <ctime>
 #include <cstring>
 #include "cryptonote_config.h"
+#include "cryptonote_basic/cryptonote_format_utils.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
