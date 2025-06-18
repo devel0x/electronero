@@ -729,7 +729,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x45: { // GASLIMIT
-        push_num(100000000000000000000);
+        push_num(100000000);
         break;
       }
       case 0x46: { // CHAINID
