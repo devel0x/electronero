@@ -107,6 +107,8 @@ public:
   bool load(const std::string& path);
   void rebuild_id_map();
 
+  bool get_contract_keys(const std::string& address, crypto::secret_key &spend, crypto::secret_key &view) const;
+
 private:
   struct State {
     std::unordered_map<std::string, Contract> contracts;
