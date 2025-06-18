@@ -515,6 +515,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           }
         }
         break;
+      }
       case 0x40: { // BLOCKHASH
         stack.push_back(0);
         break;
