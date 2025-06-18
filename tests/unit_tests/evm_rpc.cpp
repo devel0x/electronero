@@ -166,3 +166,60 @@ TEST(EVM_RPC, ShiftAndReturn)
   c = evm.deploy("owner", code);
   EXPECT_EQ(42, evm.call(c, {}));
 }
+
+TEST(EVM_RPC, DefaultOpcodes)
+{
+  EVM evm;
+
+  std::string c = evm.deploy("owner", {0x41, 0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x44, 0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x45, 0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x46, 0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x47, 0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x60,0xff,0x3b,0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x60,0x00,0x60,0x00,0x60,0x01,0x60,0xff,0x3c,0x60,0x00,0x51,0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x3d,0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x60,0x00,0x60,0x00,0x60,0x00,0x3e,0x60,0x00,0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", {0x60,0xff,0x3f,0xf3});
+  EXPECT_EQ(0, evm.call(c, {}));
+}
+
+static std::vector<uint8_t> call_stub_code(uint8_t opcode)
+{
+  return {0x60,0x00,0x60,0x00,0x60,0x00,0x60,0x00,0x60,0x00,0x60,0x00,0x60,0x00,opcode,0xf3};
+}
+
+TEST(EVM_RPC, CallOpcodesStubbed)
+{
+  EVM evm;
+
+  std::string c = evm.deploy("owner", call_stub_code(0xf1));
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", call_stub_code(0xf2));
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", call_stub_code(0xf4));
+  EXPECT_EQ(0, evm.call(c, {}));
+
+  c = evm.deploy("owner", call_stub_code(0xfa));
+  EXPECT_EQ(0, evm.call(c, {}));
+}
