@@ -54,6 +54,7 @@ bool EVM::deposit(const std::string& address, uint64_t amount)
 {
   auto it = contracts.find(address);
   if (it == contracts.end()) return false;
+  double amount_parsed = amount / 1e8;
   it->second.balance += amount;
   return true;
 }
@@ -78,7 +79,8 @@ bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amou
   cryptonote::address_parse_info info;
   if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
     return false;
-
+  
+  double amount_parsed = amount / 1e8;
   cryptonote::tx_destination_entry de;
   de.addr = info.address;
   de.amount = amount;
@@ -96,8 +98,8 @@ bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amou
     return false;
   }
 
-  it_from->second.balance -= amount;
-  contracts[to].balance += amount;
+  it_from->second.balance -= amount_parsed;
+  contracts[to].balance += amount_parsed;
   return true;
 }
 
