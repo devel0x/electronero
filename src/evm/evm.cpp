@@ -385,6 +385,30 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num((a * b) % m);
         break;
       }
+      case 0x0a: { // EXP
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint256 exp = pop_num();
+        uint256 base = pop_num();
+        uint256 res = 1;
+        for (uint256 i = 0; i < exp; ++i)
+          res *= base;
+        push_num(res);
+        break;
+      }
+      case 0x0b: { // SIGNEXTEND
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint256 b = pop_num();
+        uint256 x = pop_num();
+        const unsigned n = b.convert_to<unsigned>();
+        if (n >= 32) { push_num(x); break; }
+        uint256 mask = ((uint256(1) << 8*(n+1)) - 1);
+        uint256 sign_bit = uint256(1) << (8*(n+1)-1);
+        uint256 res = x & mask;
+        if (res & sign_bit)
+          res |= (~mask);
+        push_num(res);
+        break;
+      }
       case 0x10: { // LT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 b = pop_num();
@@ -836,6 +860,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num(v);
         break;
       }
+      case 0xf0: { // CREATE
+        if (stack.size() < 3) throw std::runtime_error("stack underflow");
+        pop_num(); // size
+        pop_num(); // offset
+        pop_num(); // value
+        push_num(0); // failure
+        break;
+      }
       case 0xf1: // CALL
       case 0xf2: // CALLCODE
       case 0xf4: // DELEGATECALL
@@ -849,6 +881,15 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         pop_num(); // to
         pop_num(); // gas
         push_num(0); // indicate failure
+        break;
+      }
+      case 0xf5: { // CREATE2
+        if (stack.size() < 4) throw std::runtime_error("stack underflow");
+        pop_num(); // salt
+        pop_num(); // size
+        pop_num(); // offset
+        pop_num(); // value
+        push_num(0); // failure
         break;
       }
       case 0xfd: { // REVERT
