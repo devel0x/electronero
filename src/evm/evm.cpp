@@ -592,7 +592,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x3a: { // GASPRICE
-        push_num(1); // constant gas price
+        push_num(0);
         break;
       }
       case 0x3b: { // EXTCODESIZE
@@ -725,11 +725,11 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x44: { // DIFFICULTY
-        push_num(1);
+        push_num(0);
         break;
       }
       case 0x45: { // GASLIMIT
-        push_num(10000000);
+        push_num(0);
         break;
       }
       case 0x46: { // CHAINID
@@ -741,7 +741,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x48: { // BASEFEE
-        push_num(1);
+        push_num(0);
         break;
       }
       case 0x50: { // POP
@@ -779,7 +779,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x5a: { // GAS
-        push_num(1000000);
+        push_num(0);
         break;
       }
       case 0x5b: { // JUMPDEST
