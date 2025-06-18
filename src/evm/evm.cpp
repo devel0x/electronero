@@ -761,8 +761,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x57: { // JUMPI
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 dest = pop_num();
         uint256 cond = pop_num();
+        uint256 dest = pop_num();
         if (cond != 0) {
           size_t d = dest.convert_to<size_t>();
           if (d >= code.size() || !jumpdests.count(d))
