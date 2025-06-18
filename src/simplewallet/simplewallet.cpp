@@ -1902,7 +1902,6 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     dsts.push_back(gov);
   }
 
-  cryptonote::tx_destination_entry transfer_de;
   if (is_transfer)
   {
     std::string rest = data.substr(9);
@@ -1912,38 +1911,6 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
       fail_msg_writer() << tr("transfer data must be transfer:<dest>:<amount>");
       return true;
     }
-    std::string dest = rest.substr(0, pos);
-    std::string amount_str = rest.substr(pos + 1);
-    uint64_t amount = 0;
-    if (!cryptonote::parse_amount(amount, amount_str))
-    {
-      fail_msg_writer() << tr("invalid amount");
-      return true;
-    }
-    if (is_contract_address(dest))
-    {
-      cryptonote::account_public_address caddr;
-      if (!contract_deposit_address(m_wallet.get(), dest, caddr))
-      {
-        fail_msg_writer() << tr("failed to obtain contract deposit address");
-        return true;
-      }
-      transfer_de.addr = caddr;
-      transfer_de.is_subaddress = false;
-    }
-    else
-    {
-      cryptonote::address_parse_info info;
-      if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), dest, oa_prompter))
-      {
-        fail_msg_writer() << tr("failed to parse destination address");
-        return true;
-      }
-      transfer_de.addr = info.address;
-      transfer_de.is_subaddress = info.is_subaddress;
-    }
-    transfer_de.amount = amount;
-    dsts.push_back(transfer_de);
   }
   size_t fake_outs_count = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
   uint32_t priority = m_wallet->adjust_priority(0);
@@ -1966,17 +1933,6 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     m_wallet->commit_tx(ptx_vector[0]);
     crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     success_msg_writer() << tr("Contract call transaction submitted: ") << txid;
-    if (is_transfer)
-    {
-      std::string addr_str = cryptonote::get_account_address_as_str(m_wallet->nettype(), transfer_de.is_subaddress, transfer_de.addr);
-      std::string proof = m_wallet->get_tx_proof(txid, transfer_de.addr, transfer_de.is_subaddress, std::string());
-      uint64_t received = 0; bool in_pool = false; uint64_t confirmations = 0;
-      bool ok = m_wallet->check_tx_proof(txid, transfer_de.addr, transfer_de.is_subaddress, std::string(), proof, received, in_pool, confirmations);
-      if (ok)
-        success_msg_writer() << tr("Transfer proof validated");
-      else
-        fail_msg_writer() << tr("Failed to validate transfer proof");
-    }
 
     // update daemon-side EVM state
     cryptonote::COMMAND_RPC_CALL_CONTRACT::request creq;
