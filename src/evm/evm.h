@@ -131,6 +131,7 @@ private:
   std::unordered_map<std::string, Contract> contracts;
   std::unordered_map<uint64_t, std::string> id_map;
   uint64_t next_id = 0;
+  std::vector<uint8_t> last_return_data;
 };
 
 } // namespace CryptoNote
