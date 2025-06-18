@@ -87,7 +87,7 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
   if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
     return false;
   
-  double amount_parsed = stod(amount) / 1e8;
+  double amount_parsed = amount / 1e8;
   cryptonote::tx_destination_entry de;
   de.addr = info.address;
   de.amount = amount;
