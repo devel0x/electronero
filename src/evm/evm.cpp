@@ -3,9 +3,12 @@
 #include <stdexcept>
 #include "misc_log_ex.h"
 #include "common/boost_serialization_helper.h"
+#include "wallet/wallet2.h"
+#include "wipeable_string.h"
 #include <boost/filesystem.hpp>
 
 #include <unordered_map>
+#include <set>
 #include <ctime>
 #include <cstring>
 #include "cryptonote_config.h"
@@ -54,8 +57,8 @@ bool EVM::deposit(const std::string& address, const std::string& amount_str)
   if (!cryptonote::parse_amount(amount, amount_str))
     return false;
   auto it = contracts.find(address);
-  if (it == contracts.end())
-    return false;
+  if (it == contracts.end()) return false;
+  double amount_parsed = stod(amount) / 1e8;
   it->second.balance += amount;
   return true;
 }
@@ -70,8 +73,40 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
     return false;
   if (it_from->second.owner != caller)
     return false;
-  it_from->second.balance -= amount;
-  contracts[to].balance += amount;
+  crypto::secret_key spend_key, view_key;
+  if (!get_contract_keys(from, spend_key, view_key))
+    return false;
+
+  cryptonote::account_public_address from_addr = deposit_address(from);
+  tools::wallet2 w(cryptonote::MAINNET);
+  epee::wipeable_string pwd;
+  w.generate("", pwd, from_addr, spend_key, view_key, false);
+  w.init("");
+
+  cryptonote::address_parse_info info;
+  if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
+    return false;
+  
+  double amount_parsed = stod(amount) / 1e8;
+  cryptonote::tx_destination_entry de;
+  de.addr = info.address;
+  de.amount = amount;
+  de.is_subaddress = info.is_subaddress;
+
+  std::vector<cryptonote::tx_destination_entry> dsts{de};
+  std::set<uint32_t> subaddr;
+  try {
+    auto ptx = w.create_transactions_2(dsts, 0, 0, 0, std::vector<uint8_t>(), 0, subaddr, true, 0);
+    if (ptx.empty())
+      return false;
+    w.commit_tx(ptx[0]);
+  } catch (const std::exception &e) {
+    MERROR("contract transfer tx failed: " << e.what());
+    return false;
+  }
+
+  it_from->second.balance -= amount_parsed;
+  contracts[to].balance += amount_parsed;
   return true;
 }
 
@@ -122,6 +157,32 @@ const std::vector<uint8_t>& EVM::code_of(const std::string& address) const
   static const std::vector<uint8_t> empty;
   auto it = contracts.find(address);
   return it == contracts.end() ? empty : it->second.code;
+}
+
+bool EVM::get_contract_keys(const std::string& address, crypto::secret_key &spend, crypto::secret_key &view) const
+{
+  auto it = contracts.find(address);
+  if (it == contracts.end())
+    return false;
+
+  crypto::hash secret = it->second.secret_enc;
+  for (size_t i = 0; i < sizeof(secret.data); ++i)
+    secret.data[i] ^= config::EVM_SECRET_XOR[i % config::EVM_SECRET_XOR.size()];
+
+  crypto::hash mix;
+  crypto::cn_fast_hash(address.data(), address.size(), mix);
+  for (size_t i = 0; i < sizeof(mix.data); ++i)
+    mix.data[i] ^= secret.data[i];
+  crypto::hash h2;
+  crypto::cn_fast_hash(&mix, sizeof(mix), h2);
+
+  memcpy(spend.data, &mix, sizeof(spend.data));
+  memcpy(view.data, &h2, sizeof(view.data));
+  sc_reduce32(reinterpret_cast<unsigned char*>(spend.data));
+  sc_reduce32(reinterpret_cast<unsigned char*>(view.data));
+
+  memwipe(&secret, sizeof(secret));
+  return true;
 }
 
 cryptonote::account_public_address EVM::deposit_address(const std::string& address) const
