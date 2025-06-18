@@ -129,13 +129,17 @@ Make sure to include the numeric argument. Calling `increment` without a value
 produces the signature `increment()` instead and will revert, leaving the state
 unchanged.
 
+If you prefer manual control, encode function calls with any Ethereum tool such
+as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
+payload `7cf5dab000000000000000000000000000000000000000000000000000000000000005`.
+=======
+electronero-wallet-cli call_contract c1 increment 5 write
+```
+
 Make sure to include the numeric argument. Calling `increment` without a value
 produces the signature `increment()` instead and will revert, leaving the state
 unchanged.
 
-If you prefer manual control, encode function calls with any Ethereum tool such
-as `solc --abi` or `ethers.js`. The call `increment(5)` yields the hexadecimal
-payload `d09de08a0000000000000000000000000000000000000000000000000000000000000005`.
 Save this string to a file named `inc.data` next to your wallet and invoke the
 contract:
 
@@ -153,7 +157,7 @@ electronero-wallet-cli call_contract c1 read.data
 The CLI prints the returned integer. The same payload can be sent over RPC:
 
 ```json
-{"jsonrpc":"2.0","id":"0","method":"call_contract","params":{"account":"c1","caller":"<your address>","data":"d09de08a0000000000000000000000000000000000000000000000000000000000000005","write":true}}
+{"jsonrpc":"2.0","id":"0","method":"call_contract","params":{"account":"c1","caller":"<your address>","data":"7cf5dab000000000000000000000000000000000000000000000000000000000000005","write":true}}
 ```
 
 Use `electronero-wallet-cli encode_call increment 5` to print the same hex
