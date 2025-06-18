@@ -516,12 +516,20 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         }
         break;
       }
+      case 0x40: { // BLOCKHASH
+        stack.push_back(0);
+        break;
+      }
       case 0x42: { // TIMESTAMP
         stack.push_back(timestamp);
         break;
       }
       case 0x43: { // NUMBER
         stack.push_back(block_height);
+        break;
+      }
+      case 0x48: { // BASEFEE
+        stack.push_back(0);
         break;
       }
       case 0x50: { // POP
@@ -552,6 +560,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x58: { // PC
         stack.push_back(pc - 1);
+        break;
+      }
+      case 0x59: { // MSIZE
+        stack.push_back(memory.size());
         break;
       }
       case 0x5a: { // GAS
