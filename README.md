@@ -231,6 +231,22 @@ contract BalanceCheck {
 }
 ```
 
+`CALLER` (0x33) pushes the address that invoked the current contract. The full
+public wallet address is encoded directly and padded or truncated to 32 bytes
+before being placed on the stack. Contracts can inspect this value to enforce
+permissions.
+
+```solidity
+contract WhoAmI {
+    function sender() public view returns (address) {
+        assembly {
+            0x33
+            return(0, 32)
+        }
+    }
+}
+```
+
 Block metadata is also exposed through `TIMESTAMP` (0x42) and `NUMBER` (0x43).
 `TIMESTAMP` pushes the current block or RPC time in seconds and `NUMBER` pushes
 the blockchain height. A contract can query these values in assembly:

@@ -505,15 +505,19 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           }
           else
           {
-            crypto::hash h = crypto::cn_fast_hash(caller.data(), caller.size());
             uint256 v = 0;
-            for (int i = 0; i < 20; ++i)
+            const size_t bytes = std::min<size_t>(32, caller.size());
+            for (size_t i = 0; i < bytes; ++i)
             {
-              v = (v << 8) | static_cast<uint8_t>(h.data[i]);
+              v = (v << 8) | static_cast<uint8_t>(caller[i]);
             }
+            v <<= (32 - bytes) * 8;
             stack.push_back(v);
           }
         }
+        break;
+      case 0x40: { // BLOCKHASH
+        stack.push_back(0);
         break;
       }
       case 0x42: { // TIMESTAMP
@@ -522,6 +526,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x43: { // NUMBER
         stack.push_back(block_height);
+        break;
+      }
+      case 0x48: { // BASEFEE
+        stack.push_back(0);
         break;
       }
       case 0x50: { // POP
@@ -552,6 +560,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x58: { // PC
         stack.push_back(pc - 1);
+        break;
+      }
+      case 0x59: { // MSIZE
+        stack.push_back(memory.size());
         break;
       }
       case 0x5a: { // GAS
