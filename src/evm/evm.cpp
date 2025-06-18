@@ -413,29 +413,29 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x10: { // LT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 b = pop_num();
         uint256 a = pop_num();
+        uint256 b = pop_num();
         push_num(a < b);
         break;
       }
       case 0x11: { // GT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 b = pop_num();
         uint256 a = pop_num();
+        uint256 b = pop_num();
         push_num(a > b);
         break;
       }
       case 0x12: { // SLT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        int256 b = static_cast<int256>(pop_num());
         int256 a = static_cast<int256>(pop_num());
+        int256 b = static_cast<int256>(pop_num());
         push_num(a < b);
         break;
       }
       case 0x13: { // SGT
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        int256 b = static_cast<int256>(pop_num());
         int256 a = static_cast<int256>(pop_num());
+        int256 b = static_cast<int256>(pop_num());
         push_num(a > b);
         break;
       }
