@@ -59,7 +59,7 @@ bool EVM::deposit(const std::string& address, const std::string& amount_str)
   auto it = contracts.find(address);
   if (it == contracts.end()) return false;
   double amount_parsed = amount / 1e8;
-  it->second.balance += amount;
+  it->second.balance += amount_parsed;
   return true;
 }
 
@@ -80,8 +80,9 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
   cryptonote::account_public_address from_addr = deposit_address(from);
   tools::wallet2 w(cryptonote::MAINNET);
   epee::wipeable_string pwd;
-  w.generate("", pwd, from_addr, spend_key, view_key, false);
-  w.init("");
+  w.generate(from, pwd, from_addr, spend_key, view_key, false);
+  w.init("localhost:11882"); 
+  // todo programatically determine localhost port based on cryptonote_config or console arguments 
 
   cryptonote::address_parse_info info;
   if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
