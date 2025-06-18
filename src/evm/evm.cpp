@@ -593,7 +593,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x3a: { // GASPRICE
-        push_num(1); // constant gas price
+        push_num(0);
         break;
       }
       case 0x3b: { // EXTCODESIZE
@@ -726,23 +726,23 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x44: { // DIFFICULTY
-        push_num(1);
+        push_num(0);
         break;
       }
       case 0x45: { // GASLIMIT
-        push_num(10000000);
+        push_num(100000000);
         break;
       }
       case 0x46: { // CHAINID
         push_num(0);
         break;
       }
-      case 0x47: { // SELFBALANCE
-        push_num(contract.balance);
+      case 0x48: { // BASEFEE
+        push_num(0);
         break;
       }
-      case 0x48: { // BASEFEE
-        push_num(1);
+      case 0x47: { // SELFBALANCE
+        push_num(contract.balance);
         break;
       }
       case 0x50: { // POP
@@ -761,8 +761,8 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x57: { // JUMPI
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 dest = pop_num();
         uint256 cond = pop_num();
+        uint256 dest = pop_num();
         if (cond != 0) {
           size_t d = dest.convert_to<size_t>();
           if (d >= code.size() || !jumpdests.count(d))
@@ -899,7 +899,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0xf4: // DELEGATECALL
       case 0xfa: { // STATICCALL
         if (stack.size() < 7) throw std::runtime_error("stack underflow");
-        uint256 gas = pop_num();
         uint256 to = pop_num();
         uint256 value = pop_num();
         uint256 in_off = pop_num();
