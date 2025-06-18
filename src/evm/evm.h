@@ -90,9 +90,9 @@ public:
   int64_t call(const std::string& address, const std::vector<uint8_t>& input,
                uint64_t block_height = 0, uint64_t timestamp = 0,
                const std::string& caller = std::string(), uint64_t call_value = 0);
-  bool transfer(const std::string& from, const std::string& to, uint64_t amount, const std::string& caller);
+  bool transfer(const std::string& from, const std::string& to, const std::string& amount, const std::string& caller);
   bool destroy(const std::string& address, const std::string& dest, const std::string& caller);
-  bool deposit(const std::string& address, uint64_t amount);
+  bool deposit(const std::string& address, const std::string& amount);
   bool transfer_owner(const std::string& address, const std::string& new_owner, const std::string& caller);
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;

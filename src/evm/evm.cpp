@@ -12,6 +12,7 @@
 #include <ctime>
 #include <cstring>
 #include "cryptonote_config.h"
+#include "cryptonote_basic/cryptonote_format_utils.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
@@ -50,17 +51,23 @@ std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& by
   return address;
 }
 
-bool EVM::deposit(const std::string& address, uint64_t amount)
+bool EVM::deposit(const std::string& address, const std::string& amount_str)
 {
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, amount_str))
+    return false;
   auto it = contracts.find(address);
   if (it == contracts.end()) return false;
-  double amount_parsed = amount / 1e8;
+  double amount_parsed = stod(amount) / 1e8;
   it->second.balance += amount;
   return true;
 }
 
-bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amount, const std::string& caller)
+bool EVM::transfer(const std::string& from, const std::string& to, const std::string& amount_str, const std::string& caller)
 {
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, amount_str))
+    return false;
   auto it_from = contracts.find(from);
   if (it_from == contracts.end() || it_from->second.balance < amount)
     return false;
@@ -80,7 +87,7 @@ bool EVM::transfer(const std::string& from, const std::string& to, uint64_t amou
   if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
     return false;
   
-  double amount_parsed = amount / 1e8;
+  double amount_parsed = stod(amount) / 1e8;
   cryptonote::tx_destination_entry de;
   de.addr = info.address;
   de.amount = amount;
@@ -570,12 +577,20 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         }
         break;
       }
+      case 0x40: { // BLOCKHASH
+        stack.push_back(0);
+        break;
+      }
       case 0x42: { // TIMESTAMP
         stack.push_back(timestamp);
         break;
       }
       case 0x43: { // NUMBER
         stack.push_back(block_height);
+        break;
+      }
+      case 0x48: { // BASEFEE
+        stack.push_back(0);
         break;
       }
       case 0x50: { // POP
@@ -606,6 +621,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x58: { // PC
         stack.push_back(pc - 1);
+        break;
+      }
+      case 0x59: { // MSIZE
+        stack.push_back(memory.size());
         break;
       }
       case 0x5a: { // GAS
@@ -666,7 +685,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 amount = stack.back(); stack.pop_back();
         auto it = id_map.find(dest_id.convert_to<uint64_t>());
         if (it != id_map.end())
-          transfer(self, it->second, amount.convert_to<uint64_t>(), contract.owner);
+          transfer(self, it->second, std::to_string(amount.convert_to<uint64_t>()), contract.owner);
         break;
       }
       case 0xa1: { // LOG
