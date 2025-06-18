@@ -737,10 +737,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         push_num(0);
         break;
       }
-      case 0x47: { // SELFBALANCE
-        push_num(contract.balance);
-        break;
-      }
       case 0x48: { // BASEFEE
         push_num(0);
         break;
@@ -955,9 +951,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         pop_value(); // size
         pop_value(); // offset
         MWARNING("EVM REVERT at pc with stack size " << stack.size());
-        return -1;
-      }
-      case 0xfe: { // INVALID
         return -1;
       }
       case 0xfe: { // INVALID
