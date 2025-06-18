@@ -270,6 +270,7 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
            " data=" << epee::string_tools::buff_to_hex_nodelimer(std::string(input.begin(), input.end())) <<
            " height=" << block_height <<
            " ts=" << timestamp);
+  last_return_data.clear();
   int64_t res = execute(address, it->second, input, block_height, timestamp, caller, call_value);
   MDEBUG("EVM::call result:" << res);
   return res;
@@ -621,14 +622,20 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x3d: { // RETURNDATASIZE
-        push_num(0);
+        push_num(last_return_data.size());
         break;
       }
       case 0x3e: { // RETURNDATACOPY
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        pop_num(); // dest offset
-        pop_num(); // offset
-        pop_num(); // length
+        uint256 len = pop_num();
+        uint256 offset = pop_num();
+        uint256 dest_off = pop_num();
+        for (uint64_t i = 0; i < len.convert_to<uint64_t>(); ++i)
+        {
+          size_t pos = (offset + i).convert_to<size_t>();
+          uint256 b = pos < last_return_data.size() ? last_return_data[pos] : 0;
+          memory[(dest_off + i).convert_to<uint64_t>()] = Value(b);
+        }
         break;
       }
       case 0x3f: { // EXTCODEHASH
@@ -694,11 +701,19 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x40: { // BLOCKHASH
-        push_num(0);
+        crypto::hash h;
+        keccak(reinterpret_cast<const uint8_t*>(&block_height), sizeof(block_height), reinterpret_cast<uint8_t*>(&h), sizeof(h));
+        uint256 v = 0;
+        for (int i = 0; i < 32; ++i)
+        {
+          v <<= 8;
+          v |= ((const unsigned char*)&h)[i];
+        }
+        push_num(v);
         break;
       }
       case 0x41: { // COINBASE
-        push_num(0);
+        push_num(contract.id);
         break;
       }
       case 0x42: { // TIMESTAMP
@@ -862,10 +877,20 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0xf0: { // CREATE
         if (stack.size() < 3) throw std::runtime_error("stack underflow");
-        pop_num(); // size
-        pop_num(); // offset
-        pop_num(); // value
-        push_num(0); // failure
+        uint256 value = pop_num();
+        uint256 offset = pop_num();
+        uint256 size = pop_num();
+        std::vector<uint8_t> bytecode;
+        for (uint64_t i = 0; i < size.convert_to<uint64_t>(); ++i)
+        {
+          Value mv = memory[(offset + i).convert_to<uint64_t>()];
+          uint256 b = mv.is_string ? 0 : mv.num;
+          bytecode.push_back(b.convert_to<uint8_t>());
+        }
+        std::string addr = deploy(contract.owner, bytecode);
+        contracts[addr].balance += value.convert_to<uint64_t>();
+        contract.balance -= value.convert_to<uint64_t>();
+        push_num(contracts[addr].id);
         break;
       }
       case 0xf1: // CALL
@@ -873,23 +898,52 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0xf4: // DELEGATECALL
       case 0xfa: { // STATICCALL
         if (stack.size() < 7) throw std::runtime_error("stack underflow");
-        pop_num(); // out size
-        pop_num(); // out offset
-        pop_num(); // in size
-        pop_num(); // in offset
-        pop_num(); // value or flags
-        pop_num(); // to
-        pop_num(); // gas
-        push_num(0); // indicate failure
+        uint256 gas = pop_num();
+        uint256 to = pop_num();
+        uint256 value = pop_num();
+        uint256 in_off = pop_num();
+        uint256 in_size = pop_num();
+        uint256 out_off = pop_num();
+        uint256 out_size = pop_num();
+        auto it = id_map.find(to.convert_to<uint64_t>());
+        if (it == id_map.end()) { push_num(0); break; }
+        std::vector<uint8_t> data;
+        for (uint64_t i = 0; i < in_size.convert_to<uint64_t>(); ++i)
+        {
+          Value mv = memory[(in_off + i).convert_to<uint64_t>()];
+          uint256 b = mv.is_string ? 0 : mv.num;
+          data.push_back(b.convert_to<uint8_t>());
+        }
+        int64_t ret = call(it->second, data, block_height, timestamp, self, value.convert_to<uint64_t>());
+        uint256 r = static_cast<uint256>(ret >= 0 ? ret : 0);
+        last_return_data.resize(32);
+        for (int i = 31; i >= 0; --i)
+        {
+          last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
+          r >>= 8;
+        }
+        for (uint64_t i = 0; i < out_size.convert_to<uint64_t>() && i < last_return_data.size(); ++i)
+          memory[(out_off + i).convert_to<uint64_t>()] = Value(last_return_data[i]);
+        push_num(ret >= 0 ? 1 : 0);
         break;
       }
       case 0xf5: { // CREATE2
         if (stack.size() < 4) throw std::runtime_error("stack underflow");
-        pop_num(); // salt
-        pop_num(); // size
-        pop_num(); // offset
-        pop_num(); // value
-        push_num(0); // failure
+        uint256 value = pop_num();
+        uint256 offset = pop_num();
+        uint256 size = pop_num();
+        pop_num(); // salt (ignored)
+        std::vector<uint8_t> bytecode;
+        for (uint64_t i = 0; i < size.convert_to<uint64_t>(); ++i)
+        {
+          Value mv = memory[(offset + i).convert_to<uint64_t>()];
+          uint256 b = mv.is_string ? 0 : mv.num;
+          bytecode.push_back(b.convert_to<uint8_t>());
+        }
+        std::string addr = deploy(contract.owner, bytecode);
+        contracts[addr].balance += value.convert_to<uint64_t>();
+        contract.balance -= value.convert_to<uint64_t>();
+        push_num(contracts[addr].id);
         break;
       }
       case 0xfd: { // REVERT
@@ -907,12 +961,26 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (stack.size() == 1) {
           Value v = stack.back();
           if (v.is_string) return 0;
+          last_return_data.resize(32);
+          uint256 r = v.num;
+          for (int i = 31; i >= 0; --i)
+          {
+            last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
+            r >>= 8;
+          }
           return static_cast<int64_t>(v.num);
         }
         uint256 offset = pop_num();
         pop_value(); // size
         Value mv = memory[static_cast<uint64_t>(offset)];
         if (mv.is_string) return 0;
+        last_return_data.resize(32);
+        uint256 r = mv.num;
+        for (int i = 31; i >= 0; --i)
+        {
+          last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
+          r >>= 8;
+        }
         return mv.num.convert_to<int64_t>();
       }
       default:
