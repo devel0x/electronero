@@ -491,15 +491,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       }
       case 0x20: { // KECCAK256
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
-        uint256 offset = stack.back(); stack.pop_back();
-        uint256 len = stack.back(); stack.pop_back();
-        const uint64_t off = offset.convert_to<uint64_t>();
-        const uint64_t l = len.convert_to<uint64_t>();
+        uint256 offset = pop_num();
+        uint256 len = pop_num();
         std::vector<uint8_t> buf;
         buf.reserve(len.convert_to<size_t>());
         for (uint64_t i = 0; i < len.convert_to<uint64_t>(); ++i)
         {
-          uint256 v = memory[static_cast<uint64_t>((offset + i).convert_to<uint64_t>())];
+          Value mv = memory[static_cast<uint64_t>((offset + i).convert_to<uint64_t>())];
+          uint256 v = mv.is_string ? 0 : mv.num;
           buf.push_back(v.convert_to<uint8_t>());
         }
         crypto::hash h;
@@ -510,11 +509,11 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           v <<= 8;
           v |= ((const unsigned char*)&h)[i];
         }
-        stack.push_back(v);
+        push_num(v);
         break;
       }
       case 0x34: { // CALLVALUE
-        stack.push_back(call_value);
+        push_num(call_value);
         break;
       }
       case 0x35: { // CALLDATALOAD
