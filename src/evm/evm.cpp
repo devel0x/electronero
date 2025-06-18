@@ -11,6 +11,7 @@
 #include <set>
 #include <ctime>
 #include <cstring>
+#include <string>
 #include "cryptonote_config.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include <boost/multiprecision/cpp_int.hpp>
@@ -58,7 +59,7 @@ bool EVM::deposit(const std::string& address, const std::string& amount_str)
     return false;
   auto it = contracts.find(address);
   if (it == contracts.end()) return false;
-  double amount_parsed = stod(amount) / 1e8;
+  double amount_parsed = std::stod(amount) / 1e8;
   it->second.balance += amount;
   return true;
 }
