@@ -93,6 +93,8 @@ public:
   bool transfer(const std::string& from, const std::string& to, const std::string& amount, const std::string& caller);
   bool destroy(const std::string& address, const std::string& dest, const std::string& caller);
   bool deposit(const std::string& address, const std::string& amount);
+  bool mint(const std::string& from, const std::string& to, uint64_t amount);
+  bool burn(const std::string& from, uint64_t amount);
   bool transfer_owner(const std::string& address, const std::string& new_owner, const std::string& caller);
   uint64_t balance_of(const std::string& address) const;
   bool is_owner(const std::string& contract, const std::string& address) const;
@@ -127,6 +129,8 @@ private:
   int64_t execute(const std::string& self, Contract& c, const std::vector<uint8_t>& input,
                   uint64_t block_height, uint64_t timestamp,
                   const std::string& caller, uint64_t call_value);
+
+  cryptonote::account_public_address random_address() const;
 
   std::unordered_map<std::string, Contract> contracts;
   std::unordered_map<uint64_t, std::string> id_map;

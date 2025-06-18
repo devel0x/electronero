@@ -63,6 +63,78 @@ bool EVM::deposit(const std::string& address, const std::string& amount_str)
   return true;
 }
 
+cryptonote::account_public_address EVM::random_address() const
+{
+  cryptonote::account_base acc;
+  acc.generate();
+  return acc.get_keys().m_account_address;
+}
+
+bool EVM::mint(const std::string& from, const std::string& to, uint64_t amount)
+{
+  crypto::secret_key spend_key, view_key;
+  if (!get_contract_keys(from, spend_key, view_key))
+    return false;
+
+  cryptonote::account_public_address from_addr = deposit_address(from);
+  tools::wallet2 w(cryptonote::MAINNET);
+  epee::wipeable_string pwd;
+  w.generate(from, pwd, from_addr, spend_key, view_key, false);
+  w.init("localhost:11882");
+
+  cryptonote::address_parse_info info;
+  if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
+    return false;
+
+  cryptonote::tx_destination_entry de;
+  de.addr = info.address;
+  de.amount = amount;
+  de.is_subaddress = info.is_subaddress;
+  std::vector<cryptonote::tx_destination_entry> dsts{de};
+  std::set<uint32_t> subaddr;
+  try {
+    auto ptx = w.create_transactions_2(dsts, 0, 0, 0, std::vector<uint8_t>(), 0, subaddr, true, 0);
+    if (ptx.empty())
+      return false;
+    w.commit_tx(ptx[0]);
+  } catch (const std::exception &e) {
+    MERROR("contract mint tx failed: " << e.what());
+    return false;
+  }
+  return true;
+}
+
+bool EVM::burn(const std::string& from, uint64_t amount)
+{
+  crypto::secret_key spend_key, view_key;
+  if (!get_contract_keys(from, spend_key, view_key))
+    return false;
+
+  cryptonote::account_public_address from_addr = deposit_address(from);
+  tools::wallet2 w(cryptonote::MAINNET);
+  epee::wipeable_string pwd;
+  w.generate(from, pwd, from_addr, spend_key, view_key, false);
+  w.init("localhost:11882");
+
+  cryptonote::account_public_address burn_addr = random_address();
+  cryptonote::tx_destination_entry de;
+  de.addr = burn_addr;
+  de.amount = amount;
+  de.is_subaddress = false;
+  std::vector<cryptonote::tx_destination_entry> dsts{de};
+  std::set<uint32_t> subaddr;
+  try {
+    auto ptx = w.create_transactions_2(dsts, 0, 0, 0, std::vector<uint8_t>(), 0, subaddr, true, 0);
+    if (ptx.empty())
+      return false;
+    w.commit_tx(ptx[0]);
+  } catch (const std::exception &e) {
+    MERROR("contract burn tx failed: " << e.what());
+    return false;
+  }
+  return true;
+}
+
 bool EVM::transfer(const std::string& from, const std::string& to, const std::string& amount_str, const std::string& caller)
 {
   uint64_t amount = 0;
@@ -73,41 +145,21 @@ bool EVM::transfer(const std::string& from, const std::string& to, const std::st
     return false;
   if (it_from->second.owner != caller)
     return false;
-  crypto::secret_key spend_key, view_key;
-  if (!get_contract_keys(from, spend_key, view_key))
-    return false;
 
-  cryptonote::account_public_address from_addr = deposit_address(from);
-  tools::wallet2 w(cryptonote::MAINNET);
-  epee::wipeable_string pwd;
-  w.generate(from, pwd, from_addr, spend_key, view_key, false);
-  w.init("localhost:11882"); 
-  // todo programatically determine localhost port based on cryptonote_config or console arguments 
-
-  cryptonote::address_parse_info info;
-  if (!cryptonote::get_account_address_from_str_or_url(info, w.nettype(), to, nullptr))
-    return false;
-  
   double amount_parsed = amount / 1e8;
-  cryptonote::tx_destination_entry de;
-  de.addr = info.address;
-  de.amount = amount;
-  de.is_subaddress = info.is_subaddress;
+  bool to_contract = contracts.find(to) != contracts.end();
 
-  std::vector<cryptonote::tx_destination_entry> dsts{de};
-  std::set<uint32_t> subaddr;
-  try {
-    auto ptx = w.create_transactions_2(dsts, 0, 0, 0, std::vector<uint8_t>(), 0, subaddr, true, 0);
-    if (ptx.empty())
+  if (to_contract)
+  {
+    contracts[to].balance += amount_parsed;
+  }
+  else
+  {
+    if (!mint(from, to, amount))
       return false;
-    w.commit_tx(ptx[0]);
-  } catch (const std::exception &e) {
-    MERROR("contract transfer tx failed: " << e.what());
-    return false;
   }
 
   it_from->second.balance -= amount_parsed;
-  contracts[to].balance += amount_parsed;
   return true;
 }
 
@@ -838,6 +890,13 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         auto it = id_map.find(dest_id.convert_to<uint64_t>());
         if (it != id_map.end())
           transfer(self, it->second, std::to_string(amount.convert_to<uint64_t>()), contract.owner);
+        break;
+      }
+      case 0xa5: { // BURN
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint256 amount = pop_num();
+        burn(self, amount.convert_to<uint64_t>());
+        contract.balance -= amount.convert_to<uint64_t>();
         break;
       }
       case 0xa1: { // LOG
