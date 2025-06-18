@@ -81,6 +81,7 @@ When you run `deploy_contract` the CLI displays the byte count and fee split bet
 Calls that modify contract state require a fee as well. The wallet uses 5 atomic units per byte of call data for such write operations, while read-only calls remain free. Half of every EVM fee is forwarded to a governance address configured in `cryptonote_config.h`.
 
 Every contract maintains its own balance tracked by the EVM. You can deposit coins with `deposit_contract <address> <amount>` or `call_contract <address> deposit:<amount> write`. Deposits send the amount to a deterministic wallet address derived from the contract so the funds remain spendable. The full per‑byte call fee is forwarded to the governance wallet so you pay the normal network fee plus the EVM fee. Transfers between contracts or to regular addresses automatically craft a transaction using `create_transactions_2` and validate a transaction proof. The built‑in `transfer:` text command is restricted to the contract's owner and uses `call_contract <address> transfer:<dest>:<amount> write`.
+Amounts for `deposit_contract` and the `deposit:` and `transfer:` text commands use the wallet's current display unit (for example `1` equals `1.00000000`). The CLI converts these values to atomic units before sending them to the daemon.
 Sending coins directly to a contract address with the normal `transfer` command will perform the same deposit logic automatically.
 ### Interacting with a contract
 
