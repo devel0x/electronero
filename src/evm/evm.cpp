@@ -317,8 +317,23 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
     MWARNING("EVM opcode 0x" << std::hex << (int)op << std::dec << " pc=" << (pc-1) << " stack=" << stack.size());
     switch (op) {
       case 0x00: // STOP
-        if (stack.empty()) return 0;
-        if (stack.back().is_string) return 0;
+        if (stack.empty()) {
+          last_return_data.clear();
+          return 0;
+        }
+        if (stack.back().is_string) {
+          last_return_data.assign(stack.back().str.begin(), stack.back().str.end());
+          return 0;
+        }
+        last_return_data.resize(32);
+        {
+          uint256 r = stack.back().num;
+          for (int i = 31; i >= 0; --i)
+          {
+            last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
+            r >>= 8;
+          }
+        }
         return static_cast<int64_t>(stack.back().num);
       case 0x01: { // ADD
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
@@ -961,7 +976,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return 0;
         if (stack.size() == 1) {
           Value v = stack.back();
-          if (v.is_string) return 0;
+          if (v.is_string) {
+            last_return_data.assign(v.str.begin(), v.str.end());
+            return 0;
+          }
           last_return_data.resize(32);
           uint256 r = v.num;
           for (int i = 31; i >= 0; --i)
@@ -974,7 +992,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 offset = pop_num();
         pop_value(); // size
         Value mv = memory[static_cast<uint64_t>(offset)];
-        if (mv.is_string) return 0;
+        if (mv.is_string) {
+          last_return_data.assign(mv.str.begin(), mv.str.end());
+          return 0;
+        }
         last_return_data.resize(32);
         uint256 r = mv.num;
         for (int i = 31; i >= 0; --i)
