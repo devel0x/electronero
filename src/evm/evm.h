@@ -101,6 +101,7 @@ public:
   const std::vector<uint256>& logs_of(const std::string& address) const;
   const std::vector<uint8_t>& code_of(const std::string& address) const;
   cryptonote::account_public_address deposit_address(const std::string& address) const;
+  const std::string& get_last_return_string() const;
   std::vector<std::string> contracts_of_owner(const std::string& owner) const;
   std::vector<std::string> all_addresses() const;
   bool save(const std::string& path) const;
@@ -132,6 +133,7 @@ private:
   std::unordered_map<uint64_t, std::string> id_map;
   uint64_t next_id = 0;
   std::vector<uint8_t> last_return_data;
+  std::string last_return_string;
 };
 
 } // namespace CryptoNote

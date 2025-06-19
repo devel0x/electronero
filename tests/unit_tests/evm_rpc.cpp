@@ -223,3 +223,11 @@ TEST(EVM_RPC, CallOpcodesStubbed)
   c = evm.deploy("owner", call_stub_code(0xfa));
   EXPECT_EQ(0, evm.call(c, {}));
 }
+
+TEST(EVM_RPC, ReturnSenderString)
+{
+  EVM evm;
+  std::string c = evm.deploy("owner", {0x33, 0xf3});
+  evm.call(c, {}, 0, 0, "caller");
+  EXPECT_EQ("caller", evm.get_last_return_string());
+}

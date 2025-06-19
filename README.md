@@ -150,7 +150,18 @@ stored in `read.data`:
 electronero-wallet-cli call_contract c1 read.data
 ```
 
-The CLI prints the returned integer. The same payload can be sent over RPC:
+The CLI prints the returned integer. When calling through the API, use
+`evm.get_last_return_string()` to read any string returned by the contract.
+For instance when your contract executes `return msg.sender`, call
+`evm.call` with a custom caller address and read back the value like so:
+
+```cpp
+EVM evm;
+std::string ca = evm.deploy("owner", {0x33, 0xf3});  // returns msg.sender
+evm.call(ca, {}, 0, 0, "caller");
+std::string sender = evm.get_last_return_string();  // "caller"
+```
+The same payload can be sent over RPC:
 
 ```json
 {"jsonrpc":"2.0","id":"0","method":"call_contract","params":{"account":"c1","caller":"<your address>","data":"7cf5dab000000000000000000000000000000000000000000000000000000000000005","write":true}}
