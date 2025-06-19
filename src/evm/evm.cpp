@@ -291,6 +291,16 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
   std::vector<Value> stack;
   std::unordered_map<uint64_t, Value> memory;
 
+  MWARNING("EVM execute self=" << self <<
+           " owner=" << contract.owner <<
+           " id=" << contract.id <<
+           " balance=" << contract.balance <<
+           " caller=" << (caller.empty() ? "<none>" : caller) <<
+           " value=" << call_value <<
+           " data=" << epee::string_tools::buff_to_hex_nodelimer(std::string(input.begin(), input.end())) <<
+           " height=" << block_height <<
+           " ts=" << timestamp);
+
   auto pop_value = [&]() -> Value {
     if (stack.empty()) throw std::runtime_error("stack underflow");
     Value v = stack.back();
