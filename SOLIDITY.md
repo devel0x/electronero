@@ -127,3 +127,43 @@ contract Args {
     }
 }
 ```
+
+## Caller Example
+
+### Assembly Version
+```solidity
+pragma solidity ^0.8.0;
+
+contract CallerAsm {
+    address public lastCaller;
+
+    function remember() public {
+        assembly {
+            sstore(lastCaller.slot, caller())
+        }
+    }
+
+    function caller() public pure returns (address ret) {
+        assembly {
+            ret := caller()
+        }
+    }
+}
+```
+
+### Standard Solidity Version
+```solidity
+pragma solidity ^0.8.0;
+
+contract Caller {
+    address public lastCaller;
+
+    function remember() public {
+        lastCaller = msg.sender;
+    }
+
+    function caller() public view returns (address) {
+        return msg.sender;
+    }
+}
+```
