@@ -2301,10 +2301,12 @@ namespace cryptonote
     struct response
     {
       int64_t result;
+      std::string return_data;
       std::string status;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(result)
+        KV_SERIALIZE(return_data)
         KV_SERIALIZE(status)
       END_KV_SERIALIZE_MAP()
     };

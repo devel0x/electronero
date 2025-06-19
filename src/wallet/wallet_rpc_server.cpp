@@ -3098,6 +3098,7 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
         return false;
       }
       res.result = daemon_res.result;
+      res.return_data = daemon_res.return_data;
       res.status = daemon_res.status;
       return daemon_res.status == CORE_RPC_STATUS_OK;
     }
@@ -3180,9 +3181,10 @@ bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONT
       return false;
     }
     res.result = daemon_res.result;
+    res.return_data = daemon_res.return_data;
     res.status = daemon_res.status;
     return daemon_res.status == CORE_RPC_STATUS_OK;
- }
+}
 namespace
 {
   bool encode_simple_call(const std::string &method, const std::vector<std::string> &params, std::string &hex)
