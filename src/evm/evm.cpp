@@ -983,7 +983,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return 0;
         if (stack.size() == 1) {
           Value v = stack.back();
-          if (v.is_string) return 0;
+          if (v.is_string) {
+            last_return_data.assign(v.str.begin(), v.str.end());
+            return 0;
+          }
           last_return_data.resize(32);
           uint256 r = v.num;
           for (int i = 31; i >= 0; --i)
@@ -996,7 +999,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 offset = pop_num();
         pop_value(); // size
         Value mv = memory[static_cast<uint64_t>(offset)];
-        if (mv.is_string) return 0;
+        if (mv.is_string) {
+          last_return_data.assign(mv.str.begin(), mv.str.end());
+          return 0;
+        }
         last_return_data.resize(32);
         uint256 r = mv.num;
         for (int i = 31; i >= 0; --i)

@@ -1868,7 +1868,7 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     {
       success_msg_writer() << tr("Contract returned: ") << res.result;
       if (!res.return_data.empty())
-        success_msg_writer() << tr("Return data hex: ") << res.return_data;
+        success_msg_writer() << tr("Return data: ") << res.return_data;
     }
     else
       fail_msg_writer() << tr("failed to call contract: ") << err;
