@@ -829,6 +829,18 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         contract.storage[key] = value;
         break;
       }
+      case 0x5e: { // MCOPY
+        if (stack.size() < 3) throw std::runtime_error("stack underflow");
+        uint256 dst = pop_num();
+        uint256 src = pop_num();
+        uint256 length = pop_num();
+        for (uint64_t i = 0; i < length.convert_to<uint64_t>(); ++i)
+        {
+          memory[(dst + i).convert_to<uint64_t>()] =
+            memory[(src + i).convert_to<uint64_t>()];
+        }
+        break;
+      }
       case 0x80 ... 0x8f: { // DUP1 through DUP16
         unsigned n = op - 0x7f; // 1..16
         if (stack.size() < n) throw std::runtime_error("stack underflow");
