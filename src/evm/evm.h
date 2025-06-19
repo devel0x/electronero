@@ -124,7 +124,9 @@ private:
     }
   };
 
-  int64_t execute(const std::string& self, Contract& c, const std::vector<uint8_t>& input,
+  int64_t execute(const std::string& self, Contract& c,
+                  const std::vector<uint8_t>& code,
+                  const std::vector<uint8_t>& input,
                   uint64_t block_height, uint64_t timestamp,
                   const std::string& caller, uint64_t call_value);
 

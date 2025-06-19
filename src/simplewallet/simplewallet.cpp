@@ -321,13 +321,17 @@ namespace
     return "invalid";
   }
 
-  bool compile_solidity(const std::string& file, std::string& hex)
+  bool compile_solidity(const std::string& file, std::string& hex, bool runtime = true)
   {
     try
     {
       namespace bp = boost::process;
       bp::ipstream out;
-      bp::child c(bp::search_path("solc"), "--optimize", "--bin-runtime", file, bp::std_out > out, bp::std_err > bp::null);
+      bp::child c(
+        bp::search_path("solc"), "--optimize",
+        runtime ? "--bin-runtime" : "--bin",
+        file,
+        bp::std_out > out, bp::std_err > bp::null);
 
       std::string line, last_line;
       while (out && std::getline(out, line))
@@ -363,6 +367,22 @@ namespace
     keccak(reinterpret_cast<const uint8_t*>(sig.data()), sig.size(), hash, 32);
     hex = epee::string_tools::buff_to_hex_nodelimer(std::string((char*)hash, 4));
 
+    for (const std::string &p : params)
+    {
+      unsigned long long val = 0;
+      try { val = std::stoull(p); }
+      catch (const std::exception&) { return false; }
+      char buf[17];
+      snprintf(buf, sizeof(buf), "%016llx", val);
+      hex.append(64 - 16, '0');
+    hex += buf;
+  }
+  return true;
+  }
+
+  bool encode_params(const std::vector<std::string> &params, std::string &hex)
+  {
+    hex.clear();
     for (const std::string &p : params)
     {
       unsigned long long val = 0;
@@ -1691,9 +1711,9 @@ bool simple_wallet::version(const std::vector<std::string> &args)
 
 bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 {
-    if (args.size() != 1)
+    if (args.size() < 1)
     {
-      fail_msg_writer() << tr("usage: deploy_contract <file>");
+      fail_msg_writer() << tr("usage: deploy_contract <file> [constructor args...]");
       return true;
     }
   if (!try_connect_to_daemon())
@@ -1701,10 +1721,14 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
 
   // contract files live alongside the wallet, so form the path relative to the wallet file
   const boost::filesystem::path file_path = boost::filesystem::path(m_wallet_file).parent_path() / args[0];
+  std::vector<std::string> params;
+  if (args.size() > 1)
+    params.assign(args.begin() + 1, args.end());
+
   std::string data;
   if (file_path.extension() == ".sol")
   {
-    if (!compile_solidity(file_path.string(), data))
+    if (!compile_solidity(file_path.string(), data, params.empty()))
     {
       fail_msg_writer() << tr("failed to compile solidity contract") << ' ' << file_path.string();
       return true;
@@ -1714,6 +1738,17 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   {
     fail_msg_writer() << tr("failed to read contract file") << ' ' << file_path.string();
     return true;
+  }
+
+  if (!params.empty())
+  {
+    std::string param_hex;
+    if (!encode_params(params, param_hex))
+    {
+      fail_msg_writer() << tr("invalid constructor parameters");
+      return true;
+    }
+    data += param_hex;
   }
   std::string bin;
   if (!epee::string_tools::parse_hexstr_to_binbuff(data, bin))

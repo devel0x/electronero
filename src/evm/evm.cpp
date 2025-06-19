@@ -37,7 +37,6 @@ std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& by
   hex.resize(50);
   std::string address = config::CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX + hex;
   Contract c;
-  c.code = bytecode;
   c.owner = owner;
   c.id = id;
   crypto::hash secret;
@@ -48,6 +47,17 @@ std::string EVM::deploy(const std::string& owner, const std::vector<uint8_t>& by
   memwipe(&secret, sizeof(secret));
   contracts[address] = c;
   id_map[id] = address;
+
+  // run constructor bytecode; runtime code is returned via last_return_data
+  last_return_data.clear();
+  try {
+    execute(address, contracts[address], bytecode, {}, 0, 0, owner, 0);
+    contracts[address].code = last_return_data;
+  } catch (const std::exception &e) {
+    MWARNING("EVM constructor failed: " << e.what());
+    contracts[address].code = bytecode;
+  }
+
   return address;
 }
 
@@ -271,12 +281,15 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
            " height=" << block_height <<
            " ts=" << timestamp);
   last_return_data.clear();
-  int64_t res = execute(address, it->second, input, block_height, timestamp, caller, call_value);
+  int64_t res = execute(address, it->second, it->second.code, input,
+                        block_height, timestamp, caller, call_value);
   MDEBUG("EVM::call result:" << res);
   return res;
 }
 
-int64_t EVM::execute(const std::string& self, Contract& contract, const std::vector<uint8_t>& input,
+int64_t EVM::execute(const std::string& self, Contract& contract,
+                     const std::vector<uint8_t>& code,
+                     const std::vector<uint8_t>& input,
                      uint64_t block_height, uint64_t timestamp,
                      const std::string& caller, uint64_t call_value) {
   struct Value {
@@ -316,7 +329,6 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
 
   auto push_num = [&](uint256 n) { stack.emplace_back(n); };
   auto push_str = [&](const std::string &s) { stack.emplace_back(s); };
-  const auto& code = contract.code;
   std::unordered_set<size_t> jumpdests;
   for (size_t i = 0; i < code.size(); ++i)
     if (code[i] == 0x5b)
@@ -982,17 +994,18 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return static_cast<int64_t>(v.num);
         }
         uint256 offset = pop_num();
-        pop_value(); // size
-        Value mv = memory[static_cast<uint64_t>(offset)];
-        if (mv.is_string) return 0;
-        last_return_data.resize(32);
-        uint256 r = mv.num;
-        for (int i = 31; i >= 0; --i)
-        {
-          last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
-          r >>= 8;
+        uint256 size = pop_num();
+        last_return_data.clear();
+        for (uint64_t i = 0; i < size.convert_to<uint64_t>(); ++i) {
+          Value mv = memory[(offset + i).convert_to<uint64_t>()];
+          uint256 b = mv.is_string ? 0 : mv.num;
+          last_return_data.push_back(b.convert_to<uint8_t>());
         }
-        return mv.num.convert_to<int64_t>();
+        uint256 r = 0;
+        for (size_t i = 0; i < last_return_data.size(); ++i) {
+          r = (r << 8) | last_return_data[i];
+        }
+        return static_cast<int64_t>(r);
       }
       default:
         MWARNING("EVM unsupported opcode 0x" << std::hex << int(op) << std::dec);

@@ -116,6 +116,14 @@ Deploy the resulting runtime bytecode:
 electronero-wallet-cli deploy_contract Counter.bin
 ```
 
+Contracts with constructors can be deployed by passing the initialization values
+after the source file. The wallet compiles the full bytecode and appends the
+encoded parameters automatically:
+
+```bash
+electronero-wallet-cli deploy_contract Token.sol 1000000
+```
+
 The wallet prints the new contract address (for example `c1`). You can invoke
 functions by name without preparing the ABI payload yourself. The following
 command increments the counter by `5` and automatically encodes
