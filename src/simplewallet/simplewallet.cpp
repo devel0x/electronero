@@ -1728,7 +1728,8 @@ bool simple_wallet::deploy_contract(const std::vector<std::string>& args)
   std::string data;
   if (file_path.extension() == ".sol")
   {
-    if (!compile_solidity(file_path.string(), data, params.empty()))
+    // always compile the full bytecode so the constructor can execute
+    if (!compile_solidity(file_path.string(), data, false))
     {
       fail_msg_writer() << tr("failed to compile solidity contract") << ' ' << file_path.string();
       return true;

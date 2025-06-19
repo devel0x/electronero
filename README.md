@@ -110,7 +110,7 @@ Compile the source in your wallet directory:
 electronero-wallet-cli compile_contract Counter.sol
 ```
 
-Deploy the resulting runtime bytecode:
+Deploy the compiled bytecode (you can also pass the Solidity file directly):
 
 ```bash
 electronero-wallet-cli deploy_contract Counter.bin
