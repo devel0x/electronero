@@ -180,6 +180,8 @@
 #define DEFAULT_TXPOOL_MAX_SIZE                         648000000ull // 3 days at 300000, in bytes
 
 // New constants are intended to go here
+#define TOKEN_DEPLOYMENT_FEE                            ((uint64_t)10000)
+constexpr const char GOVERNANCE_WALLET_ADDRESS[] = "etnkHfFuanNeTe3q9dux4d9cRiLkUR4hDffvhfTp6nbhEJ5R8TY4vdyZjT4BtWxnvSJ5nfD64eCAQfKMJHSym2dj8PQqeiKmBM";
 namespace config
 {
   uint64_t const DEFAULT_FEE_ATOMIC_XMR_PER_KB = 5;

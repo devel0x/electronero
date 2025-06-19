@@ -525,3 +525,7 @@ config](utils/conf/electronerod.conf).
 
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
+
+## Token Smart Contracts
+Electronero now includes a simple token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, and `token_transfer_from` commands to manage ERC20-like tokens.
+Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`. Token data is stored in `~/.bitelectronero/tokens.bin` and synchronized across peers.
