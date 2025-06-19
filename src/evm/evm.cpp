@@ -13,6 +13,7 @@
 #include <cstring>
 #include "cryptonote_config.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "crypto/keccak.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include "crypto/hash.h"
 #include "string_tools.h"
@@ -221,6 +222,23 @@ cryptonote::account_public_address EVM::deposit_address(const std::string& addre
   memwipe(&view_key, sizeof(view_key));
   memwipe(&secret, sizeof(secret));
   return out;
+}
+
+std::string EVM::smart_wallet_address(const std::string& address) const
+{
+  crypto::hash h;
+  keccak(reinterpret_cast<const uint8_t*>(address.data()), address.size(), reinterpret_cast<uint8_t*>(&h), sizeof(h));
+  std::string hex = epee::string_tools::pod_to_hex(h);
+  smart_map[hex] = address;
+  return hex;
+}
+
+std::string EVM::public_wallet_address(const std::string& smart) const
+{
+  auto it = smart_map.find(smart);
+  if (it == smart_map.end())
+    return std::string();
+  return it->second;
 }
 
 std::vector<std::string> EVM::contracts_of_owner(const std::string& owner) const
@@ -1012,6 +1030,7 @@ bool EVM::save(const std::string& path) const
   state.contracts = contracts;
   state.next_id = next_id;
   state.id_map = id_map;
+  state.smart_map = smart_map;
   return tools::serialize_obj_to_file(state, path);
 }
 
@@ -1025,6 +1044,7 @@ bool EVM::load(const std::string& path)
   contracts = std::move(state.contracts);
   next_id = state.next_id;
   id_map = std::move(state.id_map);
+  smart_map = std::move(state.smart_map);
   return true;
 }
 

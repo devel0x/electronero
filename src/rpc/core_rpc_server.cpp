@@ -2349,6 +2349,20 @@ namespace cryptonote
     return true;
   }
 
+  bool core_rpc_server::on_get_smart_wallet_address(const COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request& req, COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response& res)
+  {
+    res.smart_address = m_core.get_evm().smart_wallet_address(req.address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
+  bool core_rpc_server::on_get_public_wallet_address(const COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request& req, COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response& res)
+  {
+    res.address = m_core.get_evm().public_wallet_address(req.smart_address);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
   bool core_rpc_server::on_verify_contract(const COMMAND_RPC_VERIFY_CONTRACT::request& req, COMMAND_RPC_VERIFY_CONTRACT::response& res)
   {
     const auto& code = m_core.get_evm().code_of(req.address);

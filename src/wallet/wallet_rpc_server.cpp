@@ -3256,7 +3256,55 @@ bool wallet_rpc_server::on_encode_call(const wallet_rpc::COMMAND_RPC_ENCODE_CALL
     return false;
   }
   return true;
-}  
+}
+
+bool wallet_rpc_server::on_smart_wallet_address(const wallet_rpc::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if (m_wallet->restricted())
+  {
+    er.code = WALLET_RPC_ERROR_CODE_DENIED;
+    er.message = "Command unavailable in restricted mode.";
+    return false;
+  }
+
+  cryptonote::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request daemon_req;
+  cryptonote::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response daemon_res;
+  daemon_req.address = req.address;
+  bool r = m_wallet->invoke_http_json("/get_smart_wallet_address", daemon_req, daemon_res);
+  if (!r)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "RPC request failed";
+    return false;
+  }
+  res.smart_address = daemon_res.smart_address;
+  return true;
+}
+
+bool wallet_rpc_server::on_public_wallet_address(const wallet_rpc::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if (m_wallet->restricted())
+  {
+    er.code = WALLET_RPC_ERROR_CODE_DENIED;
+    er.message = "Command unavailable in restricted mode.";
+    return false;
+  }
+
+  cryptonote::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request daemon_req;
+  cryptonote::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response daemon_res;
+  daemon_req.smart_address = req.smart_address;
+  bool r = m_wallet->invoke_http_json("/get_public_wallet_address", daemon_req, daemon_res);
+  if (!r)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "RPC request failed";
+    return false;
+  }
+  res.address = daemon_res.address;
+  return true;
+}
 }
 
 
