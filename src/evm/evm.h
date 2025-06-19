@@ -101,6 +101,8 @@ public:
   const std::vector<uint256>& logs_of(const std::string& address) const;
   const std::vector<uint8_t>& code_of(const std::string& address) const;
   cryptonote::account_public_address deposit_address(const std::string& address) const;
+  std::string smart_wallet_address(const std::string& address) const;
+  std::string public_wallet_address(const std::string& smart) const;
   std::vector<std::string> contracts_of_owner(const std::string& owner) const;
   std::vector<std::string> all_addresses() const;
   bool save(const std::string& path) const;
@@ -114,6 +116,7 @@ private:
     std::unordered_map<std::string, Contract> contracts;
     uint64_t next_id = 0;
     std::unordered_map<uint64_t, std::string> id_map;
+    std::unordered_map<std::string, std::string> smart_map;
 
     template<class Archive>
     void serialize(Archive& ar, const unsigned int /*version*/)
@@ -121,6 +124,7 @@ private:
       ar & contracts;
       ar & next_id;
       ar & id_map;
+      ar & smart_map;
     }
   };
 
@@ -131,6 +135,7 @@ private:
   std::unordered_map<std::string, Contract> contracts;
   std::unordered_map<uint64_t, std::string> id_map;
   uint64_t next_id = 0;
+  mutable std::unordered_map<std::string, std::string> smart_map;
   std::vector<uint8_t> last_return_data;
 };
 
