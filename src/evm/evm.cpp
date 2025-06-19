@@ -854,6 +854,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         if (!value.is_string) contract.logs.push_back(value.num);
         break;
       }
+      case 0xb0: { // OWNER
+        auto itc = contracts.find(contract.owner);
+        if (itc != contracts.end())
+          push_num(itc->second.id);
+        else
+          push_str(contract.owner);
+        break;
+      }
       case 0xff: { // SELFDESTRUCT
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint256 dest_id = pop_num();

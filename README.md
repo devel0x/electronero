@@ -231,6 +231,21 @@ contract BalanceCheck {
 }
 ```
 
+The `OWNER` (0xb0) opcode pushes the contract's owner onto the stack. If the
+owner is another contract its numeric id is returned, otherwise the owner's
+wallet address string is pushed. A simple helper returns this id:
+
+```solidity
+contract Owned {
+    function ownerId() public view returns (uint256) {
+        assembly {
+            0xb0 // OWNER
+            return(0, 32)
+        }
+    }
+}
+```
+
 Block metadata is also exposed through `TIMESTAMP` (0x42) and `NUMBER` (0x43).
 `TIMESTAMP` pushes the current block or RPC time in seconds and `NUMBER` pushes
 the blockchain height. A contract can query these values in assembly:

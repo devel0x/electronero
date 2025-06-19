@@ -223,3 +223,11 @@ TEST(EVM_RPC, CallOpcodesStubbed)
   c = evm.deploy("owner", call_stub_code(0xfa));
   EXPECT_EQ(0, evm.call(c, {}));
 }
+
+TEST(EVM_RPC, OwnerOpcode)
+{
+  EVM evm;
+  std::string c1 = evm.deploy("alice", {0});
+  std::string c2 = evm.deploy(c1, {0xb0, 0xf3});
+  EXPECT_EQ(1, evm.call(c2, {}));
+}
