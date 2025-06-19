@@ -2477,6 +2477,52 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_GET_SMART_WALLET_ADDRESS
+  {
+    struct request
+    {
+      std::string address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string smart_address;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(smart_address)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS
+  {
+    struct request
+    {
+      std::string smart_address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(smart_address)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string address;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(address)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_VERIFY_CONTRACT
   {
     struct request

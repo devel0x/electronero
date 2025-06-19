@@ -120,6 +120,8 @@ namespace cryptonote
       MAP_URI_AUTO_JON2_IF("/get_contract_logs", on_get_contract_logs, COMMAND_RPC_GET_CONTRACT_LOGS, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contract_code", on_get_contract_code, COMMAND_RPC_GET_CONTRACT_CODE, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contract_deposit_address", on_get_contract_deposit_address, COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_smart_wallet_address", on_get_smart_wallet_address, COMMAND_RPC_GET_SMART_WALLET_ADDRESS, !m_restricted)
+      MAP_URI_AUTO_JON2_IF("/get_public_wallet_address", on_get_public_wallet_address, COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/verify_contract", on_verify_contract, COMMAND_RPC_VERIFY_CONTRACT, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contracts", on_get_contracts, COMMAND_RPC_GET_CONTRACTS, !m_restricted)
       MAP_URI_AUTO_JON2_IF("/get_contracts_by_owner", on_get_contracts_by_owner, COMMAND_RPC_GET_CONTRACTS_BY_OWNER, !m_restricted)
@@ -240,6 +242,8 @@ namespace cryptonote
     bool on_get_contract_logs(const COMMAND_RPC_GET_CONTRACT_LOGS::request& req, COMMAND_RPC_GET_CONTRACT_LOGS::response& res);
     bool on_get_contract_code(const COMMAND_RPC_GET_CONTRACT_CODE::request& req, COMMAND_RPC_GET_CONTRACT_CODE::response& res);
     bool on_get_contract_deposit_address(const COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::request& req, COMMAND_RPC_GET_CONTRACT_DEPOSIT_ADDRESS::response& res);
+    bool on_get_smart_wallet_address(const COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request& req, COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response& res);
+    bool on_get_public_wallet_address(const COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request& req, COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response& res);
     bool on_verify_contract(const COMMAND_RPC_VERIFY_CONTRACT::request& req, COMMAND_RPC_VERIFY_CONTRACT::response& res);
     bool on_get_contracts(const COMMAND_RPC_GET_CONTRACTS::request& req, COMMAND_RPC_GET_CONTRACTS::response& res);
     bool on_get_contracts_by_owner(const COMMAND_RPC_GET_CONTRACTS_BY_OWNER::request& req, COMMAND_RPC_GET_CONTRACTS_BY_OWNER::response& res);
