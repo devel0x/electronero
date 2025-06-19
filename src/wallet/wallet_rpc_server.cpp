@@ -36,6 +36,7 @@
 using namespace epee;
 
 #include "wallet_rpc_server.h"
+#include "token/token.h"
 #include "wallet/wallet_args.h"
 #include "common/command_line.h"
 #include "common/i18n.h"
@@ -2900,6 +2901,46 @@ namespace tools
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  m_tokens.create(req.name, req.supply, m_wallet->get_account().get_public_address_str(m_wallet->nettype()));
+  res.status = WALLET_RPC_STATUS_OK;
+  return true;
+}
+//---------------------------------------------------------------------------------
+bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  std::string address = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
+  res.balance = m_tokens.balance_of(req.name, address);
+  return true;
+}
+//---------------------------------------------------------------------------------
+bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_tokens.transfer(req.name, from, req.to, req.amount);
+  return true;
+}
+//---------------------------------------------------------------------------------
+bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_tokens.approve(req.name, owner, req.spender, req.amount);
+  return true;
+}
+//---------------------------------------------------------------------------------
+bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_tokens.transfer_from(req.name, spender, req.from, req.to, req.amount);
+  return true;
+}
 }
 
 int main(int argc, char** argv) {
