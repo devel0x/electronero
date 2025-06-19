@@ -234,6 +234,8 @@ namespace cryptonote
     bool transfer_owner(const std::vector<std::string>& args);
     bool contract_addresses(const std::vector<std::string>& args);
     bool verify_contract(const std::vector<std::string>& args);
+    bool smart_wallet_address(const std::vector<std::string>& args);
+    bool public_wallet_address(const std::vector<std::string>& args);
     bool compile_contract(const std::vector<std::string>& args);
     bool bulk_transfer(const std::vector<std::string>& args);
 

@@ -2146,6 +2146,50 @@ bool simple_wallet::contract_owner(const std::vector<std::string>& args)
   return true;
 }
 
+bool simple_wallet::smart_wallet_address(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: smart_wallet_address <address>");
+    return true;
+  }
+  if (!try_connect_to_daemon())
+    return true;
+
+  cryptonote::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request req;
+  cryptonote::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response res;
+  req.address = args[0];
+  bool r = m_wallet->invoke_http_json("/get_smart_wallet_address", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Smart wallet address: ") << res.smart_address;
+  else
+    fail_msg_writer() << tr("failed to get smart wallet address: ") << err;
+  return true;
+}
+
+bool simple_wallet::public_wallet_address(const std::vector<std::string>& args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: public_wallet_address <smart_address>");
+    return true;
+  }
+  if (!try_connect_to_daemon())
+    return true;
+
+  cryptonote::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request req;
+  cryptonote::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response res;
+  req.smart_address = args[0];
+  bool r = m_wallet->invoke_http_json("/get_public_wallet_address", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+    success_msg_writer() << tr("Public wallet address: ") << res.address;
+  else
+    fail_msg_writer() << tr("failed to get public wallet address: ") << err;
+  return true;
+}
+
 bool simple_wallet::contract_storage(const std::vector<std::string>& args)
 {
   if (args.size() != 2)
@@ -3238,6 +3282,14 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::verify_contract, this, _1),
                            tr("verify_contract <address> <file.sol>"),
                            tr("Compile a Solidity file and verify it matches the deployed contract"));
+  m_cmd_binder.set_handler("smart_wallet_address",
+                           boost::bind(&simple_wallet::smart_wallet_address, this, _1),
+                           tr("smart_wallet_address <address>"),
+                           tr("Print the 32 byte smart wallet address for <address>"));
+  m_cmd_binder.set_handler("public_wallet_address",
+                           boost::bind(&simple_wallet::public_wallet_address, this, _1),
+                           tr("public_wallet_address <smart_address>"),
+                           tr("Recover the wallet address for a smart wallet address"));
   m_cmd_binder.set_handler("bulk_transfer",
                            boost::bind(&simple_wallet::bulk_transfer, this, _1),
                            tr("bulk_transfer <file>"),

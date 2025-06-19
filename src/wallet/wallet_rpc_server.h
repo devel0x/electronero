@@ -139,6 +139,8 @@ namespace tools
         MAP_JON_RPC_WE("deploy_contract",    on_deploy_contract,    wallet_rpc::COMMAND_RPC_DEPLOY_CONTRACT)
         MAP_JON_RPC_WE("call_contract",      on_call_contract,      wallet_rpc::COMMAND_RPC_CALL_CONTRACT)
         MAP_JON_RPC_WE("encode_call",       on_encode_call,       wallet_rpc::COMMAND_RPC_ENCODE_CALL)
+        MAP_JON_RPC_WE("smart_wallet_address", on_smart_wallet_address, wallet_rpc::COMMAND_RPC_GET_SMART_WALLET_ADDRESS)
+        MAP_JON_RPC_WE("public_wallet_address", on_public_wallet_address, wallet_rpc::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -211,6 +213,8 @@ namespace tools
       bool on_deploy_contract(const wallet_rpc::COMMAND_RPC_DEPLOY_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_DEPLOY_CONTRACT::response& res, epee::json_rpc::error& er);
       bool on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er);
       bool on_encode_call(const wallet_rpc::COMMAND_RPC_ENCODE_CALL::request& req, wallet_rpc::COMMAND_RPC_ENCODE_CALL::response& res, epee::json_rpc::error& er);
+      bool on_smart_wallet_address(const wallet_rpc::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_GET_SMART_WALLET_ADDRESS::response& res, epee::json_rpc::error& er);
+      bool on_public_wallet_address(const wallet_rpc::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_GET_PUBLIC_WALLET_ADDRESS::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);
