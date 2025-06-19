@@ -132,6 +132,7 @@ private:
   std::unordered_map<uint64_t, std::string> id_map;
   uint64_t next_id = 0;
   std::vector<uint8_t> last_return_data;
+  std::string last_return_string;
 };
 
 } // namespace CryptoNote
