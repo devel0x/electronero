@@ -271,6 +271,7 @@ int64_t EVM::call(const std::string& address, const std::vector<uint8_t>& input,
            " height=" << block_height <<
            " ts=" << timestamp);
   last_return_data.clear();
+  last_return_string.clear();
   int64_t res = execute(address, it->second, input, block_height, timestamp, caller, call_value);
   MDEBUG("EVM::call result:" << res);
   return res;
@@ -290,6 +291,16 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
 
   std::vector<Value> stack;
   std::unordered_map<uint64_t, Value> memory;
+
+  MWARNING("EVM execute self=" << self <<
+           " owner=" << contract.owner <<
+           " id=" << contract.id <<
+           " balance=" << contract.balance <<
+           " caller=" << (caller.empty() ? "<none>" : caller) <<
+           " value=" << call_value <<
+           " data=" << epee::string_tools::buff_to_hex_nodelimer(std::string(input.begin(), input.end())) <<
+           " height=" << block_height <<
+           " ts=" << timestamp);
 
   auto pop_value = [&]() -> Value {
     if (stack.empty()) throw std::runtime_error("stack underflow");
@@ -961,7 +972,12 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return 0;
         if (stack.size() == 1) {
           Value v = stack.back();
-          if (v.is_string) return 0;
+          if (v.is_string) {
+            last_return_string = v.str;
+            last_return_data.assign(v.str.begin(), v.str.end());
+            return 0;
+          }
+          last_return_string.clear();
           last_return_data.resize(32);
           uint256 r = v.num;
           for (int i = 31; i >= 0; --i)
@@ -974,7 +990,12 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 offset = pop_num();
         pop_value(); // size
         Value mv = memory[static_cast<uint64_t>(offset)];
-        if (mv.is_string) return 0;
+        if (mv.is_string) {
+          last_return_string = mv.str;
+          last_return_data.assign(mv.str.begin(), mv.str.end());
+          return 0;
+        }
+        last_return_string.clear();
         last_return_data.resize(32);
         uint256 r = mv.num;
         for (int i = 31; i >= 0; --i)
@@ -991,8 +1012,12 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
   }
   if (stack.empty())
     return 0;
-  if (stack.back().is_string)
+  if (stack.back().is_string) {
+    last_return_string = stack.back().str;
+    last_return_data.assign(last_return_string.begin(), last_return_string.end());
     return 0;
+  }
+  last_return_string.clear();
   return static_cast<int64_t>(stack.back().num);
 }
 
