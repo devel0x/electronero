@@ -289,6 +289,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
   };
 
   std::vector<Value> stack;
+  std::vector<size_t> retstack;
   std::unordered_map<uint64_t, Value> memory;
 
   MWARNING("EVM execute self=" << self <<
@@ -318,9 +319,14 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
   auto push_str = [&](const std::string &s) { stack.emplace_back(s); };
   const auto& code = contract.code;
   std::unordered_set<size_t> jumpdests;
+  std::unordered_set<size_t> subdests;
   for (size_t i = 0; i < code.size(); ++i)
+  {
     if (code[i] == 0x5b)
       jumpdests.insert(i);
+    else if (code[i] == 0x5c)
+      subdests.insert(i);
+  }
 
   for (size_t pc = 0; pc < code.size();) {
     uint8_t op = code[pc++];
@@ -794,6 +800,25 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         break;
       }
       case 0x5b: { // JUMPDEST
+        break;
+      }
+      case 0x5c: { // BEGINSUB
+        break;
+      }
+      case 0x5d: { // JUMPSUB
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint256 dest = pop_num();
+        size_t d = dest.convert_to<size_t>();
+        if (d >= code.size() || !subdests.count(d))
+          throw std::runtime_error("bad subroutine dest 0x5d");
+        retstack.push_back(pc);
+        pc = d;
+        break;
+      }
+      case 0x5e: { // RETURNSUB
+        if (retstack.empty()) throw std::runtime_error("empty return stack");
+        pc = retstack.back();
+        retstack.pop_back();
         break;
       }
       case 0x51: { // MLOAD
