@@ -127,3 +127,43 @@ contract Args {
     }
 }
 ```
+
+## GasRemaining (assembly)
+```solidity
+pragma solidity ^0.8.0;
+
+contract GasRemaining {
+    function check() public view returns (uint256 g) {
+        assembly {
+            g := gas()
+        }
+    }
+}
+```
+
+## CodeHashLookup (assembly)
+```solidity
+pragma solidity ^0.8.0;
+
+contract CodeHashLookup {
+    function query(address who) public view returns (bytes32 h) {
+        assembly {
+            h := extcodehash(who)
+        }
+    }
+}
+```
+
+## MemoryStoreReturn (assembly)
+```solidity
+pragma solidity ^0.8.0;
+
+contract MemoryStoreReturn {
+    function store(uint256 value) public pure returns (uint256) {
+        assembly {
+            mstore(0x0, value)
+            return(0x0, 32)
+        }
+    }
+}
+```
