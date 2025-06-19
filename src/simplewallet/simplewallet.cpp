@@ -1865,7 +1865,11 @@ bool simple_wallet::call_contract(const std::vector<std::string>& args)
     bool r = m_wallet->invoke_http_json("/call_contract", req, res);
     std::string err = interpret_rpc_response(r, res.status);
     if (err.empty())
+    {
       success_msg_writer() << tr("Contract returned: ") << res.result;
+      if (!res.return_data.empty())
+        success_msg_writer() << tr("Return data hex: ") << res.return_data;
+    }
     else
       fail_msg_writer() << tr("failed to call contract: ") << err;
     return true;

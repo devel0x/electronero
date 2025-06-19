@@ -1040,4 +1040,9 @@ bool EVM::load(const std::string& path)
   return true;
 }
 
+const std::vector<uint8_t>& EVM::get_last_return_data() const
+{
+  return last_return_data;
+}
+
 } // namespace CryptoNote

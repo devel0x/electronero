@@ -106,6 +106,7 @@ public:
   bool save(const std::string& path) const;
   bool load(const std::string& path);
   void rebuild_id_map();
+  const std::vector<uint8_t>& get_last_return_data() const { return last_return_data; }
 
   bool get_contract_keys(const std::string& address, crypto::secret_key &spend, crypto::secret_key &view) const;
 

@@ -2273,6 +2273,7 @@ namespace cryptonote
       try
       {
         res.result = m_core.get_evm().call(req.account, data, height, ts, req.caller, req.call_value);
+        res.return_data = epee::string_tools::buff_to_hex_nodelimer(std::string(m_core.get_evm().get_last_return_data().begin(), m_core.get_evm().get_last_return_data().end()));
         res.status = CORE_RPC_STATUS_OK;
         MDEBUG("call result " << res.result);
         return true;
