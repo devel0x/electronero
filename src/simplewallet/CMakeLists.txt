@@ -48,6 +48,7 @@ target_link_libraries(simplewallet
     cncrypto
     common
     mnemonics
+    token
     epee
     ${EPEE_READLINE}
     version

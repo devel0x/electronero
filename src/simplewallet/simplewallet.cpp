@@ -2133,6 +2133,26 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("seed",
                            boost::bind(&simple_wallet::seed, this, _1),
                            tr("Display the Electrum-style mnemonic seed"));
+  m_cmd_binder.set_handler("token_create",
+                           boost::bind(&simple_wallet::token_create, this, _1),
+                           tr("token_create <name> <supply>"),
+                           tr("Create a new token."));
+  m_cmd_binder.set_handler("token_balance",
+                           boost::bind(&simple_wallet::token_balance, this, _1),
+                           tr("token_balance <name> [address]"),
+                           tr("Show token balance."));
+  m_cmd_binder.set_handler("token_transfer",
+                           boost::bind(&simple_wallet::token_transfer, this, _1),
+                           tr("token_transfer <name> <address> <amount>"),
+                           tr("Transfer tokens."));
+  m_cmd_binder.set_handler("token_approve",
+                           boost::bind(&simple_wallet::token_approve, this, _1),
+                           tr("token_approve <name> <spender> <amount>"),
+                           tr("Approve token spending."));
+  m_cmd_binder.set_handler("token_transfer_from",
+                           boost::bind(&simple_wallet::token_transfer_from, this, _1),
+                           tr("token_transfer_from <name> <from> <to> <amount>"),
+                           tr("Transfer tokens using allowance."));
   m_cmd_binder.set_handler("set",
                            boost::bind(&simple_wallet::set_variable, this, _1),
                            tr("set <option> [<value>]"),
@@ -5338,6 +5358,106 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
     local_args.push_back(payment_id_str);
   message_writer() << tr("Donating ") << amount_str << " to The Electronero Project (donate.electronero.io or "<< MONERO_DONATION_ADDR <<").";
   transfer_new(local_args);
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_create(const std::vector<std::string> &args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_create <name> <supply>");
+    return true;
+  }
+  uint64_t supply = 0;
+  if (!cryptonote::parse_amount(supply, args[1]))
+  {
+    fail_msg_writer() << tr("invalid supply");
+    return true;
+  }
+  m_tokens.create(args[0], supply, m_wallet->get_account().get_public_address_str(m_wallet->nettype()));
+  success_msg_writer() << tr("Token created");
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_balance(const std::vector<std::string> &args)
+{
+  if (args.size() < 1 || args.size() > 2)
+  {
+    fail_msg_writer() << tr("usage: token_balance <name> [address]");
+    return true;
+  }
+  std::string address = args.size() == 2 ? args[1] : m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  uint64_t bal = m_tokens.balance_of(args[0], address);
+  message_writer() << bal;
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_transfer(const std::vector<std::string> &args)
+{
+  if (args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: token_transfer <name> <address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_tokens.transfer(args[0], from, args[1], amount))
+  {
+    fail_msg_writer() << tr("token transfer failed");
+    return true;
+  }
+  success_msg_writer() << tr("token transferred");
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_approve(const std::vector<std::string> &args)
+{
+  if (args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: token_approve <name> <spender> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_tokens.approve(args[0], owner, args[1], amount))
+  {
+    fail_msg_writer() << tr("token approve failed");
+    return true;
+  }
+  success_msg_writer() << tr("token approval set");
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
+{
+  if (args.size() != 4)
+  {
+    fail_msg_writer() << tr("usage: token_transfer_from <name> <from> <to> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[3]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_tokens.transfer_from(args[0], spender, args[1], args[2], amount))
+  {
+    fail_msg_writer() << tr("token transfer_from failed");
+    return true;
+  }
+  success_msg_writer() << tr("token transferred from");
   return true;
 }
 //----------------------------------------------------------------------------------------------------
