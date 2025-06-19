@@ -799,14 +799,33 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
       case 0x51: { // MLOAD
         if (stack.empty()) throw std::runtime_error("stack underflow");
         uint256 offset = pop_num();
-        stack.push_back(memory[static_cast<uint64_t>(offset)]);
+        uint256 value = 0;
+        for (int i = 0; i < 32; ++i)
+        {
+          Value mv = memory[(offset + i).convert_to<uint64_t>()];
+          uint256 b = mv.is_string ? 0 : mv.num;
+          value = (value << 8) | b;
+        }
+        stack.emplace_back(value);
         break;
       }
       case 0x52: { // MSTORE
         if (stack.size() < 2) throw std::runtime_error("stack underflow");
         uint256 offset = pop_num();
         Value value = pop_value();
-        memory[static_cast<uint64_t>(offset)] = value;
+        if (value.is_string)
+        {
+          for (size_t i = 0; i < value.str.size(); ++i)
+            memory[(offset + i).convert_to<uint64_t>()] = Value((uint8_t)value.str[i]);
+        }
+        else
+        {
+          uint256 tmp = value.num;
+          for (int i = 31; i >= 0; --i)
+          {
+            memory[(offset + (31 - i)).convert_to<uint64_t>()] = Value((tmp >> (i*8)) & 0xff);
+          }
+        }
         break;
       }
       case 0x53: { // MSTORE8
@@ -983,7 +1002,10 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return 0;
         if (stack.size() == 1) {
           Value v = stack.back();
-          if (v.is_string) return 0;
+          if (v.is_string) {
+            last_return_data.assign(v.str.begin(), v.str.end());
+            return 0;
+          }
           last_return_data.resize(32);
           uint256 r = v.num;
           for (int i = 31; i >= 0; --i)
@@ -994,17 +1016,15 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
           return static_cast<int64_t>(v.num);
         }
         uint256 offset = pop_num();
-        pop_value(); // size
-        Value mv = memory[static_cast<uint64_t>(offset)];
-        if (mv.is_string) return 0;
-        last_return_data.resize(32);
-        uint256 r = mv.num;
-        for (int i = 31; i >= 0; --i)
+        uint256 size = pop_num();
+        last_return_data.clear();
+        for (uint64_t i = 0; i < size.convert_to<uint64_t>(); ++i)
         {
-          last_return_data[i] = (r & 0xff).convert_to<uint8_t>();
-          r >>= 8;
+          Value mv = memory[(offset + i).convert_to<uint64_t>()];
+          uint8_t b = mv.is_string ? (mv.str.empty() ? 0 : (uint8_t)mv.str[0]) : mv.num.convert_to<uint8_t>();
+          last_return_data.push_back(b);
         }
-        return mv.num.convert_to<int64_t>();
+        return 0;
       }
       default:
         MWARNING("EVM unsupported opcode 0x" << std::hex << int(op) << std::dec);
@@ -1038,6 +1058,11 @@ bool EVM::load(const std::string& path)
   next_id = state.next_id;
   id_map = std::move(state.id_map);
   return true;
+}
+
+const std::vector<uint8_t>& EVM::get_last_return_data() const
+{
+  return last_return_data;
 }
 
 } // namespace CryptoNote

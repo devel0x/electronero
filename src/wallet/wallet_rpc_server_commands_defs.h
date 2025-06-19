@@ -1966,6 +1966,7 @@ namespace wallet_rpc
     struct response
     {
       int64_t result;
+      std::string return_data;
       std::string tx_hash;
       uint64_t fee;
       std::string tx_blob;
@@ -1974,6 +1975,7 @@ namespace wallet_rpc
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(result)
+        KV_SERIALIZE(return_data)
         KV_SERIALIZE(tx_hash)
         KV_SERIALIZE(fee)
         KV_SERIALIZE(tx_blob)

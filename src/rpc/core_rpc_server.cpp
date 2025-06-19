@@ -2273,6 +2273,13 @@ namespace cryptonote
       try
       {
         res.result = m_core.get_evm().call(req.account, data, height, ts, req.caller, req.call_value);
+        {
+          const auto &rd = m_core.get_evm().get_last_return_data();
+          std::string data(rd.begin(), rd.end());
+          bool printable = !data.empty() &&
+            std::all_of(data.begin(), data.end(), [](char c){ return c >= 32 && c < 127; });
+          res.return_data = printable ? data : epee::string_tools::buff_to_hex_nodelimer(data);
+        }
         res.status = CORE_RPC_STATUS_OK;
         MDEBUG("call result " << res.result);
         return true;
