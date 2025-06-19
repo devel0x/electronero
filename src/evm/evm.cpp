@@ -290,6 +290,7 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
 
   std::vector<Value> stack;
   std::unordered_map<uint64_t, Value> memory;
+  std::unordered_map<uint256, uint256> transient_storage;
 
   MWARNING("EVM execute self=" << self <<
            " owner=" << contract.owner <<
@@ -827,6 +828,35 @@ int64_t EVM::execute(const std::string& self, Contract& contract, const std::vec
         uint256 key = pop_num();
         uint256 value = pop_num();
         contract.storage[key] = value;
+        break;
+      }
+      case 0x5c: { // TLOAD
+        if (stack.empty()) throw std::runtime_error("stack underflow");
+        uint256 key = pop_num();
+        uint256 value = 0;
+        auto it = transient_storage.find(key);
+        if (it != transient_storage.end())
+          value = it->second;
+        push_num(value);
+        break;
+      }
+      case 0x5d: { // TSTORE
+        if (stack.size() < 2) throw std::runtime_error("stack underflow");
+        uint256 key = pop_num();
+        uint256 value = pop_num();
+        transient_storage[key] = value;
+        break;
+      }
+      case 0x5e: { // MCOPY
+        if (stack.size() < 3) throw std::runtime_error("stack underflow");
+        uint256 dst = pop_num();
+        uint256 src = pop_num();
+        uint256 length = pop_num();
+        for (uint64_t i = 0; i < length.convert_to<uint64_t>(); ++i)
+        {
+          memory[(dst + i).convert_to<uint64_t>()] =
+            memory[(src + i).convert_to<uint64_t>()];
+        }
         break;
       }
       case 0x80 ... 0x8f: { // DUP1 through DUP16
