@@ -2420,10 +2420,6 @@ namespace tools
       delete m_wallet;
     m_wallet = wal.release();
     boost::filesystem::path token_path = tools::get_default_data_dir();
-    if (m_wallet->nettype() == cryptonote::TESTNET)
-      token_path /= "testnet";
-    else if (m_wallet->nettype() == cryptonote::STAGENET)
-      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -2486,10 +2482,6 @@ namespace tools
       delete m_wallet;
     m_wallet = wal.release();
     boost::filesystem::path token_path = tools::get_default_data_dir();
-    if (m_wallet->nettype() == cryptonote::TESTNET)
-      token_path /= "testnet";
-    else if (m_wallet->nettype() == cryptonote::STAGENET)
-      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);

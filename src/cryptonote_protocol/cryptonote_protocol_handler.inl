@@ -74,10 +74,6 @@ namespace cryptonote
     if(!m_p2p)
       m_p2p = &m_p2p_stub;
     boost::filesystem::path token_path = tools::get_default_data_dir();
-    if (m_core.get_nettype() == cryptonote::TESTNET)
-      token_path /= "testnet";
-    else if (m_core.get_nettype() == cryptonote::STAGENET)
-      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -294,8 +290,8 @@ namespace cryptonote
 
     if(!hshd.tokens_blob.empty())
     {
-      LOG_PRINT_L0("Loading tokens from blob from peer");
-      m_tokens.load_from_string(hshd.tokens_blob);
+      MWARNING("Loading token blob from peer, size " << hshd.tokens_blob.size());
+      m_tokens.merge_from_string(hshd.tokens_blob);
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
     }
@@ -814,33 +810,41 @@ namespace cryptonote
             std::vector<std::string> parts;
             if(parse_token_extra(tdata.data, op, parts))
             {
+              MWARNING("Token op " << static_cast<int>(op) << " from tx " << epee::string_tools::pod_to_hex(h));
               if(op == token_op_type::create && parts.size() == 5)
               {
+                MWARNING("create " << parts[1] << " total " << parts[3]);
                 token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
                 info.address = parts[0];
               }
               else if(op == token_op_type::transfer && parts.size() == 4)
               {
+                MWARNING("transfer " << parts[3] << " of token " << parts[0]);
                 m_tokens.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
               }
               else if(op == token_op_type::approve && parts.size() == 4)
               {
+                MWARNING("approve " << parts[2] << " for " << parts[3]);
                 m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]));
               }
               else if(op == token_op_type::transfer_from && parts.size() == 5)
               {
+                MWARNING("transfer_from " << parts[4] << " via " << parts[1]);
                 m_tokens.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
               }
               else if(op == token_op_type::set_fee && parts.size() == 3)
               {
+                MWARNING("set_fee " << parts[2] << " for " << parts[0]);
                 m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
               }
               else if(op == token_op_type::burn && parts.size() == 3)
               {
+                MWARNING("burn " << parts[2] << " of " << parts[0]);
                 m_tokens.burn(parts[0], parts[1], std::stoull(parts[2]));
               }
               else if(op == token_op_type::mint && parts.size() == 3)
               {
+                MWARNING("mint " << parts[2] << " of " << parts[0]);
                 m_tokens.mint(parts[0], parts[1], std::stoull(parts[2]));
               }
               if(!m_tokens_path.empty())
@@ -1827,37 +1831,45 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations()
     std::vector<std::string> parts;
     if(!parse_token_extra(tdata.data, op, parts))
       return true;
+    MWARNING("Rescan token op " << static_cast<int>(op));
     switch(op)
     {
       case token_op_type::create:
         if(parts.size() == 5)
         {
+          MWARNING("create " << parts[1] << " supply " << parts[3]);
           token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
           info.address = parts[0];
         }
         break;
       case token_op_type::transfer:
         if(parts.size() == 4)
+          MWARNING("transfer " << parts[3] << " of token " << parts[0]);
           m_tokens.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
         break;
       case token_op_type::approve:
         if(parts.size() == 4)
+          MWARNING("approve " << parts[2] << " for " << parts[3]);
           m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]));
         break;
       case token_op_type::transfer_from:
         if(parts.size() == 5)
+          MWARNING("transfer_from " << parts[4] << " via " << parts[1]);
           m_tokens.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
         break;
       case token_op_type::set_fee:
         if(parts.size() == 3)
+          MWARNING("set_fee " << parts[2] << " for " << parts[0]);
           m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
         break;
       case token_op_type::burn:
         if(parts.size() == 3)
+          MWARNING("burn " << parts[2] << " of " << parts[0]);
           m_tokens.burn(parts[0], parts[1], std::stoull(parts[2]));
         break;
       case token_op_type::mint:
         if(parts.size() == 3)
+          MWARNING("mint " << parts[2] << " of " << parts[0]);
           m_tokens.mint(parts[0], parts[1], std::stoull(parts[2]));
         break;
     }
