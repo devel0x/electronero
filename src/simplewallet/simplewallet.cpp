@@ -53,6 +53,7 @@
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "simplewallet.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "cryptonote_config.h"
 #include "storages/http_abstract_invoke.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "crypto/crypto.h"  // for crypto::secret_key definition
@@ -2133,6 +2134,50 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("seed",
                            boost::bind(&simple_wallet::seed, this, _1),
                            tr("Display the Electrum-style mnemonic seed"));
+  m_cmd_binder.set_handler("token_create",
+                           boost::bind(&simple_wallet::token_create, this, _1),
+                           tr("token_create <name> <symbol> <supply> [creator_fee]"),
+                           tr("Create a new token."));
+  m_cmd_binder.set_handler("token_balance",
+                          boost::bind(&simple_wallet::token_balance, this, _1),
+                          tr("token_balance <token_address> [owner]"),
+                          tr("Show token balance."));
+  m_cmd_binder.set_handler("token_transfer",
+                          boost::bind(&simple_wallet::token_transfer, this, _1),
+                          tr("token_transfer <token_address> <to> <amount>"),
+                          tr("Transfer tokens."));
+  m_cmd_binder.set_handler("token_info",
+                          boost::bind(&simple_wallet::token_info, this, _1),
+                          tr("token_info <token_address>"),
+                           tr("Show token metadata."));
+  m_cmd_binder.set_handler("token_approve",
+                           boost::bind(&simple_wallet::token_approve, this, _1),
+                           tr("token_approve <name> <spender> <amount>"),
+                           tr("Approve token spending."));
+  m_cmd_binder.set_handler("token_transfer_from",
+                          boost::bind(&simple_wallet::token_transfer_from, this, _1),
+                          tr("token_transfer_from <token_address> <from> <to> <amount>"),
+                          tr("Transfer tokens using allowance."));
+  m_cmd_binder.set_handler("token_set_fee",
+                          boost::bind(&simple_wallet::token_set_fee, this, _1),
+                          tr("token_set_fee <token_address> <creator_fee>"),
+                          tr("Set or update creator fee."));
+  m_cmd_binder.set_handler("all_tokens",
+                           boost::bind(&simple_wallet::all_tokens, this, _1),
+                           tr("all_tokens"),
+                           tr("List all tokens."));
+  m_cmd_binder.set_handler("my_tokens",
+                           boost::bind(&simple_wallet::my_tokens, this, _1),
+                           tr("my_tokens"),
+                           tr("List tokens created by this wallet."));
+  m_cmd_binder.set_handler("token_history",
+                           boost::bind(&simple_wallet::token_history, this, _1),
+                           tr("token_history <token_address>"),
+                           tr("Show transfer history for a token."));
+  m_cmd_binder.set_handler("token_history_addr",
+                           boost::bind(&simple_wallet::token_history_addr, this, _1),
+                           tr("token_history_addr <address>"),
+                           tr("Show token transfers involving an address."));
   m_cmd_binder.set_handler("set",
                            boost::bind(&simple_wallet::set_variable, this, _1),
                            tr("set <option> [<value>]"),
@@ -3495,6 +3540,10 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     if (m_wallet->get_account().get_device()) {
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.
     // NOTE: this is_deprecated() refers to the wallet file format before becoming JSON. It does not refer to the "old english" seed words form of "deprecated" used elsewhere.
@@ -3571,6 +3620,8 @@ bool simple_wallet::close_wallet()
   try
   {
     m_wallet->store();
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
   }
   catch (const std::exception& e)
   {
@@ -3587,6 +3638,8 @@ bool simple_wallet::save(const std::vector<std::string> &args)
   {
     LOCK_IDLE_SCOPE();
     m_wallet->store();
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
     success_msg_writer() << tr("Wallet data saved");
   }
   catch (const std::exception& e)
@@ -5340,6 +5393,329 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
   transfer_new(local_args);
   return true;
 }
+//--------------------------------------------------------------------------------
+bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra)
+{
+  try
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, m_current_subaddress_account, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+    {
+      fail_msg_writer() << tr("failed to create token transaction");
+      return false;
+    }
+    m_wallet->commit_tx(ptx_vector[0]);
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    fail_msg_writer() << e.what();
+    return false;
+  }
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_create(const std::vector<std::string> &args)
+{
+  if (args.size() != 3 && args.size() != 4)
+  {
+    fail_msg_writer() << tr("usage: token_create <name> <symbol> <supply> [creator_fee]");
+    return true;
+  }
+  uint64_t supply = 0;
+  if (!cryptonote::parse_amount(supply, args[2]))
+  {
+    fail_msg_writer() << tr("invalid supply");
+    return true;
+  }
+  uint64_t creator_fee = 0;
+  if(args.size() == 4 && !cryptonote::parse_amount(creator_fee, args[3]))
+  {
+    fail_msg_writer() << tr("invalid creator_fee");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info &info = m_tokens.create(args[0], args[1], supply, creator, creator_fee);
+  std::string extra_str = make_token_extra(token_op_type::create, std::vector<std::string>{info.address, args[0], args[1], std::to_string(supply), creator, std::to_string(creator_fee)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("Token created with address: ") << info.address;
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_balance(const std::vector<std::string> &args)
+{
+  if (args.size() < 1 || args.size() > 2)
+  {
+    fail_msg_writer() << tr("usage: token_balance <token_address> [owner]");
+    return true;
+  }
+  std::string address = args.size() == 2 ? args[1] : m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  uint64_t bal = m_tokens.balance_of_by_address(args[0], address);
+  message_writer() << bal;
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_transfer(const std::vector<std::string> &args)
+{
+  if (args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: token_transfer <token_address> <to> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  if (!m_tokens.transfer_by_address(args[0], from, args[1], amount))
+  {
+    fail_msg_writer() << tr("token transfer failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_TRANSFER_FEE, ginfo.address, ginfo.is_subaddress});
+  if(tk->creator_fee > 0)
+    dsts.push_back({tk->creator_fee, creator_info.address, creator_info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::transfer, std::vector<std::string>{args[0], from, args[1], std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token transferred");
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_approve(const std::vector<std::string> &args)
+{
+  if (args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: token_approve <name> <spender> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_tokens.approve(args[0], owner, args[1], amount))
+  {
+    fail_msg_writer() << tr("token approve failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::approve, std::vector<std::string>{args[0], owner, args[1], std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token approval set");
+  return true;
+}
+//------------------------------------------------------------------------------------
+bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
+{
+  if (args.size() != 4)
+  {
+    fail_msg_writer() << tr("usage: token_transfer_from <token_address> <from> <to> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[3]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_tokens.transfer_from_by_address(args[0], spender, args[1], args[2], amount))
+  {
+    fail_msg_writer() << tr("token transfer_from failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_TRANSFER_FEE, ginfo.address, ginfo.is_subaddress});
+  if(tk->creator_fee > 0)
+    dsts.push_back({tk->creator_fee, creator_info.address, creator_info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::transfer_from, std::vector<std::string>{args[0], spender, args[1], args[2], std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token transferred from");
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::token_info(const std::vector<std::string> &args)
+{
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_info <token_address>");
+    return true;
+  }
+  const ::token_info *info = m_tokens.get_by_address(args[0]);
+  if(!info)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  message_writer() << tr("Name: ") << info->name;
+  message_writer() << tr("Symbol: ") << info->symbol;
+  message_writer() << tr("Supply: ") << info->total_supply;
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::all_tokens(const std::vector<std::string> &args)
+{
+  std::vector<::token_info> list;
+  m_tokens.list_all(list);
+  for(const auto &t : list)
+  {
+    message_writer() << t.name << " (" << t.symbol << ") " << t.address;
+  }
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::my_tokens(const std::vector<std::string> &args)
+{
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::vector<::token_info> list;
+  m_tokens.list_by_creator(creator, list);
+  for(const auto &t : list)
+  {
+    message_writer() << t.name << " (" << t.symbol << ") " << t.address;
+  }
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::token_history(const std::vector<std::string> &args)
+{
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_history <token_address>");
+    return true;
+  }
+  std::vector<token_transfer_record> hist;
+  m_tokens.history_by_token(args[0], hist);
+  for(const auto &h : hist)
+  {
+    message_writer() << h.from << " -> " << h.to << ": " << h.amount;
+  }
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
+{
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_history_addr <address>");
+    return true;
+  }
+  std::vector<token_transfer_record> hist;
+  m_tokens.history_by_account(args[0], hist);
+  for(const auto &h : hist)
+  {
+    message_writer() << h.token_address << " " << h.from << " -> " << h.to << ": " << h.amount;
+  }
+  return true;
+}
+bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
+{
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_set_fee <token_address> <creator_fee>");
+    return true;
+  }
+  uint64_t fee = 0;
+  if(!cryptonote::parse_amount(fee, args[1]))
+  {
+    fail_msg_writer() << tr("invalid creator_fee");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_tokens.set_creator_fee(args[0], creator, fee))
+  {
+    fail_msg_writer() << tr("not token creator or token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::set_fee, std::vector<std::string>{args[0], creator, std::to_string(fee)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+//------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::accept_loaded_tx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data&(size_t)> &get_tx, const std::string &extra_message)
 {
