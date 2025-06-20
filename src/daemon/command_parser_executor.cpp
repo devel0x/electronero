@@ -545,7 +545,6 @@ bool t_command_parser_executor::flush_txpool(const std::vector<std::string>& arg
 bool t_command_parser_executor::rescan_token_tx(const std::vector<std::string>& args)
 {
   if (!args.empty()) return false;
-
   return m_executor.rescan_token_tx();
 }
 

@@ -74,6 +74,10 @@ namespace cryptonote
     if(!m_p2p)
       m_p2p = &m_p2p_stub;
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_core.get_nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_core.get_nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -290,6 +294,7 @@ namespace cryptonote
 
     if(!hshd.tokens_blob.empty())
     {
+      LOG_PRINT_L0("Loading tokens from blob from peer");
       m_tokens.load_from_string(hshd.tokens_blob);
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);

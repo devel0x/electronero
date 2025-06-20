@@ -2287,6 +2287,9 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("rescan_bc",
                            boost::bind(&simple_wallet::rescan_blockchain, this, _1),
                            tr("Rescan the blockchain from scratch."));
+  m_cmd_binder.set_handler("rescan_token_tx",
+                           boost::bind(&simple_wallet::rescan_token_tx, this, _1),
+                           tr("Rescan the blockchain for token operations."));
   m_cmd_binder.set_handler("set_tx_note",
                            boost::bind(&simple_wallet::set_tx_note, this, _1),
                            tr("set_tx_note <txid> [free text note]"),
@@ -3307,6 +3310,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3404,6 +3411,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3455,6 +3466,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3496,6 +3511,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3576,6 +3595,10 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -5470,6 +5493,7 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_create(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_create called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3 && args.size() != 4)
@@ -5506,7 +5530,10 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    if(!m_tokens.save(m_tokens_path))
+      fail_msg_writer() << tr("Failed to save token data to ") << m_tokens_path;
+  }
   success_msg_writer() << tr("Token created with address: ") << info.address;
   return true;
 }
@@ -5548,6 +5575,7 @@ bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3)
@@ -5601,6 +5629,7 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_approve(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_approve called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3)
@@ -5637,6 +5666,7 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer_from called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 4)
@@ -5690,6 +5720,7 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 
 bool simple_wallet::token_burn(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_burn called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
@@ -5743,6 +5774,7 @@ bool simple_wallet::token_burn(const std::vector<std::string> &args)
 
 bool simple_wallet::token_mint(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_mint called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
@@ -5896,6 +5928,7 @@ bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 }
 bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_set_fee called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
@@ -6992,6 +7025,31 @@ bool simple_wallet::unspent_outputs(const std::vector<std::string> &args_)
 bool simple_wallet::rescan_blockchain(const std::vector<std::string> &args_)
 {
   return refresh_main(0, true);
+}
+
+bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
+{
+  if (!try_connect_to_daemon())
+    return true;
+  if (!m_wallet)
+  {
+    fail_msg_writer() << tr("wallet is null");
+    return true;
+  }
+
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request req;
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response res;
+  bool r = m_wallet->invoke_http_json("/rescan_token_tx", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (!err.empty())
+  {
+    fail_msg_writer() << tr("failed to rescan token tx: ") << err;
+    return true;
+  }
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  success_msg_writer() << tr("Token operations rescanned");
+  return true;
 }
 //----------------------------------------------------------------------------------------------------
 void simple_wallet::wallet_idle_thread()
