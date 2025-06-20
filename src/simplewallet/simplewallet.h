@@ -48,6 +48,7 @@
 #include "common/i18n.h"
 #include "common/password.h"
 #include "crypto/crypto.h"  // for definition of crypto::secret_key
+#include "token/token.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.simplewallet"
@@ -159,6 +160,14 @@ namespace cryptonote
     bool sweep_single(const std::vector<std::string> &args);
     bool sweep_unmixable(const std::vector<std::string> &args);
     bool donate(const std::vector<std::string> &args);
+    bool token_create(const std::vector<std::string> &args);
+    bool token_balance(const std::vector<std::string> &args);
+    bool token_transfer(const std::vector<std::string> &args);
+    bool token_approve(const std::vector<std::string> &args);
+    bool token_transfer_from(const std::vector<std::string> &args);
+    bool token_info(const std::vector<std::string> &args);
+    bool all_tokens(const std::vector<std::string> &args);
+    bool my_tokens(const std::vector<std::string> &args);
     bool sign_transfer(const std::vector<std::string> &args);
     bool submit_transfer(const std::vector<std::string> &args);
     std::vector<std::vector<cryptonote::tx_destination_entry>> split_amounts(
@@ -353,5 +362,8 @@ namespace cryptonote
     bool m_auto_refresh_refreshing;
     std::atomic<bool> m_in_manual_refresh;
     uint32_t m_current_subaddress_account;
+
+    token_store m_tokens;
+    std::string m_tokens_path;
   };
 }
