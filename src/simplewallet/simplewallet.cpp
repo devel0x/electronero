@@ -5465,7 +5465,7 @@ bool simple_wallet::token_balance(const std::vector<std::string> &args)
   }
   std::string address = args.size() == 2 ? args[1] : m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   uint64_t bal = m_tokens.balance_of_by_address(args[0], address);
-  message_writer() << bal;
+  message_writer() << cryptonote::print_money(bal);
   return true;
 }
 //------------------------------------------------------------------------------------
@@ -5649,32 +5649,56 @@ bool simple_wallet::my_tokens(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------
 bool simple_wallet::token_history(const std::vector<std::string> &args)
 {
-  if(args.size() != 1)
+  if(args.size() < 1 || args.size() > 3)
   {
-    fail_msg_writer() << tr("usage: token_history <token_address>");
+    fail_msg_writer() << tr("usage: token_history <token_address> [address] [in|out]");
     return true;
   }
+  std::string token = args[0];
+  std::string address;
+  std::string type;
+  if(args.size() == 2)
+  {
+    if(args[1] == "in" || args[1] == "out")
+      type = args[1];
+    else
+      address = args[1];
+  }
+  else if(args.size() == 3)
+  {
+    address = args[1];
+    type = args[2];
+  }
   std::vector<token_transfer_record> hist;
-  m_tokens.history_by_token(args[0], hist);
+  if(!address.empty())
+    m_tokens.history_by_token_account(token, address, hist);
+  else
+    m_tokens.history_by_token(token, hist);
   for(const auto &h : hist)
   {
-    message_writer() << h.from << " -> " << h.to << ": " << h.amount;
+    if(type == "in" && !address.empty() && h.to != address) continue;
+    if(type == "out" && !address.empty() && h.from != address) continue;
+    message_writer() << h.from << " -> " << h.to << ": " << cryptonote::print_money(h.amount);
   }
   return true;
 }
 //------------------------------------------------------------------------------
 bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 {
-  if(args.size() != 1)
+  if(args.size() < 1 || args.size() > 2)
   {
-    fail_msg_writer() << tr("usage: token_history_addr <address>");
+    fail_msg_writer() << tr("usage: token_history_addr <address> [in|out]");
     return true;
   }
+  std::string address = args[0];
+  std::string type = args.size() == 2 ? args[1] : std::string();
   std::vector<token_transfer_record> hist;
-  m_tokens.history_by_account(args[0], hist);
+  m_tokens.history_by_account(address, hist);
   for(const auto &h : hist)
   {
-    message_writer() << h.token_address << " " << h.from << " -> " << h.to << ": " << h.amount;
+    if(type == "in" && h.to != address) continue;
+    if(type == "out" && h.from != address) continue;
+    message_writer() << h.token_address << " " << h.from << " -> " << h.to << ": " << cryptonote::print_money(h.amount);
   }
   return true;
 }

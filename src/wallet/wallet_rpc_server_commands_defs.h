@@ -901,9 +901,13 @@ namespace wallet_rpc
     struct request
     {
       std::string token_address;
+      std::string address;
+      std::string type;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
+        KV_SERIALIZE(address)
+        KV_SERIALIZE(type)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -937,9 +941,11 @@ namespace wallet_rpc
     struct request
     {
       std::string address;
+      std::string type;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(address)
+        KV_SERIALIZE(type)
       END_KV_SERIALIZE_MAP()
     };
 

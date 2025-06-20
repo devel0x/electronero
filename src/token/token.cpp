@@ -254,3 +254,10 @@ void token_store::history_by_account(const std::string &account, std::vector<tok
             out.push_back(r);
 }
 
+void token_store::history_by_token_account(const std::string &token_address, const std::string &account, std::vector<token_transfer_record> &out) const
+{
+    for(const auto &r : transfer_history)
+        if(r.token_address == token_address && (r.from == account || r.to == account))
+            out.push_back(r);
+}
+

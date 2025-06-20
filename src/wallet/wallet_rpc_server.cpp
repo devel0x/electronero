@@ -3122,9 +3122,14 @@ bool wallet_rpc_server::on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HIS
 {
   if (!m_wallet) return not_open(er);
   std::vector<token_transfer_record> hist;
-  m_tokens.history_by_token(req.token_address, hist);
+  if(!req.address.empty())
+    m_tokens.history_by_token_account(req.token_address, req.address, hist);
+  else
+    m_tokens.history_by_token(req.token_address, hist);
   for(const auto &h : hist)
   {
+    if(req.type == "in" && !req.address.empty() && h.to != req.address) continue;
+    if(req.type == "out" && !req.address.empty() && h.from != req.address) continue;
     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::entry e;
     e.token_address = h.token_address;
     e.from = h.from;
@@ -3142,6 +3147,8 @@ bool wallet_rpc_server::on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKE
   m_tokens.history_by_account(req.address, hist);
   for(const auto &h : hist)
   {
+    if(req.type == "in" && h.to != req.address) continue;
+    if(req.type == "out" && h.from != req.address) continue;
     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::entry e;
     e.token_address = h.token_address;
     e.from = h.from;
