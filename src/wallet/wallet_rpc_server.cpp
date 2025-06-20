@@ -2943,7 +2943,10 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
   }
   m_wallet->commit_tx(ptx_vector[0]);
   if(!m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    if(!m_tokens.save(m_tokens_path))
+      MERROR("Failed to save token data to " << m_tokens_path);
+  }
   res.status = WALLET_RPC_STATUS_OK;
   res.token_address = tk.address;
   return true;

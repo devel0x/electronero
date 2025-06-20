@@ -5503,7 +5503,10 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    if(!m_tokens.save(m_tokens_path))
+      fail_msg_writer() << tr("Failed to save token data to ") << m_tokens_path;
+  }
   success_msg_writer() << tr("Token created with address: ") << info.address;
   return true;
 }
