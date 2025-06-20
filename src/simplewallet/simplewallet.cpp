@@ -5405,6 +5405,24 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
       fail_msg_writer() << tr("failed to create token transaction");
       return false;
     }
+    uint64_t token_fee = 0;
+    for(const auto &d : dsts)
+    {
+      if (d.amount != 1)
+        token_fee += d.amount;
+    }
+    uint64_t network_fee = ptx_vector[0].fee;
+    uint64_t total_fee = token_fee + network_fee;
+
+    std::string prompt = (boost::format(tr("Token transaction fee is %s (network %s + token %s). Is this okay?  (Y/Yes/N/No): "))
+        % print_money(total_fee) % print_money(network_fee) % print_money(token_fee)).str();
+    std::string accepted = input_line(prompt);
+    if (std::cin.eof() || !command_line::is_yes(accepted))
+    {
+      fail_msg_writer() << tr("transaction cancelled.");
+      return false;
+    }
+
     m_wallet->commit_tx(ptx_vector[0]);
     return true;
   }
