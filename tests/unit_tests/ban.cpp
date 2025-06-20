@@ -38,7 +38,13 @@
 #define MAKE_IPV4_ADDRESS(a,b,c,d) epee::net_utils::ipv4_network_address{MAKE_IP(a,b,c,d),0}
 
 namespace cryptonote {
-  class blockchain_storage;
+  // Minimal stub for compiling protocol handler with the test core.
+  class blockchain_storage
+  {
+  public:
+    template<typename F>
+    bool for_all_transactions(F&&) { return true; }
+  };
 }
 
 class test_core
