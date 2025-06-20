@@ -220,6 +220,22 @@ namespace cryptonote
     bool unblackball(const std::vector<std::string>& args);
     bool blackballed(const std::vector<std::string>& args);
     bool version(const std::vector<std::string>& args);
+    bool deploy_contract(const std::vector<std::string>& args);
+    bool call_contract(const std::vector<std::string>& args);
+    bool encode_call(const std::vector<std::string>& args);
+    bool contract_balance(const std::vector<std::string>& args);
+    bool deposit_contract(const std::vector<std::string>& args);
+    bool contract_owner(const std::vector<std::string>& args);
+    bool contract_storage(const std::vector<std::string>& args);
+    bool contract_logs(const std::vector<std::string>& args);
+    bool contract_code(const std::vector<std::string>& args);
+    bool contracts_by_owner(const std::vector<std::string>& args);
+    bool my_contracts(const std::vector<std::string>& args);
+    bool transfer_owner(const std::vector<std::string>& args);
+    bool contract_addresses(const std::vector<std::string>& args);
+    bool verify_contract(const std::vector<std::string>& args);
+    bool compile_contract(const std::vector<std::string>& args);
+    bool bulk_transfer(const std::vector<std::string>& args);
 
     uint64_t get_daemon_blockchain_height(std::string& err);
     bool try_connect_to_daemon(bool silent = false, uint32_t* version = nullptr);
