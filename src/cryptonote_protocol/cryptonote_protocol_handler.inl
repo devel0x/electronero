@@ -38,6 +38,8 @@
 #include <boost/interprocess/detail/atomic.hpp>
 #include <list>
 #include <ctime>
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "profile_tools.h"
@@ -70,6 +72,10 @@ namespace cryptonote
   {
     if(!m_p2p)
       m_p2p = &m_p2p_stub;
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -81,6 +87,8 @@ namespace cryptonote
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::deinit()
   {
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -279,6 +287,13 @@ namespace cryptonote
       }
     }
 
+    if(!hshd.tokens_blob.empty())
+    {
+      m_tokens.load_from_string(hshd.tokens_blob);
+      if(!m_tokens_path.empty())
+        m_tokens.save(m_tokens_path);
+    }
+
     context.m_remote_blockchain_height = hshd.current_height;
 
     uint64_t target = m_core.get_target_blockchain_height();
@@ -327,6 +342,7 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
+    m_tokens.store_to_string(hshd.tokens_blob);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
