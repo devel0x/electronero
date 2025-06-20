@@ -175,6 +175,26 @@ uint64_t token_store::allowance_of(const std::string &name, const std::string &o
     return sit == oit->second.end() ? 0 : sit->second;
 }
 
+bool token_store::burn(const std::string &address, const std::string &owner, uint64_t amount) {
+    token_info *tok = get_by_address(address);
+    if(!tok) return false;
+    auto it = tok->balances.find(owner);
+    if(it == tok->balances.end() || it->second < amount) return false;
+    it->second -= amount;
+    tok->total_supply -= amount;
+    record_transfer(address, owner, "", amount);
+    return true;
+}
+
+bool token_store::mint(const std::string &address, const std::string &creator, uint64_t amount) {
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator) return false;
+    tok->total_supply += amount;
+    tok->balances[creator] += amount;
+    record_transfer(address, "", creator, amount);
+    return true;
+}
+
 bool token_store::set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee)
 {
     token_info *tok = get_by_address(address);

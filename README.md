@@ -545,6 +545,8 @@ The following commands are available in both the CLI and RPC:
 * `token_transfer <token_address> <to> <amount>` – transfer tokens, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
 * `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account.
+* `token_burn <token_address> <amount>` – destroy tokens you own.
+* `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
 * `token_history <token_address>` – list transfers for a token.
@@ -556,4 +558,4 @@ Token state is stored in `~/.bitelectronero/tokens.bin` and kept in sync across 
 
 
 ### Future Token Improvements
-A future enhancement would add a `token_burn` command so holders can permanently destroy tokens they own. This would reduce both their balance and the token's total supply, with CLI and RPC methods mirroring the existing transfer operations.
+Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.

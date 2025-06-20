@@ -17,7 +17,9 @@ enum class token_op_type : uint8_t {
     transfer = 1,
     approve = 2,
     transfer_from = 3,
-    set_fee = 4
+    set_fee = 4,
+    burn = 5,
+    mint = 6
 };
 
 struct token_info {
@@ -95,6 +97,9 @@ public:
     uint64_t balance_of(const std::string &name, const std::string &account) const;
     uint64_t balance_of_by_address(const std::string &address, const std::string &account) const;
     uint64_t allowance_of(const std::string &name, const std::string &owner, const std::string &spender) const;
+
+    bool burn(const std::string &address, const std::string &owner, uint64_t amount);
+    bool mint(const std::string &address, const std::string &creator, uint64_t amount);
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
 

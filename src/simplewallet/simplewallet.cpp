@@ -2158,6 +2158,14 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer_from, this, _1),
                           tr("token_transfer_from <token_address> <from> <to> <amount>"),
                           tr("Transfer tokens using allowance."));
+  m_cmd_binder.set_handler("token_burn",
+                          boost::bind(&simple_wallet::token_burn, this, _1),
+                          tr("token_burn <token_address> <amount>"),
+                          tr("Burn tokens."));
+  m_cmd_binder.set_handler("token_mint",
+                          boost::bind(&simple_wallet::token_mint, this, _1),
+                          tr("token_mint <token_address> <amount>"),
+                          tr("Mint new tokens (creator only)."));
   m_cmd_binder.set_handler("token_set_fee",
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
@@ -5602,6 +5610,101 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token transferred from");
+  return true;
+}
+
+bool simple_wallet::token_burn(const std::vector<std::string> &args)
+{
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_burn <token_address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  if(!m_tokens.burn(args[0], owner, amount))
+  {
+    fail_msg_writer() << tr("token burn failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_TRANSFER_FEE, ginfo.address, ginfo.is_subaddress});
+  if(tk->creator_fee > 0)
+    dsts.push_back({tk->creator_fee, creator_info.address, creator_info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::burn, std::vector<std::string>{args[0], owner, std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token burned");
+  return true;
+}
+
+bool simple_wallet::token_mint(const std::vector<std::string> &args)
+{
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_mint <token_address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk || tk->creator != creator)
+  {
+    fail_msg_writer() << tr("not token creator or token not found");
+    return true;
+  }
+  if(!m_tokens.mint(args[0], creator, amount))
+  {
+    fail_msg_writer() << tr("token mint failed");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::mint, std::vector<std::string>{args[0], creator, std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token minted");
   return true;
 }
 //----------------------------------------------------------------------------------------------------
