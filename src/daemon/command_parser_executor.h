@@ -124,6 +124,7 @@ public:
   bool unban(const std::vector<std::string>& args);
 
   bool flush_txpool(const std::vector<std::string>& args);
+  bool rescan_token_tx(const std::vector<std::string>& args);
 
   bool output_histogram(const std::vector<std::string>& args);
 

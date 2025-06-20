@@ -241,6 +241,12 @@ t_command_server::t_command_server(
     , "Flush a transaction from the tx pool by its <txid>, or the whole tx pool."
     );
     m_command_lookup.set_handler(
+      "rescan_token_tx"
+    , std::bind(&t_command_parser_executor::rescan_token_tx, &m_parser, p::_1)
+    , "rescan_token_tx"
+    , "Rescan the blockchain for token operations"
+    );
+    m_command_lookup.set_handler(
       "output_histogram"
     , std::bind(&t_command_parser_executor::output_histogram, &m_parser, p::_1)
     , "output_histogram [@<amount>] <min_count> [<max_count>]"

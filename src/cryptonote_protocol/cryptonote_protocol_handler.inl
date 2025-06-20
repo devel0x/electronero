@@ -1804,6 +1804,62 @@ skip:
     m_block_queue.flush_spans(context.m_connection_id, false);
   }
 
+//-----------------------------------------------------------------------------------
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::rescan_token_operations()
+{
+  m_tokens = token_store();
+  auto &bc = m_core.get_blockchain_storage();
+  bc.for_all_transactions([this](const crypto::hash&, const cryptonote::transaction &tx){
+    std::vector<cryptonote::tx_extra_field> fields;
+    if(!cryptonote::parse_tx_extra(tx.extra, fields))
+      return true;
+    cryptonote::tx_extra_token_data tdata;
+    if(!find_tx_extra_field_by_type(fields, tdata))
+      return true;
+    token_op_type op;
+    std::vector<std::string> parts;
+    if(!parse_token_extra(tdata.data, op, parts))
+      return true;
+    switch(op)
+    {
+      case token_op_type::create:
+        if(parts.size() == 5)
+        {
+          token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
+          info.address = parts[0];
+        }
+        break;
+      case token_op_type::transfer:
+        if(parts.size() == 4)
+          m_tokens.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+        break;
+      case token_op_type::approve:
+        if(parts.size() == 4)
+          m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+        break;
+      case token_op_type::transfer_from:
+        if(parts.size() == 5)
+          m_tokens.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
+        break;
+      case token_op_type::set_fee:
+        if(parts.size() == 3)
+          m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
+        break;
+      case token_op_type::burn:
+        if(parts.size() == 3)
+          m_tokens.burn(parts[0], parts[1], std::stoull(parts[2]));
+        break;
+      case token_op_type::mint:
+        if(parts.size() == 3)
+          m_tokens.mint(parts[0], parts[1], std::stoull(parts[2]));
+        break;
+    }
+    return true;
+  });
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+}
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   void t_cryptonote_protocol_handler<t_core>::stop()

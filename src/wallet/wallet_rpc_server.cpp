@@ -2238,8 +2238,8 @@ namespace tools
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
-  bool wallet_rpc_server::on_rescan_spent(const wallet_rpc::COMMAND_RPC_RESCAN_SPENT::request& req, wallet_rpc::COMMAND_RPC_RESCAN_SPENT::response& res, epee::json_rpc::error& er)
-  {
+bool wallet_rpc_server::on_rescan_spent(const wallet_rpc::COMMAND_RPC_RESCAN_SPENT::request& req, wallet_rpc::COMMAND_RPC_RESCAN_SPENT::response& res, epee::json_rpc::error& er)
+{
     if (!m_wallet) return not_open(er);
     if (m_wallet->restricted())
     {
@@ -3251,6 +3251,23 @@ bool wallet_rpc_server::on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HIS
     e.amount = h.amount;
     res.transfers.push_back(e);
   }
+  return true;
+}
+//------------------------------------------------------------------------------------------------------------------------------
+bool wallet_rpc_server::on_rescan_token_tx(const wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::request& req, wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request daemon_req;
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response daemon_res;
+  bool r = m_wallet->invoke_http_json("/rescan_token_tx", daemon_req, daemon_res);
+  if (!r || daemon_res.status != CORE_RPC_STATUS_OK)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "Failed to rescan token tx";
+    return false;
+  }
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   return true;
 }
 
