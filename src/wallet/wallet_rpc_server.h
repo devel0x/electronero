@@ -139,14 +139,18 @@ namespace tools
         MAP_JON_RPC_WE("token_create",       on_token_create,       wallet_rpc::COMMAND_RPC_TOKEN_CREATE)
         MAP_JON_RPC_WE("token_balance",      on_token_balance,      wallet_rpc::COMMAND_RPC_TOKEN_BALANCE)
         MAP_JON_RPC_WE("token_transfer",     on_token_transfer,     wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER)
+        MAP_JON_RPC_WE("token_mint",        on_token_mint,        wallet_rpc::COMMAND_RPC_TOKEN_MINT)
         MAP_JON_RPC_WE("token_approve",      on_token_approve,      wallet_rpc::COMMAND_RPC_TOKEN_APPROVE)
         MAP_JON_RPC_WE("token_transfer_from",on_token_transfer_from,wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM)
+        MAP_JON_RPC_WE("token_burn",       on_token_burn,       wallet_rpc::COMMAND_RPC_TOKEN_BURN)
         MAP_JON_RPC_WE("token_info",        on_token_info,        wallet_rpc::COMMAND_RPC_TOKEN_INFO)
         MAP_JON_RPC_WE("all_tokens",        on_all_tokens,        wallet_rpc::COMMAND_RPC_TOKEN_ALL)
         MAP_JON_RPC_WE("my_tokens",         on_my_tokens,         wallet_rpc::COMMAND_RPC_TOKEN_MINE)
         MAP_JON_RPC_WE("token_history",     on_token_history,     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY)
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
+        MAP_JON_RPC_WE("token_pause",      on_token_pause,      wallet_rpc::COMMAND_RPC_TOKEN_PAUSE)
+        MAP_JON_RPC_WE("token_unpause",    on_token_unpause,    wallet_rpc::COMMAND_RPC_TOKEN_UNPAUSE)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -219,14 +223,18 @@ namespace tools
       bool on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er);
       bool on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er);
+      bool on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINT::response& res, epee::json_rpc::error& er);
       bool on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er);
+      bool on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er);
       bool on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::request& req, wallet_rpc::COMMAND_RPC_TOKEN_INFO::response& res, epee::json_rpc::error& er);
       bool on_all_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_ALL::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALL::response& res, epee::json_rpc::error& er);
       bool on_my_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINE::response& res, epee::json_rpc::error& er);
       bool on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er);
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
+      bool on_token_pause(const wallet_rpc::COMMAND_RPC_TOKEN_PAUSE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_PAUSE::response& res, epee::json_rpc::error& er);
+      bool on_token_unpause(const wallet_rpc::COMMAND_RPC_TOKEN_UNPAUSE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_UNPAUSE::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);

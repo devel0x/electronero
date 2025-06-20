@@ -545,6 +545,10 @@ The following commands are available in both the CLI and RPC:
 * `token_transfer <token_address> <to> <amount>` – transfer tokens, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
 * `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account.
+* `token_burn <token_address> <amount>` – destroy tokens permanently, reducing total supply.
+* `token_mint <token_address> <to> <amount>` – create new tokens (creator only).
+* `token_pause <token_address>` – pause a token so transfers and minting are disabled.
+* `token_unpause <token_address>` – resume a paused token.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
 * `token_history <token_address>` – list transfers for a token.
@@ -556,4 +560,4 @@ Token state is stored in `~/.bitelectronero/tokens.bin` and kept in sync across 
 
 
 ### Future Token Improvements
-A future enhancement would add a `token_burn` command so holders can permanently destroy tokens they own. This would reduce both their balance and the token's total supply, with CLI and RPC methods mirroring the existing transfer operations.
+Token burning is now supported using the `token_burn` command which reduces both the caller's balance and the token's total supply. Token creators can also mint additional supply with the `token_mint` command. Tokens may be paused and resumed with `token_pause` and `token_unpause` to temporarily stop transfers.

@@ -163,6 +163,8 @@ namespace cryptonote
     bool token_create(const std::vector<std::string> &args);
     bool token_balance(const std::vector<std::string> &args);
     bool token_transfer(const std::vector<std::string> &args);
+    bool token_mint(const std::vector<std::string> &args);
+    bool token_burn(const std::vector<std::string> &args);
     bool token_approve(const std::vector<std::string> &args);
     bool token_transfer_from(const std::vector<std::string> &args);
     bool token_info(const std::vector<std::string> &args);
@@ -171,6 +173,8 @@ namespace cryptonote
     bool token_history(const std::vector<std::string> &args);
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
+    bool token_pause(const std::vector<std::string> &args);
+    bool token_unpause(const std::vector<std::string> &args);
 
     bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
     bool sign_transfer(const std::vector<std::string> &args);

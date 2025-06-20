@@ -17,7 +17,11 @@ enum class token_op_type : uint8_t {
     transfer = 1,
     approve = 2,
     transfer_from = 3,
-    set_fee = 4
+    set_fee = 4,
+    burn = 5,
+    mint = 6,
+    pause = 7,
+    unpause = 8
 };
 
 struct token_info {
@@ -27,6 +31,7 @@ struct token_info {
     std::string creator;
     uint64_t total_supply = 0;
     uint64_t creator_fee = 0;
+    bool paused = false;
     std::unordered_map<std::string, uint64_t> balances;
     std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allowances;
 
@@ -38,6 +43,7 @@ struct token_info {
         a & address;
         a & creator;
         a & creator_fee;
+        a & paused;
         a & balances;
         a & allowances;
     }
@@ -92,11 +98,17 @@ public:
     bool approve(const std::string &name, const std::string &owner, const std::string &spender, uint64_t amount);
     bool transfer_from(const std::string &name, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount);
     bool transfer_from_by_address(const std::string &address, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount);
+    bool burn(const std::string &name, const std::string &from, uint64_t amount);
+    bool burn_by_address(const std::string &address, const std::string &from, uint64_t amount);
+    bool mint(const std::string &name, const std::string &creator, const std::string &to, uint64_t amount);
+    bool mint_by_address(const std::string &address, const std::string &creator, const std::string &to, uint64_t amount);
     uint64_t balance_of(const std::string &name, const std::string &account) const;
     uint64_t balance_of_by_address(const std::string &address, const std::string &account) const;
     uint64_t allowance_of(const std::string &name, const std::string &owner, const std::string &spender) const;
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
+    bool pause(const std::string &address, const std::string &creator);
+    bool unpause(const std::string &address, const std::string &creator);
 
     void history_by_token(const std::string &token_address, std::vector<token_transfer_record> &out) const;
     void history_by_account(const std::string &account, std::vector<token_transfer_record> &out) const;

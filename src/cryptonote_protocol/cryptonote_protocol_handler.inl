@@ -829,6 +829,22 @@ namespace cryptonote
               {
                 m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
               }
+              else if(op == token_op_type::burn && parts.size() == 3)
+              {
+                m_tokens.burn_by_address(parts[0], parts[1], std::stoull(parts[2]));
+              }
+              else if(op == token_op_type::mint && parts.size() == 4)
+              {
+                m_tokens.mint_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+              }
+              else if(op == token_op_type::pause && parts.size() == 2)
+              {
+                m_tokens.pause(parts[0], parts[1]);
+              }
+              else if(op == token_op_type::unpause && parts.size() == 2)
+              {
+                m_tokens.unpause(parts[0], parts[1]);
+              }
               if(!m_tokens_path.empty())
                 m_tokens.save(m_tokens_path);
             }
