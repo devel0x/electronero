@@ -3,8 +3,6 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <sstream>
-#include <boost/filesystem.hpp>
-#include "common/util.h"
 #include "crypto/hash.h"
 #include "crypto/crypto.h"
 #include "string_tools.h"
@@ -34,8 +32,6 @@ bool token_store::load_from_string(const std::string &blob) {
 }
 
 bool token_store::save(const std::string &file) {
-    boost::filesystem::path path(file);
-    tools::create_directories_if_necessary(path.parent_path().string());
     std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
     if (!ofs)
         return false;
