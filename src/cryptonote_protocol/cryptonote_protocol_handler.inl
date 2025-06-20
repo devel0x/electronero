@@ -1808,21 +1808,24 @@ skip:
 
 //-----------------------------------------------------------------------------------
 template<class t_core>
-void t_cryptonote_protocol_handler<t_core>::rescan_token_operations()
+void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
   m_tokens = token_store();
   auto &bc = m_core.get_blockchain_storage();
-  bc.for_all_transactions([this](const crypto::hash&, const cryptonote::transaction &tx){
+  uint64_t top = bc.get_current_blockchain_height();
+  if (from_height >= top)
+    return;
+  auto process_tx = [this](const cryptonote::transaction &tx){
     std::vector<cryptonote::tx_extra_field> fields;
     if(!cryptonote::parse_tx_extra(tx.extra, fields))
-      return true;
+      return;
     cryptonote::tx_extra_token_data tdata;
     if(!find_tx_extra_field_by_type(fields, tdata))
-      return true;
+      return;
     token_op_type op;
     std::vector<std::string> parts;
     if(!parse_token_extra(tdata.data, op, parts))
-      return true;
+      return;
     switch(op)
     {
       case token_op_type::create:
@@ -1857,8 +1860,19 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations()
           m_tokens.mint(parts[0], parts[1], std::stoull(parts[2]));
         break;
     }
+  };
+
+  uint64_t end = top - 1;
+  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx](uint64_t, const crypto::hash&, const cryptonote::block& b){
+    process_tx(b.miner_tx);
+    std::list<cryptonote::transaction> txs;
+    std::list<crypto::hash> missed;
+    bc.get_transactions(b.tx_hashes, txs, missed);
+    for (const auto &tx : txs)
+      process_tx(tx);
     return true;
   });
+
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
 }

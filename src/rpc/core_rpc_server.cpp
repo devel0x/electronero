@@ -1737,7 +1737,7 @@ namespace cryptonote
 
     try
     {
-      m_core.get_protocol()->rescan_token_operations();
+      m_core.get_protocol()->rescan_token_operations(req.from_height);
       res.status = CORE_RPC_STATUS_OK;
     }
     catch (const std::exception &e)

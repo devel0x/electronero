@@ -1551,9 +1551,10 @@ bool t_rpc_command_executor::flush_txpool(const std::string &txid)
     return true;
 }
 
-bool t_rpc_command_executor::rescan_token_tx()
+bool t_rpc_command_executor::rescan_token_tx(uint64_t from_height)
 {
     cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request req;
+    req.from_height = from_height;
     cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response res;
     std::string fail_message = "Unsuccessful";
     epee::json_rpc::error error_resp;
