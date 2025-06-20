@@ -1730,6 +1730,23 @@ namespace cryptonote
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
+  //----------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_rescan_token_tx(const COMMAND_RPC_RESCAN_TOKEN_TX::request& req, COMMAND_RPC_RESCAN_TOKEN_TX::response& res, epee::json_rpc::error& error_resp)
+  {
+    PERF_TIMER(on_rescan_token_tx);
+
+    try
+    {
+      m_core.get_protocol()->rescan_token_operations();
+      res.status = CORE_RPC_STATUS_OK;
+    }
+    catch (const std::exception &e)
+    {
+      res.status = std::string("Failed: ") + e.what();
+    }
+
+    return true;
+  }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_output_histogram(const COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request& req, COMMAND_RPC_GET_OUTPUT_HISTOGRAM::response& res, epee::json_rpc::error& error_resp)
   {

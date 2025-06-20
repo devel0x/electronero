@@ -2239,6 +2239,9 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("rescan_spent",
                            boost::bind(&simple_wallet::rescan_spent, this, _1),
                            tr("Rescan the blockchain for spent outputs."));
+  m_cmd_binder.set_handler("rescan_token_tx",
+                           boost::bind(&simple_wallet::rescan_token_tx, this, _1),
+                           tr("Rescan the blockchain for token operations."));
   m_cmd_binder.set_handler("get_tx_key",
                            boost::bind(&simple_wallet::get_tx_key, this, _1),
                            tr("get_tx_key <txid>"),
@@ -5520,6 +5523,26 @@ bool simple_wallet::token_balance(const std::vector<std::string> &args)
   std::string address = args.size() == 2 ? args[1] : m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   uint64_t bal = m_tokens.balance_of_by_address(args[0], address);
   message_writer() << cryptonote::print_money(bal);
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
+{
+  if (!try_connect_to_daemon())
+    return true;
+
+  COMMAND_RPC_RESCAN_TOKEN_TX::request req;
+  COMMAND_RPC_RESCAN_TOKEN_TX::response res;
+  bool r = m_wallet->invoke_http_json("/rescan_token_tx", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+  {
+    if(!m_tokens_path.empty())
+      m_tokens.load(m_tokens_path);
+    success_msg_writer() << tr("Token operations rescanned");
+  }
+  else
+    fail_msg_writer() << err;
   return true;
 }
 //------------------------------------------------------------------------------------

@@ -80,6 +80,26 @@ namespace
 
 namespace tools
 {
+  inline std::string interpret_rpc_response(bool ok, const std::string& status)
+  {
+    std::string err;
+    if (ok)
+    {
+      if (status == CORE_RPC_STATUS_BUSY)
+      {
+        err = wallet_rpc_server::tr("daemon is busy. Please try again later.");
+      }
+      else if (status != CORE_RPC_STATUS_OK)
+      {
+        err = status;
+      }
+    }
+    else
+    {
+      err = wallet_rpc_server::tr("possibly lost connection to daemon");
+    }
+    return err;
+  }
   const char* wallet_rpc_server::tr(const char* str)
   {
     return i18n_translate(str, "tools::wallet_rpc_server");
@@ -2465,6 +2485,30 @@ namespace tools
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    return true;
+  }
+  //----------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_rescan_token_tx(const wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::request& req, wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_wallet->restricted())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+
+    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request dreq;
+    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response dres;
+    bool r = m_wallet->invoke_http_json("/rescan_token_tx", dreq, dres);
+    std::string err = interpret_rpc_response(r, dres.status);
+    if (!err.empty())
+    {
+      er.message = err;
+      return false;
+    }
+    if(!m_tokens_path.empty())
+      m_tokens.load(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------

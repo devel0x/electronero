@@ -108,6 +108,7 @@ namespace cryptonote
     void log_connections();
     std::list<connection_info> get_connections();
     const block_queue &get_block_queue() const { return m_block_queue; }
+    void rescan_token_operations() override;
     void stop();
     void on_connection_close(cryptonote_connection_context &context);
   private:
