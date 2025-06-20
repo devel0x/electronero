@@ -190,6 +190,7 @@ namespace cryptonote
     bool save_watch_only(const std::vector<std::string> &args);
     bool set_variable(const std::vector<std::string> &args);
     bool rescan_spent(const std::vector<std::string> &args);
+    bool rescan_token_tx(const std::vector<std::string> &args);
     bool set_log(const std::vector<std::string> &args);
     bool get_tx_key(const std::vector<std::string> &args);
     bool check_tx_key(const std::vector<std::string> &args);

@@ -138,6 +138,7 @@ public:
   bool unban(const std::string &ip);
 
   bool flush_txpool(const std::string &txid);
+  bool rescan_token_tx();
 
   bool output_histogram(const std::vector<uint64_t> &amounts, uint64_t min_count, uint64_t max_count);
 
