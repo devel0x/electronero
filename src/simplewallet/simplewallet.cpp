@@ -5473,6 +5473,8 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
 bool simple_wallet::token_create(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_create called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if (args.size() != 3 && args.size() != 4)
   {
     fail_msg_writer() << tr("usage: token_create <name> <symbol> <supply> [creator_fee]");
@@ -5514,6 +5516,8 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_balance(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if (args.size() < 1 || args.size() > 2)
   {
     fail_msg_writer() << tr("usage: token_balance <token_address> [owner]");
@@ -5528,6 +5532,8 @@ bool simple_wallet::token_balance(const std::vector<std::string> &args)
 bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_transfer called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if (args.size() != 3)
   {
     fail_msg_writer() << tr("usage: token_transfer <token_address> <to> <amount>");
@@ -5580,6 +5586,8 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 bool simple_wallet::token_approve(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_approve called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if (args.size() != 3)
   {
     fail_msg_writer() << tr("usage: token_approve <name> <spender> <amount>");
@@ -5615,6 +5623,8 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
 bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_transfer_from called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if (args.size() != 4)
   {
     fail_msg_writer() << tr("usage: token_transfer_from <token_address> <from> <to> <amount>");
@@ -5667,6 +5677,8 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 bool simple_wallet::token_burn(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_burn called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_burn <token_address> <amount>");
@@ -5719,6 +5731,8 @@ bool simple_wallet::token_burn(const std::vector<std::string> &args)
 bool simple_wallet::token_mint(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_mint called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_mint <token_address> <amount>");
@@ -5763,6 +5777,8 @@ bool simple_wallet::token_mint(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::token_info(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() != 1)
   {
     fail_msg_writer() << tr("usage: token_info <token_address>");
@@ -5782,6 +5798,8 @@ bool simple_wallet::token_info(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------
 bool simple_wallet::all_tokens(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::vector<::token_info> list;
   m_tokens.list_all(list);
   for(const auto &t : list)
@@ -5793,6 +5811,8 @@ bool simple_wallet::all_tokens(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------
 bool simple_wallet::my_tokens(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
@@ -5805,6 +5825,8 @@ bool simple_wallet::my_tokens(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------
 bool simple_wallet::token_history(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() < 1 || args.size() > 3)
   {
     fail_msg_writer() << tr("usage: token_history <token_address> [address] [in|out]");
@@ -5841,6 +5863,8 @@ bool simple_wallet::token_history(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------
 bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 {
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() < 1 || args.size() > 2)
   {
     fail_msg_writer() << tr("usage: token_history_addr <address> [in|out]");
@@ -5861,6 +5885,8 @@ bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
 {
   LOG_PRINT_L0("token_set_fee called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_set_fee <token_address> <creator_fee>");

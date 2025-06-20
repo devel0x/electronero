@@ -8,6 +8,8 @@
 #include "crypto/hash.h"
 #include "crypto/crypto.h"
 #include "string_tools.h"
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 
 bool token_store::load(const std::string &file) {
     MWARNING("Loading token file " << file);
