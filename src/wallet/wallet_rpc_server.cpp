@@ -2400,6 +2400,10 @@ namespace tools
       delete m_wallet;
     m_wallet = wal.release();
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -2462,6 +2466,10 @@ namespace tools
       delete m_wallet;
     m_wallet = wal.release();
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -2916,6 +2924,7 @@ namespace tools
   //------------------------------------------------------------------------------------------------------------------------------
 bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_create called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -2964,6 +2973,7 @@ bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BAL
 //---------------------------------------------------------------------------------
 bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_transfer called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -3011,6 +3021,7 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
 //---------------------------------------------------------------------------------
 bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_approve called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -3039,6 +3050,7 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
 //---------------------------------------------------------------------------------
 bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_transfer_from called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -3086,6 +3098,7 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
 
 bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_burn called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -3133,6 +3146,7 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
 
 bool wallet_rpc_server::on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINT::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_mint called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
@@ -3279,6 +3293,7 @@ bool wallet_rpc_server::on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKE
 }
 bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er)
 {
+  LOG_PRINT_L0("RPC token_set_fee called, tokens path: " << m_tokens_path);
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);

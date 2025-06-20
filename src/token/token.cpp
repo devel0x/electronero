@@ -3,6 +3,8 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <sstream>
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 #include "crypto/hash.h"
 #include "crypto/crypto.h"
 #include "string_tools.h"
@@ -14,6 +16,7 @@
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.token"
 
 bool token_store::load(const std::string &file) {
+    MWARNING("Loading token file " << file);
     std::ifstream ifs(file, std::ios::binary);
     if (!ifs)
     {
@@ -28,6 +31,7 @@ bool token_store::load(const std::string &file) {
         tokens = std::move(data.tokens);
         transfer_history = std::move(data.transfers);
         rebuild_indexes();
+        MWARNING("Loaded " << tokens.size() << " tokens from " << file);
     }
     catch(const std::exception &e)
     {
@@ -49,12 +53,7 @@ bool token_store::load_from_string(const std::string &blob) {
 }
 
 bool token_store::save(const std::string &file) {
-    // ensure the directory exists before attempting to write
-    boost::filesystem::path p(file);
-    boost::system::error_code ec;
-    if (!boost::filesystem::exists(p.parent_path()))
-        tools::create_directories_if_necessary(p.parent_path().string());
-
+    MWARNING("Saving tokens to " << file);
     std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
     if (!ofs)
     {
@@ -66,6 +65,7 @@ bool token_store::save(const std::string &file) {
         boost::archive::binary_oarchive oa(ofs);
         token_store_data data{tokens, transfer_history};
         oa << data;
+        MWARNING("Saved " << tokens.size() << " tokens to " << file);
     }
     catch(const std::exception &e)
     {
