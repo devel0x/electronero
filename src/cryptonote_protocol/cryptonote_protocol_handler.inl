@@ -293,6 +293,7 @@ namespace cryptonote
 
     if(!hshd.tokens_blob.empty())
     {
+      LOG_PRINT_L0("Loading tokens from blob from peer");
       m_tokens.load_from_string(hshd.tokens_blob);
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);

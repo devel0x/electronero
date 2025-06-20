@@ -5487,6 +5487,7 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_create(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_create called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3 && args.size() != 4)
@@ -5545,6 +5546,7 @@ bool simple_wallet::token_balance(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3)
@@ -5598,6 +5600,7 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_approve(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_approve called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 3)
@@ -5634,6 +5637,7 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer_from called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if (args.size() != 4)
@@ -5687,6 +5691,7 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 
 bool simple_wallet::token_burn(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_burn called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
@@ -5740,6 +5745,7 @@ bool simple_wallet::token_burn(const std::vector<std::string> &args)
 
 bool simple_wallet::token_mint(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_mint called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
@@ -5893,6 +5899,7 @@ bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 }
 bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_set_fee called, tokens path: " << m_tokens_path);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   if(args.size() != 2)
