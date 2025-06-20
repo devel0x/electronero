@@ -30,6 +30,8 @@
 #pragma once
 
 #include "device.hpp"
+#include <map>
+#include <memory>
 
 namespace hw {
 
