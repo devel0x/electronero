@@ -2461,6 +2461,10 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -2913,6 +2917,8 @@ namespace tools
 bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::vector<cryptonote::tx_destination_entry> dsts;
   cryptonote::address_parse_info info;
   if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
@@ -2946,6 +2952,8 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
 bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string address = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   res.balance = m_tokens.balance_of_by_address(req.token_address, address);
   return true;
@@ -2954,6 +2962,8 @@ bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BAL
 bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
@@ -2999,6 +3009,8 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
 bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   res.success = m_tokens.approve(req.name, owner, req.spender, req.amount);
   cryptonote::address_parse_info self;
@@ -3025,6 +3037,8 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
 bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
@@ -3070,6 +3084,8 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
 bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
@@ -3115,6 +3131,8 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
 bool wallet_rpc_server::on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINT::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
@@ -3158,6 +3176,8 @@ bool wallet_rpc_server::on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::
 bool wallet_rpc_server::on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::request& req, wallet_rpc::COMMAND_RPC_TOKEN_INFO::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   const ::token_info *info = m_tokens.get_by_address(req.token_address);
   if(!info)
   {
@@ -3174,6 +3194,8 @@ bool wallet_rpc_server::on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::
 bool wallet_rpc_server::on_all_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_ALL::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALL::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::vector<::token_info> list;
   m_tokens.list_all(list);
   for(const auto &t : list)
@@ -3191,6 +3213,8 @@ bool wallet_rpc_server::on_all_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_ALL::r
 bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINE::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
@@ -3209,6 +3233,8 @@ bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::r
 bool wallet_rpc_server::on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::vector<token_transfer_record> hist;
   if(!req.address.empty())
     m_tokens.history_by_token_account(req.token_address, req.address, hist);
@@ -3231,6 +3257,8 @@ bool wallet_rpc_server::on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HIS
 bool wallet_rpc_server::on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   std::vector<token_transfer_record> hist;
   m_tokens.history_by_account(req.address, hist);
   for(const auto &h : hist)
@@ -3249,6 +3277,8 @@ bool wallet_rpc_server::on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKE
 bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
   {

@@ -6,6 +6,8 @@
 #include "crypto/hash.h"
 #include "crypto/crypto.h"
 #include "string_tools.h"
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 
 bool token_store::load(const std::string &file) {
     std::ifstream ifs(file, std::ios::binary);
@@ -32,6 +34,12 @@ bool token_store::load_from_string(const std::string &blob) {
 }
 
 bool token_store::save(const std::string &file) {
+    // ensure the directory exists before attempting to write
+    boost::filesystem::path p(file);
+    boost::system::error_code ec;
+    if (!boost::filesystem::exists(p.parent_path()))
+        tools::create_directories_if_necessary(p.parent_path().string());
+
     std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
     if (!ofs)
         return false;
