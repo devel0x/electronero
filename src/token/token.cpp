@@ -52,6 +52,20 @@ bool token_store::load_from_string(const std::string &blob) {
     return true;
 }
 
+bool token_store::merge_from_string(const std::string &blob) {
+    std::istringstream iss(blob);
+    boost::archive::binary_iarchive ia(iss);
+    token_store_data data;
+    ia >> data;
+    for (const auto &kv : data.tokens) {
+        if (tokens.find(kv.first) == tokens.end())
+            tokens.emplace(kv);
+    }
+    transfer_history.insert(transfer_history.end(), data.transfers.begin(), data.transfers.end());
+    rebuild_indexes();
+    return true;
+}
+
 bool token_store::save(const std::string &file) {
     MWARNING("Saving tokens to " << file);
     std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
