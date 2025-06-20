@@ -75,7 +75,8 @@ namespace cryptonote
     boost::filesystem::path token_path = tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
-    m_tokens.load(m_tokens_path);
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -289,6 +290,7 @@ namespace cryptonote
 
     if(!hshd.tokens_blob.empty())
     {
+      LOG_PRINT_L0("Loading tokens from blob from peer");
       m_tokens.load_from_string(hshd.tokens_blob);
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);

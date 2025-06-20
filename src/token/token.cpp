@@ -3,20 +3,26 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <sstream>
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 #include "crypto/hash.h"
 #include "crypto/crypto.h"
 #include "string_tools.h"
 
 bool token_store::load(const std::string &file) {
+    LOG_PRINT_L0("Loading token file " << file);
     std::ifstream ifs(file, std::ios::binary);
-    if (!ifs)
+    if (!ifs) {
+        LOG_PRINT_L0("Failed to open token file " << file);
         return false;
+    }
     boost::archive::binary_iarchive ia(ifs);
     token_store_data data;
     ia >> data;
     tokens = std::move(data.tokens);
     transfer_history = std::move(data.transfers);
     rebuild_indexes();
+    LOG_PRINT_L0("Loaded " << tokens.size() << " tokens from " << file);
     return true;
 }
 
@@ -32,12 +38,18 @@ bool token_store::load_from_string(const std::string &blob) {
 }
 
 bool token_store::save(const std::string &file) {
+    boost::filesystem::path path(file);
+    tools::create_directories_if_necessary(path.parent_path().string());
+    LOG_PRINT_L0("Saving tokens to " << file);
     std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
-    if (!ofs)
+    if (!ofs) {
+        LOG_PRINT_L0("Failed to open token file for writing " << file);
         return false;
+    }
     boost::archive::binary_oarchive oa(ofs);
     token_store_data data{tokens, transfer_history};
     oa << data;
+    LOG_PRINT_L0("Saved " << tokens.size() << " tokens to " << file);
     return true;
 }
 

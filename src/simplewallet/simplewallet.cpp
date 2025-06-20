@@ -3302,6 +3302,13 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3393,6 +3400,13 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3438,6 +3452,13 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3472,6 +3493,13 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   if (!m_wallet)
   {
     return false;
+  }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3551,7 +3579,8 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     boost::filesystem::path token_path = tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
-    m_tokens.load(m_tokens_path);
+    if(!m_tokens.load(m_tokens_path))
+      LOG_PRINT_L0("Failed to load tokens from " << m_tokens_path);
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.
     // NOTE: this is_deprecated() refers to the wallet file format before becoming JSON. It does not refer to the "old english" seed words form of "deprecated" used elsewhere.
@@ -5443,6 +5472,7 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_create(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_create called, tokens path: " << m_tokens_path);
   if (args.size() != 3 && args.size() != 4)
   {
     fail_msg_writer() << tr("usage: token_create <name> <symbol> <supply> [creator_fee]");
@@ -5497,6 +5527,7 @@ bool simple_wallet::token_balance(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer called, tokens path: " << m_tokens_path);
   if (args.size() != 3)
   {
     fail_msg_writer() << tr("usage: token_transfer <token_address> <to> <amount>");
@@ -5548,6 +5579,7 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_approve(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_approve called, tokens path: " << m_tokens_path);
   if (args.size() != 3)
   {
     fail_msg_writer() << tr("usage: token_approve <name> <spender> <amount>");
@@ -5582,6 +5614,7 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_transfer_from called, tokens path: " << m_tokens_path);
   if (args.size() != 4)
   {
     fail_msg_writer() << tr("usage: token_transfer_from <token_address> <from> <to> <amount>");
@@ -5633,6 +5666,7 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
 
 bool simple_wallet::token_burn(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_burn called, tokens path: " << m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_burn <token_address> <amount>");
@@ -5684,6 +5718,7 @@ bool simple_wallet::token_burn(const std::vector<std::string> &args)
 
 bool simple_wallet::token_mint(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_mint called, tokens path: " << m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_mint <token_address> <amount>");
@@ -5825,6 +5860,7 @@ bool simple_wallet::token_history_addr(const std::vector<std::string> &args)
 }
 bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
 {
+  LOG_PRINT_L0("token_set_fee called, tokens path: " << m_tokens_path);
   if(args.size() != 2)
   {
     fail_msg_writer() << tr("usage: token_set_fee <token_address> <creator_fee>");
