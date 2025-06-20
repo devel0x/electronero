@@ -38,6 +38,8 @@
 #include <boost/interprocess/detail/atomic.hpp>
 #include <list>
 #include <ctime>
+#include <boost/filesystem.hpp>
+#include "common/util.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "profile_tools.h"
@@ -70,6 +72,10 @@ namespace cryptonote
   {
     if(!m_p2p)
       m_p2p = &m_p2p_stub;
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -81,6 +87,8 @@ namespace cryptonote
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::deinit()
   {
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -279,6 +287,13 @@ namespace cryptonote
       }
     }
 
+    if(!hshd.tokens_blob.empty())
+    {
+      m_tokens.load_from_string(hshd.tokens_blob);
+      if(!m_tokens_path.empty())
+        m_tokens.save(m_tokens_path);
+    }
+
     context.m_remote_blockchain_height = hshd.current_height;
 
     uint64_t target = m_core.get_target_blockchain_height();
@@ -327,6 +342,7 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
+    m_tokens.store_to_string(hshd.tokens_blob);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -778,6 +794,47 @@ namespace cryptonote
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
       m_core.handle_incoming_tx(*tx_blob_it, tvc, false, true, false);
+      cryptonote::transaction tx;
+      crypto::hash h, ph;
+      if (cryptonote::parse_and_validate_tx_from_blob(*tx_blob_it, tx, h, ph))
+      {
+        std::vector<cryptonote::tx_extra_field> fields;
+        if (cryptonote::parse_tx_extra(tx.extra, fields))
+        {
+          cryptonote::tx_extra_token_data tdata;
+          if(find_tx_extra_field_by_type(fields, tdata))
+          {
+            token_op_type op;
+            std::vector<std::string> parts;
+            if(parse_token_extra(tdata.data, op, parts))
+            {
+              if(op == token_op_type::create && parts.size() == 5)
+              {
+                token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
+                info.address = parts[0];
+              }
+              else if(op == token_op_type::transfer && parts.size() == 4)
+              {
+                m_tokens.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+              }
+              else if(op == token_op_type::approve && parts.size() == 4)
+              {
+                m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+              }
+              else if(op == token_op_type::transfer_from && parts.size() == 5)
+              {
+                m_tokens.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
+              }
+              else if(op == token_op_type::set_fee && parts.size() == 3)
+              {
+                m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
+              }
+              if(!m_tokens_path.empty())
+                m_tokens.save(m_tokens_path);
+            }
+          }
+        }
+      }
       if(tvc.m_verifivation_failed)
       {
         LOG_PRINT_CCONTEXT_L1("Tx verification failed, dropping connection");
