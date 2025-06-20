@@ -3302,6 +3302,12 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3393,6 +3399,12 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3438,6 +3450,12 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     return false;
   }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
+  }
 
   if (!m_subaddress_lookahead.empty())
   {
@@ -3472,6 +3490,12 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   if (!m_wallet)
   {
     return false;
+  }
+  {
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
   }
 
   if (!m_subaddress_lookahead.empty())
