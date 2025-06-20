@@ -3304,6 +3304,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3401,6 +3405,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3452,6 +3460,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3493,6 +3505,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   }
   {
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3573,6 +3589,10 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
     boost::filesystem::path token_path = tools::get_default_data_dir();
+    if (m_wallet->nettype() == cryptonote::TESTNET)
+      token_path /= "testnet";
+    else if (m_wallet->nettype() == cryptonote::STAGENET)
+      token_path /= "stagenet";
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
