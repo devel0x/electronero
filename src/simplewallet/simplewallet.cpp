@@ -5715,7 +5715,6 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   success_msg_writer() << tr("creator fee updated");
   return true;
 }
-//------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::accept_loaded_tx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data&(size_t)> &get_tx, const std::string &extra_message)
 {

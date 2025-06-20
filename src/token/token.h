@@ -5,12 +5,12 @@
 #include <vector>
 #include <unordered_map>
 #include <boost/serialization/serialization.hpp>
-#include <boost/serialization/unordered_map.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/string.hpp>
-#define BOOST_SERIALIZATION_VERSION_HPP
-#include <boost/serialization/library_version_type.hpp>
+// #define BOOST_SERIALIZATION_VERSION_HPP
 #include <boost/serialization/version.hpp>
+#include <boost/serialization/library_version_type.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/unordered_map.hpp>
 
 enum class token_op_type : uint8_t {
     create = 0,

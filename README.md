@@ -535,5 +535,6 @@ Use `token_info` with the token address to query a token's metadata.
 `token_history` prints transfers for a token address while `token_history_addr` lists all token transfers involving a given wallet address.
 All token transactions use your wallet's default ring size (mixin) when constructing the underlying fee transaction, ensuring they are valid and private by default.
 
+
 ### Future Token Improvements
 A future enhancement would add a `token_burn` command so holders can permanently destroy tokens they own. This would reduce both their balance and the token's total supply, with CLI and RPC methods mirroring the existing transfer operations.
