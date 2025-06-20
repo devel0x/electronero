@@ -37,5 +37,6 @@ monero_add_library(cryptonote_protocol ${CRYPTONOTE_PROTOCOL})
 target_link_libraries(cryptonote_protocol
   PUBLIC
     p2p
+    token
   PRIVATE
     ${EXTRA_LIBRARIES})
