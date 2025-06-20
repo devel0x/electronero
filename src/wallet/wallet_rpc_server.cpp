@@ -2461,6 +2461,10 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
+    boost::filesystem::path token_path = tools::get_default_data_dir();
+    token_path /= "tokens.bin";
+    m_tokens_path = token_path.string();
+    m_tokens.load(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
