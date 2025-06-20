@@ -527,13 +527,21 @@ If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
 
 ## Token Smart Contracts
-Electronero now includes a simple token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, and `my_tokens` commands to manage ERC20-like tokens.
-Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
-Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
-Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `~/.bitelectronero/tokens.bin` and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet and `my_tokens` to see those you created.
-Use `token_info` with the token address to query a token's metadata.
-`token_history` prints transfers for a token address while `token_history_addr` lists all token transfers involving a given wallet address.
-All token transactions use your wallet's default ring size (mixin) when constructing the underlying fee transaction, ensuring they are valid and private by default.
+Electronero provides a lightweight token system similar to ERC‑20. Token actions are encoded in the transaction `tx_extra` field and shared between peers. The following commands are available in both the CLI and RPC:
+
+* `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
+* `token_balance <token_address> [owner]` – show the balance for an address.
+* `token_transfer <token_address> <to> <amount>` – transfer tokens, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
+* `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
+* `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account.
+* `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
+* `token_info <token_address>` – display token metadata.
+* `token_history <token_address>` – list transfers for a token.
+* `token_history_addr <address>` – list transfers involving an address.
+* `all_tokens` – list every known token.
+* `my_tokens` – list tokens created by the current wallet.
+
+Token state is stored in `~/.bitelectronero/tokens.bin` and kept in sync across nodes. Each operation remains private thanks to ring signatures and normal transaction handling.
 
 
 ### Future Token Improvements
