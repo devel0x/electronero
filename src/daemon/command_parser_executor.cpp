@@ -549,6 +549,12 @@ bool t_command_parser_executor::rescan_token_tx(const std::vector<std::string>& 
   return m_executor.rescan_token_tx();
 }
 
+bool t_command_parser_executor::rescan_token_tx(const std::vector<std::string>& args)
+{
+  if (!args.empty()) return false;
+  return m_executor.rescan_token_tx();
+}
+
 bool t_command_parser_executor::output_histogram(const std::vector<std::string>& args)
 {
   std::vector<uint64_t> amounts;

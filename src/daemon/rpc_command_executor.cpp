@@ -1578,6 +1578,33 @@ bool t_rpc_command_executor::rescan_token_tx()
     return true;
 }
 
+bool t_rpc_command_executor::rescan_token_tx()
+{
+    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request req;
+    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response res;
+    std::string fail_message = "Unsuccessful";
+    epee::json_rpc::error error_resp;
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->json_rpc_request(req, res, "rescan_token_tx", fail_message.c_str()))
+        {
+            return true;
+        }
+    }
+    else
+    {
+        if (!m_rpc_server->on_rescan_token_tx(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    tools::success_msg_writer() << "Token operations rescanned";
+    return true;
+}
+
 bool t_rpc_command_executor::output_histogram(const std::vector<uint64_t> &amounts, uint64_t min_count, uint64_t max_count)
 {
     cryptonote::COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request req;
