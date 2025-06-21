@@ -291,6 +291,8 @@ bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<s
     if(!(iss >> op_int))
         return false;
     op = static_cast<token_op_type>(op_int);
+    if (iss.peek() == '\t')
+        iss.get();
     std::string field;
     while(std::getline(iss, field, '\t'))
         fields.push_back(field);
