@@ -80,6 +80,10 @@ namespace cryptonote
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -93,6 +97,8 @@ namespace cryptonote
   {
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_sfts_path.empty())
+      m_sfts.save(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -298,6 +304,13 @@ namespace cryptonote
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
     }
+    if(!hshd.sfts_blob.empty())
+    {
+      MWARNING("Loading SFT blob from peer, size " << hshd.sfts_blob.size());
+      m_sfts.merge_from_string(hshd.sfts_blob);
+      if(!m_sfts_path.empty())
+        m_sfts.save(m_sfts_path);
+    }
 
     context.m_remote_blockchain_height = hshd.current_height;
 
@@ -348,6 +361,7 @@ namespace cryptonote
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
     m_tokens.store_to_string(hshd.tokens_blob);
+    m_sfts.store_to_string(hshd.sfts_blob);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -804,6 +818,7 @@ namespace cryptonote
       if (cryptonote::parse_and_validate_tx_from_blob(*tx_blob_it, tx, h, ph))
       {
         process_token_tx(tx);
+        process_sft_tx(tx);
       }
       if(tvc.m_verifivation_failed)
       {
@@ -1771,12 +1786,14 @@ template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
   m_tokens = token_store();
+  m_sfts = sft_store();
   auto &bc = m_core.get_blockchain_storage();
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
     return;
   auto process_tx = [this](const cryptonote::transaction &tx){
     process_token_tx(tx);
+    process_sft_tx(tx);
   };
 
   uint64_t end = top - 1;
@@ -1809,6 +1826,8 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
 
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1863,6 +1882,57 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_sft_tx(const cryptonote::transaction &tx)
+{
+  std::vector<cryptonote::tx_extra_field> fields;
+  if(!cryptonote::parse_tx_extra(tx.extra, fields))
+    return;
+  cryptonote::tx_extra_sft_data sdata;
+  if(!find_tx_extra_field_by_type(fields, sdata))
+    return;
+  sft_op_type op;
+  std::vector<std::string> parts;
+  if(!parse_sft_extra(sdata.data, op, parts))
+    return;
+  switch(op)
+  {
+    case sft_op_type::create:
+      if(parts.size() >= 5)
+      {
+        uint64_t creator_fee = parts.size() == 6 ? std::stoull(parts[5]) : 0;
+        std::vector<std::pair<uint64_t,uint64_t>> pairs;
+        std::stringstream ss(parts[3]);
+        std::string p;
+        while(std::getline(ss,p,','))
+        {
+          size_t pos = p.find(':');
+          if(pos==std::string::npos) continue;
+          pairs.push_back({std::stoull(p.substr(0,pos)), std::stoull(p.substr(pos+1))});
+        }
+        sft_info &info = m_sfts.create(parts[1], parts[2], pairs, parts[4], creator_fee);
+        info.address = parts[0];
+      }
+      break;
+    case sft_op_type::transfer:
+      if(parts.size() == 5)
+        m_sfts.transfer(parts[0], std::stoull(parts[1]), parts[2], parts[3], std::stoull(parts[4]));
+      break;
+    case sft_op_type::mint:
+      if(parts.size() == 4)
+        m_sfts.mint(parts[0], std::stoull(parts[1]), parts[2], std::stoull(parts[3]));
+      break;
+    case sft_op_type::burn:
+      if(parts.size() == 4)
+        m_sfts.burn(parts[0], std::stoull(parts[1]), parts[2], std::stoull(parts[3]));
+      break;
+  }
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
