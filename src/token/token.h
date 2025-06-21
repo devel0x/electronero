@@ -77,6 +77,7 @@ public:
     bool load(const std::string &file);
     bool save(const std::string &file);
     bool load_from_string(const std::string &blob);
+    bool merge_from_string(const std::string &blob);
     bool store_to_string(std::string &blob) const;
 
     const token_info *get(const std::string &name) const;
