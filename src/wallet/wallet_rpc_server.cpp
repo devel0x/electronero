@@ -2973,7 +2973,8 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
     er.message = "Invalid governance address";
     return false;
   }
-  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  uint64_t deployment_fee = req.supply * TOKEN_DEPLOYMENT_FEE_PER_TOKEN;
+  dsts.push_back({deployment_fee, info.address, info.is_subaddress});
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info &tk = m_tokens.create(req.name, req.symbol, req.supply, creator, req.creator_fee);
   std::string extra_str = make_token_extra(token_op_type::create, std::vector<std::string>{tk.address, req.name, req.symbol, std::to_string(req.supply), creator, std::to_string(req.creator_fee)});

@@ -528,7 +528,7 @@ electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing
 
 ## XRC-20 Token Smart Contracts
 Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, and `my_tokens` commands to manage ERC20-like tokens.
-Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
+Creating a token requires paying a deployment fee of `1,000,000` atomic units for each token minted. This fee is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
 Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
 Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `~/.bitelectronero/tokens.bin` and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet and `my_tokens` to see those you created.
 Use `token_info` with the token address to query a token's metadata.
@@ -540,7 +540,7 @@ Electronero provides a lightweight XRC-20 token system similar to ERC‑20.
 Token actions are encoded in the transaction `tx_extra` field and shared between peers. 
 The following commands are available in both the CLI and RPC:
 
-* `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
+* `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `supply * 1000000` atomic units to `GOVERNANCE_WALLET_ADDRESS`.
 * `token_balance <token_address> [owner]` – show the balance for an address.
 * `token_transfer <token_address> <to> <amount>` – transfer tokens, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
 * `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
