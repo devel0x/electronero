@@ -3242,6 +3242,7 @@ bool wallet_rpc_server::on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::
   res.name = info->name;
   res.symbol = info->symbol;
   res.supply = info->total_supply;
+  res.creator_fee = info->creator_fee;
   return true;
 }
 

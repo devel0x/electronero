@@ -5793,7 +5793,8 @@ bool simple_wallet::token_info(const std::vector<std::string> &args)
   }
   message_writer() << tr("Name: ") << info->name;
   message_writer() << tr("Symbol: ") << info->symbol;
-  message_writer() << tr("Supply: ") << info->total_supply;
+  message_writer() << tr("Supply: ") << cryptonote::print_money(info->total_supply);
+  message_writer() << tr("Creator fee: ") << cryptonote::print_money(info->creator_fee);
   return true;
 }
 //------------------------------------------------------------------------------
