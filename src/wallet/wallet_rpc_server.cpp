@@ -35,6 +35,8 @@
 #include "include_base_utils.h"
 using namespace epee;
 
+#include "rapidjson/document.h"
+
 #include "wallet_rpc_server.h"
 #include "token/token.h"
 #include "wallet/wallet_args.h"
@@ -3364,6 +3366,189 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_create(const wallet_rpc::COMMAND_RPC_PROPOSAL_CREATE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_CREATE::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC proposal_create called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(req.payload.size() > PROPOSAL_MAX_PAYLOAD_SIZE)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "proposal payload too large";
+    return false;
+  }
+  rapidjson::Document d;
+  if(d.Parse(req.payload.c_str()).HasParseError())
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "invalid proposal json";
+    return false;
+  }
+  std::string desc = d.HasMember("description") && d["description"].IsString() ? d["description"].GetString() : std::string();
+  std::string sig = d.HasMember("signature") && d["signature"].IsString() ? d["signature"].GetString() : std::string();
+  proposal_info &p = m_tokens.create_proposal(req.title, creator, desc, sig);
+  res.id = p.id;
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({PROPOSAL_CREATE_FEE, info.address, info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra;
+  std::string extra_str = make_token_extra(token_op_type::proposal_create, std::vector<std::string>{creator, epee::string_tools::buff_to_hex_nodelimer(req.payload)});
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+  if(ptx_vector.empty())
+    return false;
+  m_wallet->commit_tx(ptx_vector[0]);
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_vote(const wallet_rpc::COMMAND_RPC_PROPOSAL_VOTE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_VOTE::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC proposal_vote called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  res.success = m_tokens.vote_proposal(req.id, req.vote == "yes");
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), m_wallet->get_account().get_public_address_str(m_wallet->nettype()));
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({PROPOSAL_VOTE_FEE, info.address, info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra;
+  std::string extra_str = make_token_extra(token_op_type::proposal_vote, std::vector<std::string>{req.id, req.vote});
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+      m_wallet->commit_tx(ptx_vector[0]);
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_end(const wallet_rpc::COMMAND_RPC_PROPOSAL_END::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_END::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC proposal_end called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_tokens.end_proposal(req.id, creator);
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra;
+  std::string extra_str = make_token_extra(token_op_type::proposal_end, std::vector<std::string>{req.id, creator});
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+      m_wallet->commit_tx(ptx_vector[0]);
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_info(const wallet_rpc::COMMAND_RPC_PROPOSAL_INFO::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_INFO::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  const proposal_info *p = m_tokens.get_proposal(req.id);
+  if(!p)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "proposal not found";
+    return false;
+  }
+  res.id = p->id;
+  res.title = p->title;
+  res.description = p->description;
+  res.signature = p->signature;
+  res.creator = p->creator;
+  res.active = p->active;
+  res.yes = p->yes;
+  res.no = p->no;
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_all(const wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::vector<proposal_info> list;
+  m_tokens.list_proposals(list);
+  for(const auto &p : list)
+  {
+    wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::entry e;
+    e.id = p.id;
+    e.title = p.title;
+    e.description = p.description;
+    e.signature = p.signature;
+    e.creator = p.creator;
+    e.active = p.active;
+    e.yes = p.yes;
+    e.no = p.no;
+    res.proposals.push_back(e);
+  }
+  return true;
+}
+
+bool wallet_rpc_server::on_proposal_active(const wallet_rpc::COMMAND_RPC_PROPOSAL_ACTIVE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_ACTIVE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::vector<proposal_info> list;
+  m_tokens.list_active_proposals(list);
+  for(const auto &p : list)
+  {
+    wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::entry e;
+    e.id = p.id;
+    e.title = p.title;
+    e.description = p.description;
+    e.signature = p.signature;
+    e.creator = p.creator;
+    e.active = p.active;
+    e.yes = p.yes;
+    e.no = p.no;
+    res.proposals.push_back(e);
+  }
   return true;
 }
 

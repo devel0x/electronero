@@ -41,6 +41,7 @@
 #include <ctime>
 #include <boost/filesystem.hpp>
 #include "common/util.h"
+#include "rapidjson/document.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_core/blockchain.h"
@@ -1851,6 +1852,30 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::set_fee:
       if(parts.size() == 3)
         m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case token_op_type::proposal_create:
+      if(parts.size() == 2)
+      {
+        std::string payload_hex = parts[1];
+        std::string payload;
+        epee::string_tools::parse_hexstr_to_binbuff(payload_hex, payload);
+        rapidjson::Document d;
+        if(!d.Parse(payload.c_str()).HasParseError() && d.HasMember("title"))
+        {
+          std::string title = d["title"].GetString();
+          std::string desc = d.HasMember("description") && d["description"].IsString() ? d["description"].GetString() : std::string();
+          std::string sig = d.HasMember("signature") && d["signature"].IsString() ? d["signature"].GetString() : std::string();
+          m_tokens.create_proposal(title, parts[0], desc, sig);
+        }
+      }
+      break;
+    case token_op_type::proposal_vote:
+      if(parts.size() == 2)
+        m_tokens.vote_proposal(parts[0], parts[1] == "yes");
+      break;
+    case token_op_type::proposal_end:
+      if(parts.size() == 2)
+        m_tokens.end_proposal(parts[0], parts[1]);
       break;
     case token_op_type::burn:
       if(parts.size() == 3)

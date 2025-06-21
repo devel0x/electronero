@@ -2186,6 +2186,30 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::token_history_addr, this, _1),
                            tr("token_history_addr <address>"),
                            tr("Show token transfers involving an address."));
+  m_cmd_binder.set_handler("proposal_create",
+                           boost::bind(&simple_wallet::proposal_create, this, _1),
+                           tr("proposal_create <title>"),
+                           tr("Create a governance proposal."));
+  m_cmd_binder.set_handler("proposal_vote",
+                           boost::bind(&simple_wallet::proposal_vote, this, _1),
+                           tr("proposal_vote <id> <yes|no>"),
+                           tr("Vote on a proposal."));
+  m_cmd_binder.set_handler("proposal_end",
+                           boost::bind(&simple_wallet::proposal_end, this, _1),
+                           tr("proposal_end <id>"),
+                           tr("End a proposal you created."));
+  m_cmd_binder.set_handler("proposal_info",
+                           boost::bind(&simple_wallet::proposal_info_cmd, this, _1),
+                           tr("proposal_info <id or title>"),
+                           tr("Show details of a proposal."));
+  m_cmd_binder.set_handler("proposals",
+                           boost::bind(&simple_wallet::proposals, this, _1),
+                           tr("proposals"),
+                           tr("List all proposals."));
+  m_cmd_binder.set_handler("active_proposals",
+                           boost::bind(&simple_wallet::active_proposals, this, _1),
+                           tr("active_proposals"),
+                           tr("List active proposals."));
   m_cmd_binder.set_handler("set",
                            boost::bind(&simple_wallet::set_variable, this, _1),
                            tr("set <option> [<value>]"),
@@ -5921,6 +5945,182 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+
+
+bool simple_wallet::proposal_create(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: proposal_create <title>");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  boost::filesystem::path wallet_dir = boost::filesystem::path(m_wallet_file).parent_path();
+  boost::filesystem::path json_path = wallet_dir / (args[0] + ".json");
+  std::string json;
+  if(!epee::file_io_utils::load_file_to_string(json_path.string(), json))
+  {
+    fail_msg_writer() << tr("could not read ") << json_path.string();
+    return true;
+  }
+  if(json.size() > PROPOSAL_MAX_PAYLOAD_SIZE)
+  {
+    fail_msg_writer() << tr("proposal payload too large");
+    return true;
+  }
+  rapidjson::Document d;
+  if(d.Parse(json.c_str()).HasParseError())
+  {
+    fail_msg_writer() << tr("invalid proposal json");
+    return true;
+  }
+  std::string desc = d.HasMember("description") && d["description"].IsString() ? d["description"].GetString() : std::string();
+  std::string sig = d.HasMember("signature") && d["signature"].IsString() ? d["signature"].GetString() : std::string();
+  proposal_info &p = m_tokens.create_proposal(args[0], creator, desc, sig);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({PROPOSAL_CREATE_FEE, ginfo.address, ginfo.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::proposal_create,
+                                           std::vector<std::string>{creator,
+                                           epee::string_tools::buff_to_hex_nodelimer(json)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("proposal id: ") << p.id;
+  return true;
+}
+
+bool simple_wallet::proposal_vote(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: proposal_vote <id> <yes|no>");
+    return true;
+  }
+  bool yes = args[1] == "yes";
+  if(!m_tokens.vote_proposal(args[0], yes))
+  {
+    fail_msg_writer() << tr("proposal not found or closed");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), m_wallet->get_account().get_public_address_str(m_wallet->nettype()));
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({PROPOSAL_VOTE_FEE, ginfo.address, ginfo.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::proposal_vote, std::vector<std::string>{args[0], yes ? "yes" : "no"});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("vote submitted");
+  return true;
+}
+
+bool simple_wallet::proposal_end(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: proposal_end <id>");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_tokens.end_proposal(args[0], creator))
+  {
+    fail_msg_writer() << tr("proposal not found or not creator");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::proposal_end, std::vector<std::string>{args[0], creator});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("proposal ended");
+  return true;
+}
+
+bool simple_wallet::proposal_info_cmd(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: proposal_info <id or title>");
+    return true;
+  }
+  const proposal_info *p = m_tokens.get_proposal(args[0]);
+  if(!p)
+  {
+    fail_msg_writer() << tr("proposal not found");
+    return true;
+  }
+  message_writer() << tr("ID: ") << p->id;
+  message_writer() << tr("Title: ") << p->title;
+  message_writer() << tr("Description: ") << p->description;
+  if(!p->signature.empty())
+    message_writer() << tr("Signature: ") << p->signature;
+  message_writer() << tr("Creator: ") << p->creator;
+  message_writer() << tr("Status: ") << (p->active ? "active" : "ended");
+  message_writer() << tr("Yes votes: ") << p->yes << tr(" No votes: ") << p->no;
+  return true;
+}
+
+bool simple_wallet::proposals(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::vector<proposal_info> list;
+  m_tokens.list_proposals(list);
+  for(const auto &p : list)
+  {
+    message_writer() << p.id << ": " << p.title << " yes:" << p.yes << " no:" << p.no << (p.active ? "" : " [ended]");
+  }
+  return true;
+}
+
+bool simple_wallet::active_proposals(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::vector<proposal_info> list;
+  m_tokens.list_active_proposals(list);
+  for(const auto &p : list)
+  {
+    message_writer() << p.id << ": " << p.title << " yes:" << p.yes << " no:" << p.no;
+  }
   return true;
 }
 //----------------------------------------------------------------------------------------------------

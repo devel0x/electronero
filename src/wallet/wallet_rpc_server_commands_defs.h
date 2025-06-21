@@ -1043,6 +1043,168 @@ namespace wallet_rpc
     };
   };
 
+
+  struct COMMAND_RPC_PROPOSAL_CREATE
+  {
+    struct request
+    {
+      std::string title;
+      std::string payload;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(title)
+        KV_SERIALIZE(payload)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_PROPOSAL_VOTE
+  {
+    struct request
+    {
+      std::string id;
+      std::string vote;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(vote)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_PROPOSAL_END
+  {
+    struct request
+    {
+      std::string id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_PROPOSAL_INFO
+  {
+    struct request
+    {
+      std::string id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string id;
+      std::string title;
+      std::string description;
+      std::string signature;
+      std::string creator;
+      bool active;
+      uint64_t yes;
+      uint64_t no;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(title)
+        KV_SERIALIZE(description)
+        KV_SERIALIZE(signature)
+        KV_SERIALIZE(creator)
+        KV_SERIALIZE(active)
+        KV_SERIALIZE(yes)
+        KV_SERIALIZE(no)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_PROPOSAL_ALL
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct entry
+    {
+      std::string id;
+      std::string title;
+      std::string description;
+      std::string signature;
+      std::string creator;
+      bool active;
+      uint64_t yes;
+      uint64_t no;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(title)
+        KV_SERIALIZE(description)
+        KV_SERIALIZE(signature)
+        KV_SERIALIZE(creator)
+        KV_SERIALIZE(active)
+        KV_SERIALIZE(yes)
+        KV_SERIALIZE(no)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<entry> proposals;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(proposals)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_PROPOSAL_ACTIVE
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<COMMAND_RPC_PROPOSAL_ALL::entry> proposals;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(proposals)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_STORE
   {
     struct request
