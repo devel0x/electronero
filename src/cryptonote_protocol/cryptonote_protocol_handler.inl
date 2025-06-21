@@ -291,13 +291,9 @@ namespace cryptonote
       }
     }
 
-    if(!hshd.tokens_blob.empty())
-    {
-      MWARNING("Loading token blob from peer, size " << hshd.tokens_blob.size());
-      m_tokens.merge_from_string(hshd.tokens_blob);
-      if(!m_tokens_path.empty())
-        m_tokens.save(m_tokens_path);
-    }
+    // Token blob data used to be merged here but is now ignored. Tokens
+    // synchronize through transactions or a manual rescan instead of the
+    // handshake payload to keep memory usage low.
 
     context.m_remote_blockchain_height = hshd.current_height;
 
@@ -347,7 +343,8 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
-    m_tokens.store_to_string(hshd.tokens_blob);
+    // Token state is no longer sent during the handshake.
+    hshd.tokens_blob.clear();
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------

@@ -198,6 +198,8 @@ namespace cryptonote
     uint64_t cumulative_difficulty;
     crypto::hash  top_id;
     uint8_t top_version;
+    // Previously contained the serialized token state. Kept for compatibility
+    // but left empty in new versions.
     std::string tokens_blob;
 
     BEGIN_KV_SERIALIZE_MAP()

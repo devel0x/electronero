@@ -554,7 +554,7 @@ The following commands are available in both the CLI and RPC:
 * `all_tokens` – list every known token.
 * `my_tokens` – list tokens created by the current wallet.
 
-Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in sync across nodes. Each operation remains private thanks to ring signatures and normal transaction handling.
+Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in sync across nodes. The handshake previously shared this state as a single blob, but the token blob has been removed to reduce memory usage. Nodes now learn about tokens from transactions or by running `rescan_token_operations`. Each operation remains private thanks to ring signatures and normal transaction handling.
 
 
 ### Future Token Improvements
