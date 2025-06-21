@@ -559,3 +559,12 @@ Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in syn
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+### XRC-1155 Semi-Fungible Tokens
+Electronero introduces **XRC‑1155** contracts for managing semi-fungible tokens (SFTs).
+An XRC‑1155 contract can hold many token IDs, each with its own supply, allowing
+game items or collectibles to share one address. SFT data is stored in
+`~/.bitelectronero/sfts.bin` via the new `sft_store` library. Developers can
+create contracts programmatically and perform operations such as minting,
+burning, and transferring individual token IDs. Wallet and RPC interfaces will
+integrate this functionality in upcoming releases.
