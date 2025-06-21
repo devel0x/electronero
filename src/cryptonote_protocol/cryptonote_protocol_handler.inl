@@ -43,6 +43,7 @@
 #include "common/util.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "wallet/wallet_messenger.h"
 #include "cryptonote_core/blockchain.h"
 #include "profile_tools.h"
 #include "net/network_throttle-detail.hpp"
@@ -804,6 +805,7 @@ namespace cryptonote
       if (cryptonote::parse_and_validate_tx_from_blob(*tx_blob_it, tx, h, ph))
       {
         process_token_tx(tx);
+        process_message_tx(tx);
       }
       if(tvc.m_verifivation_failed)
       {
@@ -1777,6 +1779,7 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
     return;
   auto process_tx = [this](const cryptonote::transaction &tx){
     process_token_tx(tx);
+    process_message_tx(tx);
   };
 
   uint64_t end = top - 1;
@@ -1863,6 +1866,21 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_message_tx(const cryptonote::transaction &tx)
+{
+  std::vector<cryptonote::tx_extra_field> fields;
+  if(!cryptonote::parse_tx_extra(tx.extra, fields))
+    return;
+  cryptonote::tx_extra_message_data mdata;
+  if(!find_tx_extra_field_by_type(fields, mdata))
+    return;
+  std::string to, from, subject, body;
+  if(!tools::wallet_messenger::parse_message_extra(mdata.data, to, from, subject, body))
+    return;
+  tools::wallet_messenger::send_message(to, from, subject, body);
 }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
