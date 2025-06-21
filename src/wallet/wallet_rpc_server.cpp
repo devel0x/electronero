@@ -2987,7 +2987,9 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
     er.message = "Failed to create fee transaction";
     return false;
   }
+  const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
   m_wallet->commit_tx(ptx_vector[0]);
+  res.tx_hash = epee::string_tools::pod_to_hex(txid);
   if(!m_tokens_path.empty())
   {
     if(!m_tokens.save(m_tokens_path))
@@ -3049,7 +3051,11 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
@@ -3078,7 +3084,11 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
@@ -3126,7 +3136,11 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
@@ -3174,7 +3188,11 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
@@ -3220,7 +3238,11 @@ bool wallet_rpc_server::on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
@@ -3360,7 +3382,11 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
     if(ptx_vector.empty())
       res.success = false;
     else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);

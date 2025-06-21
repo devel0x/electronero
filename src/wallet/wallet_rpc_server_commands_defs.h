@@ -691,8 +691,8 @@ namespace wallet_rpc
     }; 
   };
 
-  struct COMMAND_RPC_TOKEN_CREATE
-  {
+struct COMMAND_RPC_TOKEN_CREATE
+{
     struct request
     {
       std::string name;
@@ -712,10 +712,12 @@ namespace wallet_rpc
     {
       std::string status;
       std::string token_address;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(token_address)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -743,8 +745,8 @@ namespace wallet_rpc
     };
   };
 
-  struct COMMAND_RPC_TOKEN_TRANSFER
-  {
+struct COMMAND_RPC_TOKEN_TRANSFER
+{
     struct request
     {
       std::string token_address;
@@ -761,15 +763,17 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
 
-  struct COMMAND_RPC_TOKEN_APPROVE
-  {
+struct COMMAND_RPC_TOKEN_APPROVE
+{
     struct request
     {
       std::string name;
@@ -786,15 +790,17 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
 
-  struct COMMAND_RPC_TOKEN_TRANSFER_FROM
-  {
+struct COMMAND_RPC_TOKEN_TRANSFER_FROM
+{
     struct request
     {
       std::string token_address;
@@ -813,15 +819,17 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
 
-  struct COMMAND_RPC_TOKEN_BURN
-  {
+struct COMMAND_RPC_TOKEN_BURN
+{
     struct request
     {
       std::string token_address;
@@ -836,15 +844,17 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
 
-  struct COMMAND_RPC_TOKEN_MINT
-  {
+struct COMMAND_RPC_TOKEN_MINT
+{
     struct request
     {
       std::string token_address;
@@ -859,9 +869,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1020,8 +1032,8 @@ namespace wallet_rpc
     };
   };
 
-  struct COMMAND_RPC_TOKEN_SET_FEE
-  {
+struct COMMAND_RPC_TOKEN_SET_FEE
+{
     struct request
     {
       std::string token_address;
@@ -1036,9 +1048,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
