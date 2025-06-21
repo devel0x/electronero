@@ -7008,15 +7008,13 @@ bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
     return true;
   }
   cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response res;
-  bool r = m_wallet->invoke_http_json("/rescan_token_tx", req, res);
+  bool r = m_wallet->invoke_http_json_rpc("/json_rpc", "rescan_token_tx", req, res);
   std::string err = interpret_rpc_response(r, res.status);
   if (!err.empty())
   {
     fail_msg_writer() << tr("failed to rescan token tx: ") << err;
     return true;
   }
-  if(!m_tokens_path.empty())
-    m_tokens.load(m_tokens_path);
   success_msg_writer() << tr("Token operations rescanned");
   return true;
 }
