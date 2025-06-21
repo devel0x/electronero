@@ -199,6 +199,7 @@ namespace cryptonote
     crypto::hash  top_id;
     uint8_t top_version;
     std::string tokens_blob;
+    std::string sfts_blob;
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(current_height)
@@ -206,6 +207,7 @@ namespace cryptonote
       KV_SERIALIZE_VAL_POD_AS_BLOB(top_id)
       KV_SERIALIZE_OPT(top_version, (uint8_t)0)
       KV_SERIALIZE(tokens_blob)
+      KV_SERIALIZE(sfts_blob)
     END_KV_SERIALIZE_MAP()
   };
 

@@ -32,11 +32,13 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string.hpp>
 #include <cstdint>
+#include <sstream>
 #include "include_base_utils.h"
 using namespace epee;
 
 #include "wallet_rpc_server.h"
 #include "token/token.h"
+#include "token/sft.h"
 #include "wallet/wallet_args.h"
 #include "common/util.h"
 #include "common/command_line.h"
@@ -2423,6 +2425,10 @@ namespace tools
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -2485,6 +2491,10 @@ namespace tools
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
     return true;
   }
   //----------------------------------------------------------------------------------------------------
@@ -3054,11 +3064,192 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     {
       const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
       m_wallet->commit_tx(ptx_vector[0]);
-      res.tx_hash = epee::string_tools::pod_to_hex(txid);
     }
   }
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_create(const wallet_rpc::COMMAND_RPC_SFT_CREATE::request& req, wallet_rpc::COMMAND_RPC_SFT_CREATE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::vector<std::pair<uint64_t,uint64_t>> pairs;
+  std::stringstream ss(req.pairs);
+  std::string p;
+  while(std::getline(ss,p,','))
+  {
+    size_t pos = p.find(':');
+    if(pos==std::string::npos) continue;
+    pairs.push_back({std::stoull(p.substr(0,pos)), std::stoull(p.substr(pos+1))});
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({SFT_DEPLOY_FEE, info.address, info.is_subaddress});
+
+  sft_info &sinfo = m_sfts.create(req.name, req.symbol, pairs, creator, req.creator_fee);
+  std::string extra_str = make_sft_extra(sft_op_type::create, std::vector<std::string>{sinfo.address, req.name, req.symbol, req.pairs, creator, std::to_string(req.creator_fee)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_sft_data_to_tx_extra(extra, extra_str);
+
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+  if(ptx_vector.empty())
+    return false;
+  const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+  m_wallet->commit_tx(ptx_vector[0]);
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  res.sft_address = sinfo.address;
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_balance(const wallet_rpc::COMMAND_RPC_SFT_BALANCE::request& req, wallet_rpc::COMMAND_RPC_SFT_BALANCE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string owner = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
+  res.balance = m_sfts.balance_of(req.sft_address, req.id, owner);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_transfer(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  sft_info *info = m_sfts.get_by_address(req.sft_address);
+  if(!info)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "sft not found";
+    return false;
+  }
+  res.success = m_sfts.transfer(req.sft_address, req.id, from, req.to, req.amount);
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), info->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({SFT_TRANSFER_FEE, ginfo.address, ginfo.is_subaddress});
+  if(info->creator_fee > 0)
+    dsts.push_back({info->creator_fee, creator_info.address, creator_info.is_subaddress});
+  dsts.push_back({1, self.address, self.is_subaddress});
+  std::string extra_str = make_sft_extra(sft_op_type::transfer, std::vector<std::string>{req.sft_address, std::to_string(req.id), from, req.to, std::to_string(req.amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_sft_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_mint(const wallet_rpc::COMMAND_RPC_SFT_MINT::request& req, wallet_rpc::COMMAND_RPC_SFT_MINT::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_sfts.mint(req.sft_address, req.id, creator, req.amount);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({SFT_MINT_FEE * req.amount, ginfo.address, ginfo.is_subaddress});
+  std::string extra_str = make_sft_extra(sft_op_type::mint, std::vector<std::string>{req.sft_address, std::to_string(req.id), creator, std::to_string(req.amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_sft_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_burn(const wallet_rpc::COMMAND_RPC_SFT_BURN::request& req, wallet_rpc::COMMAND_RPC_SFT_BURN::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_sfts.burn(req.sft_address, req.id, owner, req.amount);
+  if(res.success && !m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_info(const wallet_rpc::COMMAND_RPC_SFT_INFO::request& req, wallet_rpc::COMMAND_RPC_SFT_INFO::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  const sft_info *info = m_sfts.get_by_address(req.sft_address);
+  if(!info) return false;
+  res.name = info->name;
+  res.symbol = info->symbol;
+  return true;
+}
+
+bool wallet_rpc_server::on_all_sfts(const wallet_rpc::COMMAND_RPC_SFT_ALL::request& req, wallet_rpc::COMMAND_RPC_SFT_ALL::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::vector<sft_info> list;
+  m_sfts.list_all(list);
+  for(const auto &t : list)
+  {
+    wallet_rpc::COMMAND_RPC_SFT_ALL::entry e;
+    e.name = t.name;
+    e.symbol = t.symbol;
+    e.address = t.address;
+    res.sfts.push_back(e);
+  }
   return true;
 }
 //---------------------------------------------------------------------------------
