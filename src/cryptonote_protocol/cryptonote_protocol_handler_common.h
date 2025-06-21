@@ -33,6 +33,7 @@
 #include "p2p/net_node_common.h"
 #include "cryptonote_protocol/cryptonote_protocol_defs.h"
 #include "cryptonote_basic/connection_context.h"
+#include "cryptonote_basic/cryptonote_basic.h"
 namespace cryptonote
 {
   /************************************************************************/
@@ -44,6 +45,7 @@ namespace cryptonote
     virtual bool relay_transactions(NOTIFY_NEW_TRANSACTIONS::request& arg, cryptonote_connection_context& exclude_context)=0;
     //virtual bool request_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, cryptonote_connection_context& context)=0;
     virtual void rescan_token_operations(uint64_t from_height) = 0;
+    virtual void process_token_tx(const cryptonote::transaction &tx) = 0;
   };
 
   /************************************************************************/
@@ -60,6 +62,7 @@ namespace cryptonote
       return false;
     }
     virtual void rescan_token_operations(uint64_t) override {}
+    virtual void process_token_tx(const cryptonote::transaction &) override {}
 
   };
 }
