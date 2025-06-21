@@ -712,10 +712,12 @@ namespace wallet_rpc
     {
       std::string status;
       std::string token_address;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(token_address)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -761,9 +763,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -786,9 +790,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -813,9 +819,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -836,9 +844,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -859,9 +869,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -882,11 +894,13 @@ namespace wallet_rpc
       std::string name;
       std::string symbol;
       uint64_t supply;
+      uint64_t creator_fee;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
         KV_SERIALIZE(symbol)
         KV_SERIALIZE(supply)
+        KV_SERIALIZE(creator_fee)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1036,9 +1050,11 @@ namespace wallet_rpc
     struct response
     {
       bool success;
+      std::string tx_hash;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };

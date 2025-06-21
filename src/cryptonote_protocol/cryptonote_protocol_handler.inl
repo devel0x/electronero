@@ -1842,7 +1842,7 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
       break;
     case token_op_type::approve:
       if(parts.size() == 4)
-        m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+        m_tokens.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]), parts[1]);
       break;
     case token_op_type::transfer_from:
       if(parts.size() == 5)
