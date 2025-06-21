@@ -46,6 +46,7 @@
 #include "cryptonote_basic/connection_context.h"
 #include "cryptonote_basic/cryptonote_stat_info.h"
 #include "token/token.h"
+#include "token/sft.h"
 #include <boost/circular_buffer.hpp>
 
 PUSH_WARNINGS
@@ -153,6 +154,8 @@ namespace cryptonote
 
     token_store m_tokens;
     std::string m_tokens_path;
+    sft_store m_sfts;
+    std::string m_sfts_path;
 
     template<class t_parameter>
       bool post_notify(typename t_parameter::request& arg, cryptonote_connection_context& context)

@@ -80,6 +80,10 @@ namespace cryptonote
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -93,6 +97,8 @@ namespace cryptonote
   {
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_sfts_path.empty())
+      m_sfts.save(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -298,6 +304,13 @@ namespace cryptonote
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
     }
+    if(!hshd.sfts_blob.empty())
+    {
+      MWARNING("Loading SFT blob from peer, size " << hshd.sfts_blob.size());
+      m_sfts.merge_from_string(hshd.sfts_blob);
+      if(!m_sfts_path.empty())
+        m_sfts.save(m_sfts_path);
+    }
 
     context.m_remote_blockchain_height = hshd.current_height;
 
@@ -348,6 +361,7 @@ namespace cryptonote
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
     m_tokens.store_to_string(hshd.tokens_blob);
+    m_sfts.store_to_string(hshd.sfts_blob);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1809,6 +1823,8 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
 
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1863,6 +1879,8 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
