@@ -183,6 +183,7 @@
 // New constants are intended to go here
 #define TOKEN_DEPLOYMENT_FEE                            ((uint64_t)10000)
 #define TOKEN_TRANSFER_FEE                              ((uint64_t)10000)
+#define MESSAGE_SEND_FEE                                ((uint64_t)1000000)
 constexpr const char GOVERNANCE_WALLET_ADDRESS[] = "etnk9ZeCkz6Dbb4EwVPq7CftzLfHA4zv1c33oQ5dACaJWmEcxyCKYzGK89D5VtjhxKNAeTNqyV5aYZvfPWr243gL9xGdNvGutm";
 namespace config
 {

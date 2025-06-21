@@ -1011,7 +1011,10 @@ namespace cryptonote
     uint8_t version = m_blockchain_storage.get_current_hard_fork_version();
     bool r = m_mempool.add_tx(tx, tx_hash, blob_size, tvc, keeped_by_block, relayed, do_not_relay, version);
     if(r)
+    {
       m_pprotocol->process_token_tx(tx);
+      m_pprotocol->process_message_tx(tx);
+    }
     return r;
   }
   //-----------------------------------------------------------------------------------------------

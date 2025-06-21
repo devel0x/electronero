@@ -63,6 +63,7 @@
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
 #include "wallet/wallet_args.h"
+#include "wallet/wallet_messenger.h"
 #include "version.h"
 #include <stdexcept>
 
@@ -2170,6 +2171,18 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
                           tr("Set or update creator fee."));
+  m_cmd_binder.set_handler("message_send",
+                          boost::bind(&simple_wallet::message_send, this, _1),
+                          tr("message_send <to_address> <file.json>"),
+                          tr("Send a private message to another wallet."));
+  m_cmd_binder.set_handler("message_list",
+                          boost::bind(&simple_wallet::message_list, this, _1),
+                          tr("message_list"),
+                          tr("List messages for this wallet."));
+  m_cmd_binder.set_handler("message_read",
+                          boost::bind(&simple_wallet::message_read, this, _1),
+                          tr("message_read <id|subject>"),
+                          tr("Read a message by id or subject."));
   m_cmd_binder.set_handler("all_tokens",
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
@@ -5469,6 +5482,55 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
     return false;
   }
 }
+
+bool simple_wallet::submit_message_tx(const std::vector<uint8_t> &extra)
+{
+  try
+  {
+    std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+    cryptonote::address_parse_info self;
+    cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+    cryptonote::address_parse_info ginfo;
+    if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+    {
+      fail_msg_writer() << tr("Invalid governance address");
+      return false;
+    }
+    std::vector<cryptonote::tx_destination_entry> dsts;
+    dsts.push_back({MESSAGE_SEND_FEE, ginfo.address, ginfo.is_subaddress});
+    dsts.push_back({1, self.address, self.is_subaddress});
+
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, m_current_subaddress_account, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+    {
+      fail_msg_writer() << tr("failed to create message transaction");
+      return false;
+    }
+
+    uint64_t network_fee = ptx_vector[0].fee;
+    uint64_t message_fee = MESSAGE_SEND_FEE;
+    uint64_t total_fee = network_fee + message_fee;
+    std::string prompt = (boost::format(tr("Message transaction fee is %s (network %s + message %s). Is this okay?  (Y/Yes/N/No): "))
+        % print_money(total_fee) % print_money(network_fee) % print_money(message_fee)).str();
+    std::string accepted = input_line(prompt);
+    if (std::cin.eof() || !command_line::is_yes(accepted))
+    {
+      fail_msg_writer() << tr("transaction cancelled.");
+      return false;
+    }
+
+    const crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    m_wallet->commit_tx(ptx_vector[0]);
+    success_msg_writer(true) << tr("Transaction ID: ") << txid;
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    fail_msg_writer() << e.what();
+    return false;
+  }
+}
 //------------------------------------------------------------------------------------
 bool simple_wallet::token_create(const std::vector<std::string> &args)
 {
@@ -5924,6 +5986,86 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+
+bool simple_wallet::message_send(const std::vector<std::string> &args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: message_send <to_address> <file.json>");
+    return true;
+  }
+  std::string to_addr = args[0];
+  std::string file = args[1];
+  std::ifstream f(file, std::ios::binary);
+  if(!f)
+  {
+    fail_msg_writer() << tr("failed to open file");
+    return true;
+  }
+  std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  if(data.size() > 1024 * 1024)
+  {
+    fail_msg_writer() << tr("message file larger than 1MB");
+    return true;
+  }
+  rapidjson::Document doc;
+  if(doc.Parse(data.c_str()).HasParseError() || !doc.IsObject() || !doc.HasMember("Subject") || !doc.HasMember("message"))
+  {
+    fail_msg_writer() << tr("Invalid message JSON");
+    return true;
+  }
+  std::string subject = doc["Subject"].GetString();
+  std::string body = doc["message"].GetString();
+
+  std::string from_addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string extra_str = tools::wallet_messenger::make_message_extra(to_addr, from_addr, subject, body);
+  std::vector<uint8_t> extra;
+  cryptonote::add_message_data_to_tx_extra(extra, extra_str);
+  if(!submit_message_tx(extra))
+    return true;
+  return true;
+}
+
+bool simple_wallet::message_list(const std::vector<std::string> &args)
+{
+  if (!args.empty())
+  {
+    fail_msg_writer() << tr("usage: message_list");
+    return true;
+  }
+  std::string address = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  auto msgs = tools::wallet_messenger::list_messages(address);
+  for (const auto &m : msgs)
+  {
+    message_writer() << '[' << m.id << "] " << m.subject << " from " << m.from << " at "
+                     << epee::misc_utils::get_time_str(m.timestamp);
+    message_writer() << m.message;
+  }
+  return true;
+}
+
+bool simple_wallet::message_read(const std::vector<std::string> &args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: message_read <id|subject>");
+    return true;
+  }
+  std::string address = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  try
+  {
+    auto m = tools::wallet_messenger::read_message(address, args[0]);
+    message_writer() << tr("Subject: ") << m.subject;
+    message_writer() << tr("From: ") << m.from;
+    message_writer() << tr("Time: ") << epee::misc_utils::get_time_str(m.timestamp);
+    message_writer() << m.message;
+  }
+  catch (const std::exception&)
+  {
+    fail_msg_writer() << tr("Message not found");
+  }
   return true;
 }
 //----------------------------------------------------------------------------------------------------
