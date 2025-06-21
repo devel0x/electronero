@@ -556,6 +556,15 @@ The following commands are available in both the CLI and RPC:
 
 Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in sync across nodes. Each operation remains private thanks to ring signatures and normal transaction handling.
 
+## Private Wallet Messaging
+Electronero wallets can send short messages to each other by embedding data in the transaction `tx_extra` field.
+Use the following commands to interact with the messenger:
+
+* `message_send <to_address> <file.json>` – send an encrypted message. The JSON file must contain `Subject` and `message` fields and must be under 1 MB. The payload is encrypted using the sender and recipient view keys before being stored in `tx_extra`. Sending a message pays `MESSAGE_SEND_FEE` (default `1000000`) to `GOVERNANCE_WALLET_ADDRESS` plus the normal network fee.
+* `message_list` – list messages received by this wallet.
+* `message_read <id>` – display a single message by id.
+
+
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.

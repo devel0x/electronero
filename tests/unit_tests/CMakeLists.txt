@@ -68,6 +68,7 @@ set(unit_tests_sources
   varint.cpp
   ringct.cpp
   output_selection.cpp
+  wallet_messenger.cpp
   vercmp.cpp)
 
 set(unit_tests_headers

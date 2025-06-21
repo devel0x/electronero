@@ -44,6 +44,7 @@
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
 #include "wallet/wallet2.h"
+#include "wallet/wallet_messenger.h"
 #include "console_handler.h"
 #include "common/i18n.h"
 #include "common/password.h"
@@ -174,7 +175,13 @@ namespace cryptonote
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
 
+    // messaging commands
+    bool message_send(const std::vector<std::string> &args);
+    bool message_list(const std::vector<std::string> &args);
+    bool message_read(const std::vector<std::string> &args);
+
     bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
+    bool submit_message_tx(const std::vector<uint8_t> &extra);
     bool sign_transfer(const std::vector<std::string> &args);
     bool submit_transfer(const std::vector<std::string> &args);
     std::vector<std::vector<cryptonote::tx_destination_entry>> split_amounts(
