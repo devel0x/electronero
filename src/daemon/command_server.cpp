@@ -243,8 +243,8 @@ t_command_server::t_command_server(
     m_command_lookup.set_handler(
       "rescan_token_tx"
     , std::bind(&t_command_parser_executor::rescan_token_tx, &m_parser, p::_1)
-    , "rescan_token_tx"
-    , "Rescan the blockchain for token operations."
+    , "rescan_token_tx [from_height]"
+    , "Rescan the blockchain for token operations starting from the given height."
     );
     m_command_lookup.set_handler(
       "output_histogram"

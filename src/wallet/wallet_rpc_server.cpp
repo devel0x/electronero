@@ -2499,6 +2499,7 @@ namespace tools
     }
 
     cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request dreq;
+    dreq.from_height = req.from_height;
     cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response dres;
     bool r = m_wallet->invoke_http_json("/rescan_token_tx", dreq, dres);
     if (!r || dres.status != CORE_RPC_STATUS_OK)
