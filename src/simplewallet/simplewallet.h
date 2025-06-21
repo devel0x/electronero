@@ -173,6 +173,12 @@ namespace cryptonote
     bool token_history(const std::vector<std::string> &args);
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
+    bool proposal_create(const std::vector<std::string> &args);
+    bool proposal_vote(const std::vector<std::string> &args);
+    bool proposal_end(const std::vector<std::string> &args);
+    bool proposal_info_cmd(const std::vector<std::string> &args);
+    bool proposals(const std::vector<std::string> &args);
+    bool active_proposals(const std::vector<std::string> &args);
 
     bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
     bool sign_transfer(const std::vector<std::string> &args);

@@ -1852,6 +1852,18 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
       if(parts.size() == 3)
         m_tokens.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
       break;
+    case token_op_type::proposal_create:
+      if(parts.size() == 2)
+        m_tokens.create_proposal(parts[1], parts[0]);
+      break;
+    case token_op_type::proposal_vote:
+      if(parts.size() == 2)
+        m_tokens.vote_proposal(parts[0], parts[1] == "yes");
+      break;
+    case token_op_type::proposal_end:
+      if(parts.size() == 2)
+        m_tokens.end_proposal(parts[0], parts[1]);
+      break;
     case token_op_type::burn:
       if(parts.size() == 3)
         m_tokens.burn(parts[0], parts[1], std::stoull(parts[2]));

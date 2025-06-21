@@ -19,7 +19,10 @@ enum class token_op_type : uint8_t {
     transfer_from = 3,
     set_fee = 4,
     burn = 5,
-    mint = 6
+    mint = 6,
+    proposal_create = 7,
+    proposal_vote = 8,
+    proposal_end = 9
 };
 
 struct token_info {
@@ -60,15 +63,36 @@ struct token_transfer_record {
     }
 };
 
+struct proposal_info {
+    std::string id;
+    std::string title;
+    std::string creator;
+    bool active = true;
+    uint64_t yes = 0;
+    uint64_t no = 0;
+
+    template<class Archive>
+    void serialize(Archive &a, const unsigned int /*version*/) {
+        a & id;
+        a & title;
+        a & creator;
+        a & active;
+        a & yes;
+        a & no;
+    }
+};
+
 struct token_store_data
 {
     std::unordered_map<std::string, token_info> tokens;
     std::vector<token_transfer_record> transfers;
+    std::unordered_map<std::string, proposal_info> proposals;
 
     template<class Archive>
     void serialize(Archive &a, const unsigned int /*version*/) {
         a & tokens;
         a & transfers;
+        a & proposals;
     }
 };
 
@@ -104,6 +128,14 @@ public:
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
 
+    proposal_info &create_proposal(const std::string &title, const std::string &creator);
+    bool vote_proposal(const std::string &id, bool yes);
+    bool end_proposal(const std::string &id, const std::string &creator);
+    void list_proposals(std::vector<proposal_info> &out) const;
+    void list_active_proposals(std::vector<proposal_info> &out) const;
+    const proposal_info *get_proposal(const std::string &id_or_title) const;
+    proposal_info *get_proposal(const std::string &id_or_title);
+
     void history_by_token(const std::string &token_address, std::vector<token_transfer_record> &out) const;
     void history_by_account(const std::string &account, std::vector<token_transfer_record> &out) const;
     void history_by_token_account(const std::string &token_address, const std::string &account, std::vector<token_transfer_record> &out) const;
@@ -115,6 +147,7 @@ private:
     std::unordered_map<std::string, std::string> address_index;
     std::unordered_map<std::string, std::vector<std::string>> creator_tokens;
     std::vector<token_transfer_record> transfer_history;
+    std::unordered_map<std::string, proposal_info> proposals;
 
     void rebuild_indexes();
     void record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount);
