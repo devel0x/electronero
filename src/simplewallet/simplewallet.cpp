@@ -5601,7 +5601,7 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
     return true;
   }
   std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
-  if (!m_tokens.approve(args[0], owner, args[1], amount))
+  if (!m_tokens.approve(args[0], owner, args[1], amount, owner))
   {
     fail_msg_writer() << tr("token approve failed");
     return true;

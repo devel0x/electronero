@@ -162,9 +162,14 @@ bool token_store::transfer_by_address(const std::string &address, const std::str
     return true;
 }
 
-bool token_store::approve(const std::string &name, const std::string &owner, const std::string &spender, uint64_t amount) {
+bool token_store::approve(const std::string &name, const std::string &owner, const std::string &spender, uint64_t amount, const std::string &caller) {
     token_info *tok = get(name);
     if (!tok) return false;
+    if (caller != owner)
+        return false;
+    auto fit = tok->balances.find(owner);
+    if (fit == tok->balances.end())
+        return false;
     tok->allowances[owner][spender] = amount;
     return true;
 }

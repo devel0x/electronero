@@ -92,7 +92,7 @@ public:
 
     bool transfer(const std::string &name, const std::string &from, const std::string &to, uint64_t amount);
     bool transfer_by_address(const std::string &address, const std::string &from, const std::string &to, uint64_t amount);
-    bool approve(const std::string &name, const std::string &owner, const std::string &spender, uint64_t amount);
+    bool approve(const std::string &name, const std::string &owner, const std::string &spender, uint64_t amount, const std::string &caller);
     bool transfer_from(const std::string &name, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount);
     bool transfer_from_by_address(const std::string &address, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount);
     uint64_t balance_of(const std::string &name, const std::string &account) const;
