@@ -49,6 +49,7 @@
 #include "common/password.h"
 #include "crypto/crypto.h"  // for definition of crypto::secret_key
 #include "token/token.h"
+#include "token/sft.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.simplewallet"
@@ -173,6 +174,15 @@ namespace cryptonote
     bool token_history(const std::vector<std::string> &args);
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
+
+    bool sft_create(const std::vector<std::string> &args);
+    bool sft_balance(const std::vector<std::string> &args);
+    bool sft_transfer(const std::vector<std::string> &args);
+    bool sft_mint(const std::vector<std::string> &args);
+    bool sft_burn(const std::vector<std::string> &args);
+    bool sft_info(const std::vector<std::string> &args);
+    bool all_sfts(const std::vector<std::string> &args);
+    bool my_sfts(const std::vector<std::string> &args);
 
     bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
     bool sign_transfer(const std::vector<std::string> &args);
@@ -373,5 +383,7 @@ namespace cryptonote
 
     token_store m_tokens;
     std::string m_tokens_path;
+    sft_store m_sfts;
+    std::string m_sfts_path;
   };
 }
