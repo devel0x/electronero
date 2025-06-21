@@ -54,6 +54,8 @@
 #include "cryptonote_core.h"
 #include "ringct/rctSigs.h"
 #include "common/perf_timer.h"
+#include "common/util.h"
+#include <stdexcept>
 #if defined(PER_BLOCK_CHECKPOINT)
 #include "blocks/blocks.h"
 #endif
@@ -246,6 +248,26 @@ static const struct {
 	
   { 17, STAGENET_HARDFORK_V17_HEIGHT, 0, 1531319998 }
 };
+
+static const char token_checksum_hash[] = "86e525ac994777eaf96ed07b3aefa92bff34fec4f37a92f147edf319dbc86aba";
+
+static void verify_token_cpp_checksum()
+{
+  std::string path = __FILE__;
+  const std::string sub = "src/cryptonote_core/blockchain.cpp";
+  const size_t pos = path.find(sub);
+  if (pos != std::string::npos)
+    path.resize(pos);
+  else
+    path.clear();
+  path += "src/token/token.cpp";
+
+  crypto::hash hash;
+  if (!tools::sha256sum(path, hash))
+    throw std::runtime_error("Failed to compute token.cpp checksum");
+  if (epee::string_tools::pod_to_hex(hash) != std::string(token_checksum_hash))
+    throw std::runtime_error("token.cpp checksum mismatch");
+}
 
 //------------------------------------------------------------------
 Blockchain::Blockchain(tx_memory_pool& tx_pool) :
@@ -442,6 +464,7 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
   }
 
   m_db = db;
+  verify_token_cpp_checksum();
 
   m_nettype = test_options != NULL ? FAKECHAIN : nettype;
   m_offline = offline;
