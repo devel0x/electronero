@@ -38,6 +38,7 @@
 #include "wallet_rpc_server_commands_defs.h"
 #include "wallet2.h"
 #include "token/token.h"
+#include "token/sft.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.rpc"
@@ -150,6 +151,13 @@ namespace tools
         MAP_JON_RPC_WE("token_history",     on_token_history,     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY)
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
+        MAP_JON_RPC_WE("sft_create",       on_sft_create,       wallet_rpc::COMMAND_RPC_SFT_CREATE)
+        MAP_JON_RPC_WE("sft_balance",      on_sft_balance,      wallet_rpc::COMMAND_RPC_SFT_BALANCE)
+        MAP_JON_RPC_WE("sft_transfer",     on_sft_transfer,     wallet_rpc::COMMAND_RPC_SFT_TRANSFER)
+        MAP_JON_RPC_WE("sft_mint",         on_sft_mint,         wallet_rpc::COMMAND_RPC_SFT_MINT)
+        MAP_JON_RPC_WE("sft_burn",         on_sft_burn,         wallet_rpc::COMMAND_RPC_SFT_BURN)
+        MAP_JON_RPC_WE("sft_info",         on_sft_info,         wallet_rpc::COMMAND_RPC_SFT_INFO)
+        MAP_JON_RPC_WE("all_sfts",         on_all_sfts,         wallet_rpc::COMMAND_RPC_SFT_ALL)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -234,6 +242,14 @@ namespace tools
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
 
+      bool on_sft_create(const wallet_rpc::COMMAND_RPC_SFT_CREATE::request& req, wallet_rpc::COMMAND_RPC_SFT_CREATE::response& res, epee::json_rpc::error& er);
+      bool on_sft_balance(const wallet_rpc::COMMAND_RPC_SFT_BALANCE::request& req, wallet_rpc::COMMAND_RPC_SFT_BALANCE::response& res, epee::json_rpc::error& er);
+      bool on_sft_transfer(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER::response& res, epee::json_rpc::error& er);
+      bool on_sft_mint(const wallet_rpc::COMMAND_RPC_SFT_MINT::request& req, wallet_rpc::COMMAND_RPC_SFT_MINT::response& res, epee::json_rpc::error& er);
+      bool on_sft_burn(const wallet_rpc::COMMAND_RPC_SFT_BURN::request& req, wallet_rpc::COMMAND_RPC_SFT_BURN::response& res, epee::json_rpc::error& er);
+      bool on_sft_info(const wallet_rpc::COMMAND_RPC_SFT_INFO::request& req, wallet_rpc::COMMAND_RPC_SFT_INFO::response& res, epee::json_rpc::error& er);
+      bool on_all_sfts(const wallet_rpc::COMMAND_RPC_SFT_ALL::request& req, wallet_rpc::COMMAND_RPC_SFT_ALL::response& res, epee::json_rpc::error& er);
+
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);
 
@@ -258,5 +274,7 @@ namespace tools
       const boost::program_options::variables_map *m_vm;
       token_store m_tokens;
       std::string m_tokens_path;
+      sft_store m_sfts;
+      std::string m_sfts_path;
   };
 }
