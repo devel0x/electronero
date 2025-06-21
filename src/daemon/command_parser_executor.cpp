@@ -544,9 +544,15 @@ bool t_command_parser_executor::flush_txpool(const std::vector<std::string>& arg
 
 bool t_command_parser_executor::rescan_token_tx(const std::vector<std::string>& args)
 {
-  if (!args.empty()) return false;
+  uint64_t from_height = 0;
+  if (args.size() > 1) return false;
+  if (!args.empty())
+  {
+    if (!epee::string_tools::get_xtype_from_string(from_height, args[0]))
+      return false;
+  }
 
-  return m_executor.rescan_token_tx();
+  return m_executor.rescan_token_tx(from_height);
 }
 
 bool t_command_parser_executor::output_histogram(const std::vector<std::string>& args)

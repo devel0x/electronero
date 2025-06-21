@@ -2286,7 +2286,7 @@ simple_wallet::simple_wallet()
                            tr("Rescan the blockchain from scratch."));
   m_cmd_binder.set_handler("rescan_token_tx",
                            boost::bind(&simple_wallet::rescan_token_tx, this, _1),
-                           tr("Rescan the blockchain for token operations."));
+                           tr("Rescan the blockchain for token operations starting from optional height."));
   m_cmd_binder.set_handler("set_tx_note",
                            boost::bind(&simple_wallet::set_tx_note, this, _1),
                            tr("set_tx_note <txid> [free text note]"),
@@ -6994,7 +6994,19 @@ bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
     return true;
   }
 
+  if (args.size() > 1)
+  {
+    fail_msg_writer() << tr("usage: rescan_token_tx [from_height]");
+    return true;
+  }
+
   cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request req;
+  req.from_height = 0;
+  if (!args.empty() && !epee::string_tools::get_xtype_from_string(req.from_height, args[0]))
+  {
+    fail_msg_writer() << tr("Invalid height");
+    return true;
+  }
   cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response res;
   bool r = m_wallet->invoke_http_json("/rescan_token_tx", req, res);
   std::string err = interpret_rpc_response(r, res.status);
