@@ -44,6 +44,10 @@ namespace cryptonote {
   public:
     template<typename F>
     bool for_all_transactions(F&&) { return true; }
+    uint64_t get_current_blockchain_height() const { return 0; }
+    template<typename F>
+    bool for_blocks_range(uint64_t, uint64_t, F&&) const { return true; }
+    bool get_transactions(const std::vector<crypto::hash>&, std::list<cryptonote::transaction>&, std::list<crypto::hash>&) const { return true; }
   };
 }
 

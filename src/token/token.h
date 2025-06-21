@@ -107,6 +107,8 @@ public:
     void history_by_account(const std::string &account, std::vector<token_transfer_record> &out) const;
     void history_by_token_account(const std::string &token_address, const std::string &account, std::vector<token_transfer_record> &out) const;
 
+    size_t size() const { return tokens.size(); }
+
 private:
     std::unordered_map<std::string, token_info> tokens;
     std::unordered_map<std::string, std::string> address_index;

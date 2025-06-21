@@ -1935,7 +1935,9 @@ namespace wallet_rpc
   {
     struct request
     {
+      uint64_t from_height = 0;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(from_height)
       END_KV_SERIALIZE_MAP()
     };
 
