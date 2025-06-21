@@ -527,7 +527,7 @@ If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
 
 ## XRC-20 Token Smart Contracts
-Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, and `my_tokens` commands to manage ERC20-like tokens.
+Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, `my_tokens`, plus governance commands `proposal_create`, `proposal_vote`, `proposal_end`, `proposals`, and `active_proposals` to manage ERC20-like tokens and on-chain votes.
 Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
 Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
 Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `~/.bitelectronero/tokens.bin` and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet and `my_tokens` to see those you created.
@@ -557,5 +557,5 @@ The following commands are available in both the CLI and RPC:
 Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in sync across nodes. Each operation remains private thanks to ring signatures and normal transaction handling.
 
 
-### Future Token Improvements
-Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+### Governance and Voting
+Tokens can be burned or minted. The wallet now supports simple on-chain proposals and voting. Use `proposal_create` to open a proposal (costing `PROPOSAL_CREATE_FEE`), `proposal_vote` to cast a vote (costing `PROPOSAL_VOTE_FEE`), `proposal_end` to close your proposal, `proposals` to list all proposals and `active_proposals` to show those still open.

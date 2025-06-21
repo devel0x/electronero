@@ -29,6 +29,7 @@ bool token_store::load(const std::string &file) {
         ia >> data;
         tokens = std::move(data.tokens);
         transfer_history = std::move(data.transfers);
+        proposals = std::move(data.proposals);
         rebuild_indexes();
     }
     catch(const std::exception &e)
@@ -46,6 +47,7 @@ bool token_store::load_from_string(const std::string &blob) {
     ia >> data;
     tokens = std::move(data.tokens);
     transfer_history = std::move(data.transfers);
+    proposals = std::move(data.proposals);
     rebuild_indexes();
     return true;
 }
@@ -60,6 +62,10 @@ bool token_store::merge_from_string(const std::string &blob) {
             tokens.emplace(kv);
     }
     transfer_history.insert(transfer_history.end(), data.transfers.begin(), data.transfers.end());
+    for (const auto &kv : data.proposals) {
+        if (proposals.find(kv.first) == proposals.end())
+            proposals.emplace(kv);
+    }
     rebuild_indexes();
     return true;
 }
@@ -74,7 +80,7 @@ bool token_store::save(const std::string &file) {
     try
     {
         boost::archive::binary_oarchive oa(ofs);
-        token_store_data data{tokens, transfer_history};
+        token_store_data data{tokens, transfer_history, proposals};
         oa << data;
     }
     catch(const std::exception &e)
@@ -88,7 +94,7 @@ bool token_store::save(const std::string &file) {
 bool token_store::store_to_string(std::string &blob) const {
     std::ostringstream oss;
     boost::archive::binary_oarchive oa(oss);
-    token_store_data data{tokens, transfer_history};
+    token_store_data data{tokens, transfer_history, proposals};
     oa << data;
     blob = oss.str();
     return true;
@@ -248,6 +254,7 @@ bool token_store::set_creator_fee(const std::string &address, const std::string 
     return true;
 }
 
+
 void token_store::rebuild_indexes() {
     address_index.clear();
     creator_tokens.clear();
@@ -325,5 +332,50 @@ void token_store::history_by_token_account(const std::string &token_address, con
     for(const auto &r : transfer_history)
         if(r.token_address == token_address && (r.from == account || r.to == account))
             out.push_back(r);
+}
+
+proposal_info &token_store::create_proposal(const std::string &title, const std::string &creator)
+{
+    proposal_info p;
+    p.title = title;
+    p.creator = creator;
+    uint64_t nonce = crypto::rand<uint64_t>();
+    std::string data = creator + title + std::to_string(proposals.size()) + std::to_string(nonce);
+    crypto::hash h;
+    crypto::cn_fast_hash(data.data(), data.size(), h);
+    p.id = epee::string_tools::pod_to_hex(h).substr(0, 32);
+    proposals[p.id] = p;
+    return proposals[p.id];
+}
+
+bool token_store::vote_proposal(const std::string &id, bool yes)
+{
+    auto it = proposals.find(id);
+    if(it == proposals.end() || !it->second.active)
+        return false;
+    if(yes) it->second.yes++; else it->second.no++;
+    return true;
+}
+
+bool token_store::end_proposal(const std::string &id, const std::string &creator)
+{
+    auto it = proposals.find(id);
+    if(it == proposals.end() || it->second.creator != creator || !it->second.active)
+        return false;
+    it->second.active = false;
+    return true;
+}
+
+void token_store::list_proposals(std::vector<proposal_info> &out) const
+{
+    for(const auto &kv : proposals)
+        out.push_back(kv.second);
+}
+
+void token_store::list_active_proposals(std::vector<proposal_info> &out) const
+{
+    for(const auto &kv : proposals)
+        if(kv.second.active)
+            out.push_back(kv.second);
 }
 

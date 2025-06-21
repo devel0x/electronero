@@ -150,6 +150,11 @@ namespace tools
         MAP_JON_RPC_WE("token_history",     on_token_history,     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY)
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
+        MAP_JON_RPC_WE("proposal_create", on_proposal_create, wallet_rpc::COMMAND_RPC_PROPOSAL_CREATE)
+        MAP_JON_RPC_WE("proposal_vote", on_proposal_vote, wallet_rpc::COMMAND_RPC_PROPOSAL_VOTE)
+        MAP_JON_RPC_WE("proposal_end", on_proposal_end, wallet_rpc::COMMAND_RPC_PROPOSAL_END)
+        MAP_JON_RPC_WE("proposal_all", on_proposal_all, wallet_rpc::COMMAND_RPC_PROPOSAL_ALL)
+        MAP_JON_RPC_WE("proposal_active", on_proposal_active, wallet_rpc::COMMAND_RPC_PROPOSAL_ACTIVE)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -233,6 +238,11 @@ namespace tools
       bool on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er);
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
+      bool on_proposal_create(const wallet_rpc::COMMAND_RPC_PROPOSAL_CREATE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_CREATE::response& res, epee::json_rpc::error& er);
+      bool on_proposal_vote(const wallet_rpc::COMMAND_RPC_PROPOSAL_VOTE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_VOTE::response& res, epee::json_rpc::error& er);
+      bool on_proposal_end(const wallet_rpc::COMMAND_RPC_PROPOSAL_END::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_END::response& res, epee::json_rpc::error& er);
+      bool on_proposal_all(const wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_ALL::response& res, epee::json_rpc::error& er);
+      bool on_proposal_active(const wallet_rpc::COMMAND_RPC_PROPOSAL_ACTIVE::request& req, wallet_rpc::COMMAND_RPC_PROPOSAL_ACTIVE::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);
