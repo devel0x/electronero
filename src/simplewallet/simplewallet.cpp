@@ -5458,7 +5458,9 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
       return false;
     }
 
+    const crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
     m_wallet->commit_tx(ptx_vector[0]);
+    success_msg_writer(true) << tr("Transaction ID: ") << txid;
     return true;
   }
   catch(const std::exception &e)
