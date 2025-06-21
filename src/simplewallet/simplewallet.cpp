@@ -2170,6 +2170,10 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
                           tr("Set or update creator fee."));
+  m_cmd_binder.set_handler("token_transfer_ownership",
+                          boost::bind(&simple_wallet::token_transfer_ownership, this, _1),
+                          tr("token_transfer_ownership <token_address> <new_owner>"),
+                          tr("Transfer token ownership to another address."));
   m_cmd_binder.set_handler("all_tokens",
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
@@ -5924,6 +5928,41 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+
+bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_transfer_ownership called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_transfer_ownership <token_address> <new_owner>");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_tokens.transfer_ownership(args[0], creator, args[1]))
+  {
+    fail_msg_writer() << tr("not token creator or token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::transfer_ownership, std::vector<std::string>{args[0], creator, args[1]});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token ownership transferred");
   return true;
 }
 //----------------------------------------------------------------------------------------------------

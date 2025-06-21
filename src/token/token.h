@@ -19,7 +19,8 @@ enum class token_op_type : uint8_t {
     transfer_from = 3,
     set_fee = 4,
     burn = 5,
-    mint = 6
+    mint = 6,
+    transfer_ownership = 7
 };
 
 struct token_info {
@@ -103,6 +104,8 @@ public:
     bool mint(const std::string &address, const std::string &creator, uint64_t amount);
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
+
+    bool transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner);
 
     void history_by_token(const std::string &token_address, std::vector<token_transfer_record> &out) const;
     void history_by_account(const std::string &account, std::vector<token_transfer_record> &out) const;

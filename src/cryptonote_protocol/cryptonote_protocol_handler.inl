@@ -1860,6 +1860,10 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
       if(parts.size() == 3)
         m_tokens.mint(parts[0], parts[1], std::stoull(parts[2]));
       break;
+    case token_op_type::transfer_ownership:
+      if(parts.size() == 3)
+        m_tokens.transfer_ownership(parts[0], parts[1], parts[2]);
+      break;
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);

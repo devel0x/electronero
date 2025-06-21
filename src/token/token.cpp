@@ -3,6 +3,7 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <sstream>
+#include <algorithm>
 #include <boost/filesystem.hpp>
 #include "common/util.h"
 #include "crypto/hash.h"
@@ -250,6 +251,22 @@ bool token_store::set_creator_fee(const std::string &address, const std::string 
     if(!tok || tok->creator != creator)
         return false;
     tok->creator_fee = fee;
+    return true;
+}
+
+bool token_store::transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner)
+{
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator)
+        return false;
+    auto itn = address_index.find(address);
+    if(itn == address_index.end())
+        return false;
+    const std::string &name = itn->second;
+    auto &old_list = creator_tokens[creator];
+    old_list.erase(std::remove(old_list.begin(), old_list.end(), name), old_list.end());
+    tok->creator = new_owner;
+    creator_tokens[new_owner].push_back(name);
     return true;
 }
 

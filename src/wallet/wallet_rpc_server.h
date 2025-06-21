@@ -150,6 +150,7 @@ namespace tools
         MAP_JON_RPC_WE("token_history",     on_token_history,     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY)
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
+        MAP_JON_RPC_WE("token_transfer_ownership", on_token_transfer_ownership, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -233,6 +234,7 @@ namespace tools
       bool on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er);
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
+      bool on_token_transfer_ownership(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);

@@ -3394,6 +3394,49 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
   return true;
 }
 
+bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC token_transfer_ownership called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  ::token_info *tk = m_tokens.get_by_address(req.token_address);
+  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  {
+    res.success = false;
+    return true;
+  }
+  res.success = m_tokens.transfer_ownership(req.token_address, tk->creator, req.new_owner);
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  std::string extra_str = make_token_extra(token_op_type::transfer_ownership, std::vector<std::string>{req.token_address, tk->creator, req.new_owner});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
 }
 
 int main(int argc, char** argv) {

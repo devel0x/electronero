@@ -1059,6 +1059,31 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP
+  {
+    struct request
+    {
+      std::string token_address;
+      std::string new_owner;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
+        KV_SERIALIZE(new_owner)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_STORE
   {
     struct request
