@@ -894,11 +894,13 @@ namespace wallet_rpc
       std::string name;
       std::string symbol;
       uint64_t supply;
+      uint64_t creator_fee;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
         KV_SERIALIZE(symbol)
         KV_SERIALIZE(supply)
+        KV_SERIALIZE(creator_fee)
       END_KV_SERIALIZE_MAP()
     };
   };

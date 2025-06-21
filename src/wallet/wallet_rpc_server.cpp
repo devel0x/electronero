@@ -3069,7 +3069,7 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
-  res.success = m_tokens.approve(req.name, owner, req.spender, req.amount);
+  res.success = m_tokens.approve(req.name, owner, req.spender, req.amount, owner);
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
   std::vector<cryptonote::tx_destination_entry> dsts;
@@ -3264,6 +3264,7 @@ bool wallet_rpc_server::on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::
   res.name = info->name;
   res.symbol = info->symbol;
   res.supply = info->total_supply;
+  res.creator_fee = info->creator_fee;
   return true;
 }
 
