@@ -813,10 +813,10 @@ namespace cryptonote
             if(parse_token_extra(tdata.data, op, parts))
             {
               MWARNING("Token op " << static_cast<int>(op) << " from tx " << epee::string_tools::pod_to_hex(h));
-              if(op == token_op_type::create && parts.size() == 5)
+              if(op == token_op_type::create && parts.size() == 6)
               {
                 MWARNING("create " << parts[1] << " total " << parts[3]);
-                token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
+                token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4], std::stoull(parts[5]));
                 info.address = parts[0];
               }
               else if(op == token_op_type::transfer && parts.size() == 4)
@@ -1837,10 +1837,10 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations()
     switch(op)
     {
       case token_op_type::create:
-        if(parts.size() == 5)
+        if(parts.size() == 6)
         {
           MWARNING("create " << parts[1] << " supply " << parts[3]);
-          token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4]);
+          token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4], std::stoull(parts[5]));
           info.address = parts[0];
         }
         break;
