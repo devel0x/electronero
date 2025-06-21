@@ -5503,7 +5503,8 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
     return true;
   }
   std::vector<cryptonote::tx_destination_entry> dsts;
-  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  uint64_t deployment_fee = supply * TOKEN_DEPLOYMENT_FEE_PER_TOKEN;
+  dsts.push_back({deployment_fee, ginfo.address, ginfo.is_subaddress});
 
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   ::token_info &info = m_tokens.create(args[0], args[1], supply, creator, creator_fee);
@@ -5770,7 +5771,8 @@ bool simple_wallet::token_mint(const std::vector<std::string> &args)
     return true;
   }
   std::vector<cryptonote::tx_destination_entry> dsts;
-  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  uint64_t deployment_fee = amount * TOKEN_DEPLOYMENT_FEE_PER_TOKEN;
+  dsts.push_back({deployment_fee, ginfo.address, ginfo.is_subaddress});
   std::string extra_str = make_token_extra(token_op_type::mint, std::vector<std::string>{args[0], creator, std::to_string(amount)});
   std::vector<uint8_t> extra;
   cryptonote::add_token_data_to_tx_extra(extra, extra_str);
