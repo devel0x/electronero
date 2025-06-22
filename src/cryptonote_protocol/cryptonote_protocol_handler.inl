@@ -1766,8 +1766,31 @@ skip:
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
-  m_tokens = token_store();
+  if(!m_tokens_path.empty())
+  {
+    token_store loaded;
+    if(loaded.load(m_tokens_path))
+      m_tokens = std::move(loaded);
+    else
+      m_tokens = token_store();
+  }
+  else
+  {
+    m_tokens = token_store();
+  }
   auto &bc = m_core.get_blockchain_storage();
+  if(from_height > 0 && m_tokens.size() == 0)
+  {
+    bc.for_blocks_range(0, from_height - 1, [this, &bc](uint64_t, const crypto::hash&, const cryptonote::block& b){
+      process_token_tx(b.miner_tx);
+      std::list<cryptonote::transaction> txs;
+      std::list<crypto::hash> missed;
+      bc.get_transactions(b.tx_hashes, txs, missed);
+      for(const auto &tx : txs)
+        process_token_tx(tx);
+      return true;
+    });
+  }
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
     return;
