@@ -956,6 +956,24 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_TOKENS_HELD
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<std::string> addresses;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(addresses)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_TOKEN_HISTORY
   {
     struct request

@@ -147,6 +147,7 @@ namespace tools
         MAP_JON_RPC_WE("token_info",        on_token_info,        wallet_rpc::COMMAND_RPC_TOKEN_INFO)
         MAP_JON_RPC_WE("all_tokens",        on_all_tokens,        wallet_rpc::COMMAND_RPC_TOKEN_ALL)
         MAP_JON_RPC_WE("my_tokens",         on_my_tokens,         wallet_rpc::COMMAND_RPC_TOKEN_MINE)
+        MAP_JON_RPC_WE("tokens_held",      on_tokens_held,      wallet_rpc::COMMAND_RPC_TOKENS_HELD)
         MAP_JON_RPC_WE("token_history",     on_token_history,     wallet_rpc::COMMAND_RPC_TOKEN_HISTORY)
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
@@ -231,6 +232,7 @@ namespace tools
       bool on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::request& req, wallet_rpc::COMMAND_RPC_TOKEN_INFO::response& res, epee::json_rpc::error& er);
       bool on_all_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_ALL::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALL::response& res, epee::json_rpc::error& er);
       bool on_my_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINE::response& res, epee::json_rpc::error& er);
+      bool on_tokens_held(const wallet_rpc::COMMAND_RPC_TOKENS_HELD::request& req, wallet_rpc::COMMAND_RPC_TOKENS_HELD::response& res, epee::json_rpc::error& er);
       bool on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er);
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);

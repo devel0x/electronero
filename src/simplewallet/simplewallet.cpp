@@ -2182,6 +2182,10 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::my_tokens, this, _1),
                            tr("my_tokens"),
                            tr("List tokens created by this wallet."));
+  m_cmd_binder.set_handler("tokens_held",
+                           boost::bind(&simple_wallet::tokens_held, this, _1),
+                           tr("tokens_held"),
+                           tr("List tokens with a positive balance."));
   m_cmd_binder.set_handler("token_history",
                            boost::bind(&simple_wallet::token_history, this, _1),
                            tr("token_history <token_address>"),
@@ -5827,6 +5831,21 @@ bool simple_wallet::my_tokens(const std::vector<std::string> &args)
   for(const auto &t : list)
   {
     message_writer() << t.name << " (" << t.symbol << ") " << t.address;
+  }
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::tokens_held(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::vector<::token_info> list;
+  m_tokens.list_all(list);
+  for(const auto &t : list)
+  {
+    if(m_tokens.balance_of_by_address(t.address, owner) > 0)
+      message_writer() << t.name << " (" << t.symbol << ") " << t.address;
   }
   return true;
 }
