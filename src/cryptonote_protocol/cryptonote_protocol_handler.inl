@@ -291,13 +291,9 @@ namespace cryptonote
       }
     }
 
-    if(!hshd.tokens_blob.empty())
-    {
-      MWARNING("Loading token blob from peer, size " << hshd.tokens_blob.size());
-      m_tokens.merge_from_string(hshd.tokens_blob);
-      if(!m_tokens_path.empty())
-        m_tokens.save(m_tokens_path);
-    }
+    // Token blob data used to be merged here but is now ignored. Tokens
+    // synchronize through transactions or a manual rescan instead of the
+    // handshake payload to keep memory usage low.
 
     context.m_remote_blockchain_height = hshd.current_height;
 
@@ -347,7 +343,7 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
-    m_tokens.store_to_string(hshd.tokens_blob);
+    // Token state is no longer sent during the handshake.
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1770,41 +1766,76 @@ skip:
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
-  m_tokens = token_store();
+  // Preserve any existing token state when rescanning from a nonzero height so
+  // new operations are merged instead of discarding prior history.
+  if (from_height == 0)
+    m_tokens = token_store();
   auto &bc = m_core.get_blockchain_storage();
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
     return;
+
   auto process_tx = [this](const cryptonote::transaction &tx){
     process_token_tx(tx);
   };
 
-  uint64_t end = top - 1;
-  uint64_t total_blocks = end - from_height + 1;
-  uint64_t scanned_blocks = 0;
-  uint64_t scanned_txs = 0;
-  const uint64_t progress_interval = 1000;
-  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx, &scanned_blocks, &scanned_txs, total_blocks, progress_interval](uint64_t, const crypto::hash&, const cryptonote::block& b){
+  // collect regular transactions by block height
+  std::map<uint64_t, std::vector<cryptonote::transaction>> by_height;
+  bc.for_all_transactions([&](const crypto::hash &h, const cryptonote::transaction &tx){
+    uint64_t height = bc.get_db().get_tx_block_height(h);
+    if (height >= from_height && height < top)
+      by_height[height].push_back(tx);
+    return true;
+  });
+
+  // process miner transactions first
+  bc.for_blocks_range(from_height, top - 1, [this, &process_tx, &by_height](uint64_t height, const crypto::hash&, const cryptonote::block& b){
     process_tx(b.miner_tx);
-    ++scanned_txs;
-    ++scanned_blocks;
-    std::list<cryptonote::transaction> txs;
-    std::list<crypto::hash> missed;
-    bc.get_transactions(b.tx_hashes, txs, missed);
-    for (const auto &tx : txs)
+    // ensure other txes from this block execute in a stable order
+    auto it = by_height.find(height);
+    if (it != by_height.end())
     {
-      process_tx(tx);
-    }
-    scanned_txs += txs.size();
-    if (scanned_blocks % progress_interval == 0 || scanned_blocks == total_blocks)
-    {
-      std::vector<token_info> list;
-      m_tokens.list_all(list);
-      std::cout << "\r" << scanned_blocks << "/" << total_blocks << " blocks scanned, "
-                << list.size() << " tokens found, " << scanned_txs << " transactions" << std::flush;
+      auto &txs = it->second;
+      auto get_op = [](const cryptonote::transaction &t, token_op_type &op) {
+        std::vector<cryptonote::tx_extra_field> fs;
+        if(!cryptonote::parse_tx_extra(t.extra, fs))
+          return false;
+        cryptonote::tx_extra_token_data td;
+        if(!find_tx_extra_field_by_type(fs, td))
+          return false;
+        std::vector<std::string> tmp;
+        if(!parse_token_extra(td.data, op, tmp))
+          return false;
+        return true;
+      };
+      for(const auto &tx : txs)
+      {
+        token_op_type op;
+        if(get_op(tx, op) && op == token_op_type::create)
+          process_tx(tx);
+      }
+      for(const auto &tx : txs)
+      {
+        token_op_type op;
+        if(!get_op(tx, op) || op != token_op_type::create)
+          process_tx(tx);
+      }
     }
     return true;
   });
+
+  uint64_t scanned = 0;
+  const uint64_t progress_interval = 1000;
+  for(const auto &kv : by_height)
+  {
+    scanned += kv.second.size();
+    if (scanned % progress_interval == 0)
+    {
+      std::vector<token_info> list;
+      m_tokens.list_all(list);
+      std::cout << "\r" << scanned << " tx scanned, " << list.size() << " tokens found" << std::flush;
+    }
+  }
   std::cout << std::endl;
 
   if(!m_tokens_path.empty())
