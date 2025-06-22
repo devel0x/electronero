@@ -95,7 +95,9 @@ bool token_store::store_to_string(std::string &blob) const {
     return true;
 }
 
-token_info &token_store::create(const std::string &name, const std::string &symbol, uint64_t supply, const std::string &creator, uint64_t creator_fee) {
+token_info &token_store::create(const std::string &name, const std::string &symbol,
+                                uint64_t supply, const std::string &creator,
+                                uint64_t creator_fee, const std::string &address) {
     auto &tok = tokens[name];
     tok.name = name;
     tok.symbol = symbol;
@@ -103,13 +105,17 @@ token_info &token_store::create(const std::string &name, const std::string &symb
     tok.total_supply = supply;
     tok.creator_fee = creator_fee;
     tok.balances[creator] = supply;
-    // incorporate some random bytes to ensure unique hash even when called repeatedly
-    uint64_t nonce = crypto::rand<uint64_t>();
-    std::string data = creator + name + symbol + std::to_string(tokens.size()) + std::to_string(nonce);
-    crypto::hash h;
-    crypto::cn_fast_hash(data.data(), data.size(), h);
-    std::string hex = epee::string_tools::pod_to_hex(h);
-    tok.address = std::string("cEVM") + hex.substr(0, 46);
+    if (address.empty()) {
+        // incorporate some random bytes to ensure unique hash even when called repeatedly
+        uint64_t nonce = crypto::rand<uint64_t>();
+        std::string data = creator + name + symbol + std::to_string(tokens.size()) + std::to_string(nonce);
+        crypto::hash h;
+        crypto::cn_fast_hash(data.data(), data.size(), h);
+        std::string hex = epee::string_tools::pod_to_hex(h);
+        tok.address = std::string("cEVM") + hex.substr(0, 46);
+    } else {
+        tok.address = address;
+    }
     creator_tokens[creator].push_back(name);
     address_index[tok.address] = name;
     return tok;

@@ -86,7 +86,9 @@ public:
     const token_info *get_by_address(const std::string &address) const;
     token_info *get_by_address(const std::string &address);
 
-    token_info &create(const std::string &name, const std::string &symbol, uint64_t supply, const std::string &creator, uint64_t creator_fee = 0);
+    token_info &create(const std::string &name, const std::string &symbol, uint64_t supply,
+                       const std::string &creator, uint64_t creator_fee = 0,
+                       const std::string &address = std::string());
 
     void list_all(std::vector<token_info> &out) const;
     void list_by_creator(const std::string &creator, std::vector<token_info> &out) const;
