@@ -3022,6 +3022,21 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     er.message = "token not found";
     return false;
   }
+
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), req.to))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid address";
+    return false;
+  }
+  if(to_info.has_payment_id)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Integrated address not allowed";
+    return false;
+  }
+
   res.success = m_tokens.transfer_by_address(req.token_address, from, req.to, req.amount);
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
@@ -3107,6 +3122,21 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
     er.message = "token not found";
     return false;
   }
+
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), req.to))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid address";
+    return false;
+  }
+  if(to_info.has_payment_id)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Integrated address not allowed";
+    return false;
+  }
+
   res.success = m_tokens.transfer_from_by_address(req.token_address, spender, req.from, req.to, req.amount);
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
