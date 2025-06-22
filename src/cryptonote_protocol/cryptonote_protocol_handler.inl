@@ -1810,10 +1810,34 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
     std::list<cryptonote::transaction> txs;
     std::list<crypto::hash> missed;
     bc.get_transactions(b.tx_hashes, txs, missed);
-    for (const auto &tx : txs)
+
+    auto get_op = [](const cryptonote::transaction &t, token_op_type &op) {
+      std::vector<cryptonote::tx_extra_field> fs;
+      if(!cryptonote::parse_tx_extra(t.extra, fs))
+        return false;
+      cryptonote::tx_extra_token_data td;
+      if(!find_tx_extra_field_by_type(fs, td))
+        return false;
+      std::vector<std::string> tmp;
+      if(!parse_token_extra(td.data, op, tmp))
+        return false;
+      return true;
+    };
+
+    // process creation ops first so later transfers in the same block succeed
+    for(const auto &tx : txs)
     {
-      process_tx(tx);
+      token_op_type op;
+      if(get_op(tx, op) && op == token_op_type::create)
+        process_tx(tx);
     }
+    for(const auto &tx : txs)
+    {
+      token_op_type op;
+      if(!get_op(tx, op) || op != token_op_type::create)
+        process_tx(tx);
+    }
+
     scanned_txs += txs.size();
     if (scanned_blocks % progress_interval == 0 || scanned_blocks == total_blocks)
     {
