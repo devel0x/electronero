@@ -1874,9 +1874,13 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::create:
       if(parts.size() >= 5)
       {
-        uint64_t creator_fee = parts.size() == 6 ? std::stoull(parts[5]) : 0;
-        token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4], creator_fee);
-        info.address = parts[0];
+        // Skip if the token already exists to avoid overwriting balances on rescans
+        if(!m_tokens.get_by_address(parts[0]))
+        {
+          uint64_t creator_fee = parts.size() == 6 ? std::stoull(parts[5]) : 0;
+          token_info &info = m_tokens.create(parts[1], parts[2], std::stoull(parts[3]), parts[4], creator_fee);
+          info.address = parts[0];
+        }
       }
       break;
     case token_op_type::transfer:
