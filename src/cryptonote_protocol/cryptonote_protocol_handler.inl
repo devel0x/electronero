@@ -1899,6 +1899,7 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
 }
+
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   void t_cryptonote_protocol_handler<t_core>::stop()
