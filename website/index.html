@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Electronero</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #ffeb3b, #000, #fff);
+      color: #fff;
+    }
+    .hero {
+      padding: 6rem 0;
+      text-align: center;
+    }
+    .hero img {
+      max-width: 200px;
+    }
+    .timeline {
+      position: relative;
+      padding: 2rem 0;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      background: #fff;
+    }
+    .timeline-item {
+      position: relative;
+      width: 50%;
+      padding: 1rem 2rem;
+    }
+    .timeline-item:nth-child(odd) {
+      left: 0;
+      text-align: right;
+    }
+    .timeline-item:nth-child(even) {
+      left: 50%;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      top: 1rem;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #000;
+    }
+    .timeline-item:nth-child(odd)::before {
+      right: -10px;
+    }
+    .timeline-item:nth-child(even)::before {
+      left: -10px;
+    }
+    @media (max-width: 768px) {
+      .timeline::before {
+        left: 10px;
+      }
+      .timeline-item {
+        width: 100%;
+        padding-left: 2.5rem;
+        text-align: left;
+      }
+      .timeline-item::before {
+        left: -10px;
+        right: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <img src="logo-placeholder.png" alt="Logo" class="img-fluid mb-4">
+    <h1 class="display-4 fw-bold">Electronero</h1>
+  </div>
+  <div class="container">
+    <h2 class="text-center mb-5">Roadmap</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <h5>2018 &ndash; Project Inception</h5>
+        <p>Forked from Monero and Electroneum with additional security updates.</p>
+      </div>
+      <div class="timeline-item">
+        <h5>2020 &ndash; RPC Libraries</h5>
+        <p>Node.js, PHP, Go and Python modules added for easy RPC integration.</p>
+      </div>
+      <div class="timeline-item">
+        <h5>2021 &ndash; EI-2.0 Smart Chain</h5>
+        <p>Launch with cross-chain atomic swaps and xAssets support.</p>
+      </div>
+      <div class="timeline-item">
+        <h5>2021 &ndash; XRC-20 Token Platform</h5>
+        <p>Lightweight token system accessible via CLI and RPC.</p>
+      </div>
+      <div class="timeline-item">
+        <h5>Future</h5>
+        <p>Governance features and extended token utilities.</p>
+      </div>
+    </div>
+    <div class="my-5 text-center">
+      <h3>Subscribe for updates</h3>
+      <form class="d-flex flex-column flex-sm-row justify-content-center">
+        <input type="email" class="form-control mb-2 mb-sm-0 me-sm-2" placeholder="Email address">
+        <button type="submit" class="btn btn-primary">Subscribe</button>
+      </form>
+    </div>
+    <div class="text-center mb-5">
+      <a href="../docs/wallet_rpc.md" class="link-light">Wallet RPC Documentation</a>
+      &middot;
+      <a href="../docs/daemon_rpc.md" class="link-light">Daemon RPC Documentation</a>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
