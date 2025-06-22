@@ -291,13 +291,9 @@ namespace cryptonote
       }
     }
 
-    if(!hshd.tokens_blob.empty())
-    {
-      MWARNING("Loading token blob from peer, size " << hshd.tokens_blob.size());
-      m_tokens.merge_from_string(hshd.tokens_blob);
-      if(!m_tokens_path.empty())
-        m_tokens.save(m_tokens_path);
-    }
+    // Token blob data used to be merged here but is now ignored. Tokens
+    // synchronize through transactions or a manual rescan instead of the
+    // handshake payload to keep memory usage low.
 
     context.m_remote_blockchain_height = hshd.current_height;
 
@@ -347,7 +343,7 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
-    m_tokens.store_to_string(hshd.tokens_blob);
+    // Token state is no longer sent during the handshake.
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1770,7 +1766,10 @@ skip:
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
-  m_tokens = token_store();
+  // Preserve any existing token state when rescanning from a nonzero height so
+  // new operations are merged instead of discarding prior history.
+  if (from_height == 0)
+    m_tokens = token_store();
   auto &bc = m_core.get_blockchain_storage();
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
