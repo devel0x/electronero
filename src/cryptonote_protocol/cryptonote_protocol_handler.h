@@ -110,6 +110,7 @@ namespace cryptonote
     const block_queue &get_block_queue() const { return m_block_queue; }
     void rescan_token_operations(uint64_t from_height) override;
     void process_token_tx(const cryptonote::transaction &tx) override;
+    bool get_tokens_blob(std::string &blob) const override;
     void stop();
     void on_connection_close(cryptonote_connection_context &context);
   private:

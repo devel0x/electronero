@@ -2498,18 +2498,26 @@ namespace tools
       return false;
     }
 
-    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request dreq;
-    dreq.from_height = req.from_height;
-    cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response dres;
-    bool r = m_wallet->invoke_http_json_rpc("/json_rpc", "rescan_token_tx", dreq, dres);
-    if (!r)
-    {
-      er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
-      er.message = "Failed to rescan token tx";
-      return false;
-    }
-    return true;
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::request dreq;
+  dreq.from_height = req.from_height;
+  cryptonote::COMMAND_RPC_RESCAN_TOKEN_TX::response dres;
+  bool r = m_wallet->invoke_http_json_rpc("/json_rpc", "rescan_token_tx", dreq, dres);
+  if (!r)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "Failed to rescan token tx";
+    return false;
   }
+  if (!dres.token_blob.empty())
+  {
+    std::string blob;
+    epee::string_tools::parse_hexstr_to_binbuff(dres.token_blob, blob);
+    m_tokens.load_from_string(blob);
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
+  }
+  return true;
+}
   //------------------------------------------------------------------------------------------------------------------------------
   void wallet_rpc_server::handle_rpc_exception(const std::exception_ptr& e, epee::json_rpc::error& er, int default_error_code) {
     try

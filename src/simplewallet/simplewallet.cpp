@@ -7056,6 +7056,14 @@ bool simple_wallet::rescan_token_tx(const std::vector<std::string> &args)
     fail_msg_writer() << tr("failed to rescan token tx");
     return true;
   }
+  if (!res.token_blob.empty())
+  {
+    std::string blob;
+    epee::string_tools::parse_hexstr_to_binbuff(res.token_blob, blob);
+    m_tokens.load_from_string(blob);
+    if(!m_tokens_path.empty())
+      m_tokens.save(m_tokens_path);
+  }
   success_msg_writer() << tr("Token operations rescanned");
   return true;
 }

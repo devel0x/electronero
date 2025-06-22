@@ -1984,7 +1984,9 @@ namespace wallet_rpc
 
     struct response
     {
+      std::string token_blob;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_blob)
       END_KV_SERIALIZE_MAP()
     };
   };

@@ -1911,6 +1911,12 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
 }
+template<class t_core>
+bool t_cryptonote_protocol_handler<t_core>::get_tokens_blob(std::string &blob) const
+{
+  return m_tokens.store_to_string(blob);
+}
+
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   void t_cryptonote_protocol_handler<t_core>::stop()

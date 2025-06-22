@@ -1738,6 +1738,9 @@ namespace cryptonote
     try
     {
       m_core.get_protocol()->rescan_token_operations(req.from_height);
+      std::string blob;
+      if (m_core.get_protocol()->get_tokens_blob(blob))
+        res.token_blob = epee::string_tools::buff_to_hex_nodelimer(blob);
       res.status = CORE_RPC_STATUS_OK;
     }
     catch (const std::exception &e)
