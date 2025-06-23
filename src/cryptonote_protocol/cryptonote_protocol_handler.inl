@@ -1811,7 +1811,8 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
       if(!find_tx_extra_field_by_type(fs, td))
         return false;
       std::vector<std::string> tmp;
-      if(!parse_token_extra(td.data, op, tmp))
+      crypto::signature sg;
+      if(!parse_token_extra(td.data, op, tmp, sg))
         return false;
       return true;
     };
@@ -1858,9 +1859,28 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     return;
   token_op_type op;
   std::vector<std::string> parts;
-  if(!parse_token_extra(tdata.data, op, parts))
+  crypto::signature sig;
+  if(!parse_token_extra(tdata.data, op, parts, sig))
     return;
   MDEBUG("Token op " << static_cast<int>(op));
+
+  std::string signer;
+  switch(op)
+  {
+    case token_op_type::create: if(parts.size() >= 5) signer = parts[4]; break;
+    case token_op_type::transfer: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::approve: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::transfer_from: if(parts.size() == 5) signer = parts[1]; break;
+    case token_op_type::set_fee: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::transfer_ownership: if(parts.size() == 3) signer = parts[1]; break;
+  }
+  cryptonote::address_parse_info info;
+  if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
+    return;
+  if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
+    return;
   switch(op)
   {
     case token_op_type::create:
