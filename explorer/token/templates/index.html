@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Token Explorer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <script>
+        function toggleTheme() {
+            const body = document.body;
+            body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+        }
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+            }
+        }
+        function filterTokens() {
+            const term = document.getElementById('token-search').value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = text.includes(term) ? '' : 'none';
+            });
+        }
+        window.addEventListener('DOMContentLoaded', loadTheme);
+    </script>
+</head>
+<body>
+<header>
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo">
+    <h1>Token Explorer</h1>
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+</header>
+<main>
+    <div class="form-container">
+        <form action="/token" method="get">
+            <label for="token">Token Address:</label>
+            <input type="text" id="token" name="token" required>
+            <label for="token-address">Filter Address:</label>
+            <input type="text" id="token-address" name="address" placeholder="optional">
+            <button type="submit">Search Token</button>
+        </form>
+        <form action="/address" method="get">
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="addr" required>
+            <button type="submit">Search Address</button>
+        </form>
+    </div>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    {% if tokens %}
+    <input type="text" id="token-search" onkeyup="filterTokens()" placeholder="Search tokens">
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Symbol</th><th>Address</th><th>Supply</th><th>Creator Fee</th></tr>
+        </thead>
+        <tbody>
+            {% for tk in tokens %}
+            <tr>
+                <td><a href="/token?token={{ tk.address }}">{{ tk.name }}</a></td>
+                <td>{{ tk.symbol }}</td>
+                <td>{{ tk.address }}</td>
+                <td>{{ tk.supply }}</td>
+                <td>{{ tk.creator_fee }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</main>
+<footer>
+    Electronero Network &bull;
+    <a href="https://x.com/electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+    <a href="https://github.com/electronero/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
+    <a href="mailto:info@electronero.org"><i class="fa-solid fa-envelope"></i></a>
+</footer>
+</body>
+</html>

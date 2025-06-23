@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <script>
+        function toggleTheme() {
+            const body = document.body;
+            body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+        }
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+            }
+        }
+        function filterTable() {
+            const term = document.getElementById('search').value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = text.includes(term) ? '' : 'none';
+            });
+        }
+        window.addEventListener('DOMContentLoaded', loadTheme);
+    </script>
+</head>
+<body>
+<header>
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo">
+    <h1>{{ title }}</h1>
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+</header>
+<main>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% else %}
+        {% if history %}
+        <input type="text" id="search" onkeyup="filterTable()" placeholder="Search results">
+        <table>
+            <thead>
+                <tr><th>Tx ID</th><th>From</th><th>To</th><th>Amount</th><th>Height</th></tr>
+            </thead>
+            <tbody>
+                {% for tx in history %}
+                <tr>
+                    <td>{{ tx.txid }}</td>
+                    <td>{{ tx.address_from }}</td>
+                    <td>{{ tx.address_to }}</td>
+                    <td>{{ tx.amount }}</td>
+                    <td>{{ tx.height }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p>No results.</p>
+        {% endif %}
+    {% endif %}
+    <p><a href="/">Back</a></p>
+</main>
+<footer>
+    Electronero Network &bull;
+    <a href="https://x.com/electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+    <a href="https://github.com/electronero/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
+    <a href="mailto:info@electronero.org"><i class="fa-solid fa-envelope"></i></a>
+</footer>
+</body>
+</html>
