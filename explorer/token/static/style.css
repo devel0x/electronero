@@ -132,13 +132,16 @@ td.address {
 
 
 @media (max-width: 600px) {
+    form {
+        flex: none !important;
+    }
     header h1 {
         font-size: 1.2rem;
     }
     .form-container {
         flex-direction: column;
     }
-    table {
+    #index-table {
         display: block;
         overflow-x: auto;
     }
@@ -147,5 +150,9 @@ td.address {
     }
     td.address {
         max-width: 120px;
+    }
+    .off-table-address {
+        max-width:120px;
+        font-size: 0.5rem;
     }
 }
