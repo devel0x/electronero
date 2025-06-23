@@ -10,6 +10,14 @@ WALLET_PORT = int(os.environ.get("WALLET_PORT", "18082"))
 wallet = WalletRPC(host=WALLET_HOST, port=WALLET_PORT)
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+@app.template_filter('fmt_amount')
+def fmt_amount(value: object) -> str:
+    """Format atomic amount as decimal with 8 fraction digits."""
+    try:
+        return f"{int(value) / 1e8:.8f}"
+    except Exception:
+        return str(value)
+
 @app.route('/')
 def index():
     tokens = []
@@ -65,9 +73,19 @@ def token_history_html():
     try:
         result = wallet.call("token_history", params)
         if isinstance(result, dict):
-            history = result.get("history") or result.get("transfers") or []
+            raw_hist = result.get("history") or result.get("transfers") or []
         else:
-            history = result
+            raw_hist = result
+        history = []
+        for h in raw_hist:
+            history.append({
+                "txid": h.get("txid") or h.get("tx_hash"),
+                "from": h.get("from") or h.get("address_from"),
+                "to": h.get("to") or h.get("address_to"),
+                "amount": h.get("amount"),
+                "height": h.get("height"),
+                "token_address": h.get("token_address"),
+            })
     except RPCError as e:
         return render_template("results.html", title="Token History", error=str(e), history=[])
     return render_template("results.html", title="Token History", history=history, error=None)
@@ -97,9 +115,19 @@ def address_history_html():
     try:
         result = wallet.call("token_history_addr", params)
         if isinstance(result, dict):
-            history = result.get("history") or result.get("transfers") or []
+            raw_hist = result.get("history") or result.get("transfers") or []
         else:
-            history = result
+            raw_hist = result
+        history = []
+        for h in raw_hist:
+            history.append({
+                "txid": h.get("txid") or h.get("tx_hash"),
+                "from": h.get("from") or h.get("address_from"),
+                "to": h.get("to") or h.get("address_to"),
+                "amount": h.get("amount"),
+                "height": h.get("height"),
+                "token_address": h.get("token_address"),
+            })
     except RPCError as e:
         return render_template("results.html", title="Address History", error=str(e), history=[])
     return render_template("results.html", title="Address History", history=history, error=None)

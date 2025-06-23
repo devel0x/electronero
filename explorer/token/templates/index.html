@@ -63,8 +63,8 @@
                 <td><a href="/token?token={{ tk.address }}">{{ tk.name }}</a></td>
                 <td>{{ tk.symbol }}</td>
                 <td>{{ tk.address }}</td>
-                <td>{{ tk.supply }}</td>
-                <td>{{ tk.creator_fee }}</td>
+                <td>{{ tk.supply | fmt_amount }}</td>
+                <td>{{ tk.creator_fee | fmt_amount }}</td>
             </tr>
             {% endfor %}
         </tbody>
