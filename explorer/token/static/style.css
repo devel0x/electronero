@@ -135,4 +135,17 @@ td.address {
     header h1 {
         font-size: 1.2rem;
     }
+    .form-container {
+        flex-direction: column;
+    }
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+    th, td {
+        font-size: 0.8rem;
+    }
+    td.address {
+        max-width: 120px;
+    }
 }

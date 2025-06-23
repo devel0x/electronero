@@ -15,11 +15,12 @@ Run `electronero-wallet-rpc` on `localhost:18082` and then start the explorer:
 python3 app.py
 ```
 
-Visit <http://localhost:5000> in a browser. The home page lists all known tokens and lets you search by token or participant address. A filter box above the table makes it easy to find a specific token. Results are displayed in responsive tables with a search box. A theme toggle allows switching between light and dark modes and your preference is saved in `localStorage`.
+Visit <http://localhost:5000> in a browser. The home page lists all known tokens and lets you search by token or participant address. A filter box above the table makes it easy to find a specific token. Results are displayed in responsive tables with a search box. A theme toggle allows switching between light and dark modes and your preference is saved in `localStorage`. The layout automatically adapts to small screens for mobile use.
 
 ## Features
 
 - Responsive layout with light and dark themes
+- Mobile-friendly tables that scroll on small screens
 - Lists all known tokens with on-page search
 - History queries by token address or participant address
 - Simple forms on the home page for ad hoc lookups
