@@ -41,7 +41,7 @@
         {% if token_info %}
         <div class="card">
             <strong>{{ token_info.name }} ({{ token_info.symbol }})</strong><br>
-            Address: {{ token_info.address }}<br>
+            <span style="font-size:0.8rem">Address: {{ token_info.address }}</span><br>
             Supply: {{ token_info.supply | fmt_amount }}<br>
             Creator Fee: {{ token_info.creator_fee | fmt_amount }}
         </div>
@@ -70,9 +70,9 @@
 </main>
 <footer>
     Electronero Network &bull;
-    <a href="https://x.com/electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
-    <a href="https://github.com/electronero/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
-    <a href="mailto:info@electronero.org"><i class="fa-solid fa-envelope"></i></a>
+    <a href="https://x.com/_electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+    <a href="https://github.com/electronero-project/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
+    <a href="mailto:support@electronero.org"><i class="fa-solid fa-envelope"></i></a>
 </footer>
 </body>
 </html>
