@@ -799,7 +799,7 @@ namespace cryptonote
       crypto::hash h, ph;
       if (cryptonote::parse_and_validate_tx_from_blob(*tx_blob_it, tx, h, ph))
       {
-        process_token_tx(tx);
+        process_token_tx(tx, m_core.get_current_blockchain_height());
       }
       if(tvc.m_verifivation_failed)
       {
@@ -1786,8 +1786,8 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
     return;
-  auto process_tx = [this](const cryptonote::transaction &tx){
-    process_token_tx(tx);
+  auto process_tx = [this](const cryptonote::transaction &tx, uint64_t h){
+    process_token_tx(tx, h);
   };
 
   uint64_t end = top - 1;
@@ -1795,8 +1795,8 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
   uint64_t scanned_blocks = 0;
   uint64_t scanned_txs = 0;
   const uint64_t progress_interval = 1000;
-  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx, &scanned_blocks, &scanned_txs, total_blocks, progress_interval](uint64_t, const crypto::hash&, const cryptonote::block& b){
-    process_tx(b.miner_tx);
+  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx, &scanned_blocks, &scanned_txs, total_blocks, progress_interval](uint64_t height, const crypto::hash&, const cryptonote::block& b){
+    process_tx(b.miner_tx, height);
     ++scanned_txs;
     ++scanned_blocks;
     std::list<cryptonote::transaction> txs;
@@ -1811,7 +1811,9 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
       if(!find_tx_extra_field_by_type(fs, td))
         return false;
       std::vector<std::string> tmp;
-      if(!parse_token_extra(td.data, op, tmp))
+      crypto::signature sg;
+      bool hs;
+      if(!parse_token_extra(td.data, op, tmp, sg, hs))
         return false;
       return true;
     };
@@ -1821,13 +1823,13 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
     {
       token_op_type op;
       if(get_op(tx, op) && op == token_op_type::create)
-        process_tx(tx);
+        process_tx(tx, height);
     }
     for(const auto &tx : txs)
     {
       token_op_type op;
       if(!get_op(tx, op) || op != token_op_type::create)
-        process_tx(tx);
+        process_tx(tx, height);
     }
 
     scanned_txs += txs.size();
@@ -1850,6 +1852,12 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::transaction &tx)
 {
+  process_token_tx(tx, m_core.get_current_blockchain_height());
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::transaction &tx, uint64_t height)
+{
   std::vector<cryptonote::tx_extra_field> fields;
   if(!cryptonote::parse_tx_extra(tx.extra, fields))
     return;
@@ -1858,9 +1866,37 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     return;
   token_op_type op;
   std::vector<std::string> parts;
-  if(!parse_token_extra(tdata.data, op, parts))
+  crypto::signature sig;
+  bool has_sig;
+  if(!parse_token_extra(tdata.data, op, parts, sig, has_sig))
     return;
   MDEBUG("Token op " << static_cast<int>(op));
+
+  std::string signer;
+  switch(op)
+  {
+    case token_op_type::create: if(parts.size() >= 5) signer = parts[4]; break;
+    case token_op_type::transfer: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::approve: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::transfer_from: if(parts.size() == 5) signer = parts[1]; break;
+    case token_op_type::set_fee: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::transfer_ownership: if(parts.size() == 3) signer = parts[1]; break;
+  }
+  cryptonote::address_parse_info info;
+  if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
+    return;
+  bool require_sig = height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  if(has_sig)
+  {
+    if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
+      return;
+  }
+  else if(require_sig)
+  {
+    return;
+  }
   switch(op)
   {
     case token_op_type::create:
