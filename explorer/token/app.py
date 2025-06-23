@@ -62,7 +62,7 @@ def token_history(token_addr: str):
 def token_history_html():
     token_addr = request.args.get("token")
     if not token_addr:
-        return render_template("results.html", title="Token History", error="Missing token address", history=[], token_info=None)
+        return render_template("results.html", title="XRC-20 Token History", error="Missing token address", history=[], token_info=None)
     address = request.args.get("address")
     typ = request.args.get("type")
     params = {"token_address": token_addr}
@@ -94,7 +94,7 @@ def token_history_html():
                 "token_address": h.get("token_address"),
             })
     except RPCError as e:
-        return render_template("results.html", title="Token History", error=str(e), history=[], token_info=info)
+        return render_template("results.html", title="XRC-20 Token History", error=str(e), history=[], token_info=info)
     token_info = {
         "name": info.get("name"),
         "symbol": info.get("symbol"),
@@ -102,7 +102,7 @@ def token_history_html():
         "supply": info.get("supply"),
         "creator_fee": info.get("creator_fee"),
     }
-    return render_template("results.html", title="Token History", history=history, error=None, token_info=token_info)
+    return render_template("results.html", title="XRC-20 Token History", history=history, error=None, token_info=token_info)
 
 @app.route('/address/<addr>')
 def address_history(addr: str):
@@ -121,7 +121,7 @@ def address_history(addr: str):
 def address_history_html():
     addr = request.args.get("addr")
     if not addr:
-        return render_template("results.html", title="Address History", error="Missing address", history=[])
+        return render_template("results.html", title="Public Wallet History", error="Missing address", history=[])
     typ = request.args.get("type")
     params = {"address": addr}
     if typ:
@@ -146,8 +146,8 @@ def address_history_html():
                 "token_address": h.get("token_address"),
             })
     except RPCError as e:
-        return render_template("results.html", title="Address History", error=str(e), history=[])
-    return render_template("results.html", title="Address History", history=history, error=None)
+        return render_template("results.html", title="Public Wallet History", error=str(e), history=[])
+    return render_template("results.html", title="Public Wallet History", history=history, error=None)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
