@@ -300,16 +300,30 @@ void token_store::list_by_creator(const std::string &creator, std::vector<token_
     }
 }
 
-std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields)
+std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields, const crypto::secret_key *sk)
 {
     std::ostringstream oss;
     oss << static_cast<int>(op);
     for(const auto &f : fields)
         oss << '\t' << f;
-    return oss.str();
+    std::string data = oss.str();
+    if (sk)
+    {
+        crypto::public_key pub;
+        if (crypto::secret_key_to_public_key(*sk, pub))
+        {
+            crypto::hash h;
+            crypto::cn_fast_hash(data.data(), data.size(), h);
+            crypto::signature sig;
+            crypto::generate_signature(h, pub, *sk, sig);
+            data += '\t';
+            data += epee::string_tools::pod_to_hex(sig);
+        }
+    }
+    return data;
 }
 
-bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields)
+bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields, std::string *sig)
 {
     std::istringstream iss(data);
     int op_int;
@@ -319,9 +333,32 @@ bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<s
     if (iss.peek() == '\t')
         iss.get();
     std::string field;
+    std::vector<std::string> tmp;
     while(std::getline(iss, field, '\t'))
-        fields.push_back(field);
+        tmp.push_back(field);
+    if(sig && !tmp.empty())
+    {
+        *sig = tmp.back();
+        tmp.pop_back();
+    }
+    fields = std::move(tmp);
     return true;
+}
+
+bool verify_token_extra_signature(token_op_type op, const std::vector<std::string> &fields, const std::string &sig, const std::string &address, cryptonote::network_type nettype)
+{
+    crypto::signature signature;
+    if(sig.size() != sizeof(signature) * 2 || !epee::string_tools::hex_to_pod(sig, signature))
+        return false;
+
+    cryptonote::address_parse_info info;
+    if(!cryptonote::get_account_address_from_str(info, nettype, address))
+        return false;
+
+    std::string data = make_token_extra(op, fields, nullptr);
+    crypto::hash h;
+    crypto::cn_fast_hash(data.data(), data.size(), h);
+    return crypto::check_signature(h, info.address.m_spend_public_key, signature);
 }
 
 void token_store::record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount)

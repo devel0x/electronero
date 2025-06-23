@@ -1858,7 +1858,49 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     return;
   token_op_type op;
   std::vector<std::string> parts;
-  if(!parse_token_extra(tdata.data, op, parts))
+  std::string sig;
+  if(!parse_token_extra(tdata.data, op, parts, &sig))
+    return;
+  if(sig.empty())
+    return;
+
+  std::string signer;
+  switch(op)
+  {
+    case token_op_type::create:
+      if(parts.size() >= 5)
+        signer = parts[4];
+      break;
+    case token_op_type::transfer:
+      if(parts.size() == 4)
+        signer = parts[1];
+      break;
+    case token_op_type::approve:
+      if(parts.size() == 4)
+        signer = parts[1];
+      break;
+    case token_op_type::transfer_from:
+      if(parts.size() == 5)
+        signer = parts[1];
+      break;
+    case token_op_type::set_fee:
+      if(parts.size() == 3)
+        signer = parts[1];
+      break;
+    case token_op_type::burn:
+      if(parts.size() == 3)
+        signer = parts[1];
+      break;
+    case token_op_type::mint:
+      if(parts.size() == 3)
+        signer = parts[1];
+      break;
+    case token_op_type::transfer_ownership:
+      if(parts.size() == 3)
+        signer = parts[1];
+      break;
+  }
+  if(signer.empty() || !verify_token_extra_signature(op, parts, sig, signer, m_core.get_nettype()))
     return;
   MDEBUG("Token op " << static_cast<int>(op));
   switch(op)

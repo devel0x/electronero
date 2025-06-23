@@ -125,7 +125,11 @@ private:
     void record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount);
 };
 
-std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields);
-bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields);
+#include "cryptonote_config.h"
+#include "cryptonote_basic/cryptonote_basic_impl.h"
+
+std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields, const crypto::secret_key *sk = nullptr);
+bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields, std::string *sig = nullptr);
+bool verify_token_extra_signature(token_op_type op, const std::vector<std::string> &fields, const std::string &sig, const std::string &address, cryptonote::network_type nettype);
 
 #endif // TOKEN_H
