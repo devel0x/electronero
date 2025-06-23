@@ -164,6 +164,13 @@ namespace tools
       return false;
 
     m_vm = vm;
+    if (m_tokens_path.empty())
+    {
+      boost::filesystem::path token_path = tools::get_default_data_dir();
+      token_path /= "tokens.bin";
+      m_tokens_path = token_path.string();
+      m_tokens.load(m_tokens_path);
+    }
     tools::wallet2 *walvars;
     std::unique_ptr<tools::wallet2> tmpwal;
 
