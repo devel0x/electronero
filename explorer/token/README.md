@@ -23,6 +23,7 @@ Visit <http://localhost:5000> in a browser. The home page lists all known tokens
 - Lists all known tokens with on-page search
 - History queries by token address or participant address
 - Simple forms on the home page for ad hoc lookups
+- Token history pages show a stats card with name, symbol, supply, and creator fee
 
 ## Endpoints
 

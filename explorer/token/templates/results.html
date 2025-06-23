@@ -37,18 +37,25 @@
     {% if error %}
         <p class="error">{{ error }}</p>
     {% else %}
+        {% if token_info %}
+        <div class="card">
+            <strong>{{ token_info.name }} ({{ token_info.symbol }})</strong><br>
+            Address: {{ token_info.address }}<br>
+            Supply: {{ token_info.supply | fmt_amount }}<br>
+            Creator Fee: {{ token_info.creator_fee | fmt_amount }}
+        </div>
+        {% endif %}
         {% if history %}
         <input type="text" id="search" onkeyup="filterTable()" placeholder="Search results">
         <table>
             <thead>
-                <tr><th>Token</th><th>From</th><th>To</th><th>Amount</th></tr>
+                <tr><th>From</th><th>To</th><th>Amount</th></tr>
             </thead>
             <tbody>
                 {% for tx in history %}
                 <tr>
-                    <td>{{ tx.token_address }}</td>
-                    <td>{{ tx['from'] }}</td>
-                    <td>{{ tx['to'] }}</td>
+                    <td class="address" title="{{ tx['from'] }}">{{ tx['from'] }}</td>
+                    <td class="address" title="{{ tx['to'] }}">{{ tx['to'] }}</td>
                     <td>{{ tx.amount | fmt_amount }}</td>
                 </tr>
                 {% endfor %}

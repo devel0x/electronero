@@ -62,7 +62,7 @@ def token_history(token_addr: str):
 def token_history_html():
     token_addr = request.args.get("token")
     if not token_addr:
-        return render_template("results.html", title="Token History", error="Missing token address", history=[])
+        return render_template("results.html", title="Token History", error="Missing token address", history=[], token_info=None)
     address = request.args.get("address")
     typ = request.args.get("type")
     params = {"token_address": token_addr}
@@ -70,6 +70,10 @@ def token_history_html():
         params["address"] = address
     if typ:
         params["type"] = typ
+    try:
+        info = wallet.call("token_info", {"token_address": token_addr})
+    except RPCError:
+        info = {}
     try:
         result = wallet.call("token_history", params)
         if isinstance(result, dict):
@@ -87,8 +91,15 @@ def token_history_html():
                 "token_address": h.get("token_address"),
             })
     except RPCError as e:
-        return render_template("results.html", title="Token History", error=str(e), history=[])
-    return render_template("results.html", title="Token History", history=history, error=None)
+        return render_template("results.html", title="Token History", error=str(e), history=[], token_info=info)
+    token_info = {
+        "name": info.get("name"),
+        "symbol": info.get("symbol"),
+        "address": token_addr,
+        "supply": info.get("supply"),
+        "creator_fee": info.get("creator_fee"),
+    }
+    return render_template("results.html", title="Token History", history=history, error=None, token_info=token_info)
 
 @app.route('/address/<addr>')
 def address_history(addr: str):
