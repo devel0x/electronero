@@ -82,9 +82,12 @@ def token_history_html():
             raw_hist = result
         history = []
         for h in raw_hist:
+            from_addr = h.get("from") or h.get("address_from") or ""
+            if not from_addr:
+                from_addr = "Mint"
             history.append({
                 "txid": h.get("txid") or h.get("tx_hash"),
-                "from": h.get("from") or h.get("address_from"),
+                "from": from_addr,
                 "to": h.get("to") or h.get("address_to"),
                 "amount": h.get("amount"),
                 "height": h.get("height"),
@@ -131,9 +134,12 @@ def address_history_html():
             raw_hist = result
         history = []
         for h in raw_hist:
+            from_addr = h.get("from") or h.get("address_from") or ""
+            if not from_addr:
+                from_addr = "Mint"
             history.append({
                 "txid": h.get("txid") or h.get("tx_hash"),
-                "from": h.get("from") or h.get("address_from"),
+                "from": from_addr,
                 "to": h.get("to") or h.get("address_to"),
                 "amount": h.get("amount"),
                 "height": h.get("height"),
