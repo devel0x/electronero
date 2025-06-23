@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, List, Callable
+import time
 
 import requests
 
@@ -77,6 +78,29 @@ class DaemonRPC(RPCClient):
     def send_raw_transaction(self, tx_as_hex: str) -> Dict[str, Any]:
         params = {"tx_as_hex": tx_as_hex}
         return self.call("send_raw_transaction", params)
+
+    def wait_for_height(
+        self,
+        target_height: int,
+        *,
+        poll_interval: int = 5,
+        timeout: int = 120,
+    ) -> int:
+        """Wait until the daemon reaches ``target_height``.
+
+        Returns the current height once ``target_height`` is reached or raises
+        :class:`TimeoutError` if the timeout expires.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                height = self.get_block_count()
+                if height >= target_height:
+                    return height
+            except Exception:
+                pass
+            time.sleep(poll_interval)
+        raise TimeoutError("Timed out waiting for daemon to reach target height")
 
 
 class WalletRPC(RPCClient):

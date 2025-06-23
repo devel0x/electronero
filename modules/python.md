@@ -65,3 +65,20 @@ complete list of method names. The Python helpers simply forward parameters as
 provided and return the decoded JSON result.
 
 The RPC clients raise `RPCError` when a request fails.
+
+## `check_height.py`
+
+This script prints the current daemon block height to standard output. It can be
+used in monitoring tools or simple shell scripts to confirm a node is running.
+
+Run it directly from the `modules/python` directory:
+
+```bash
+python3 check_height.py --host 127.0.0.1 --port 12090
+```
+
+### Planned Upgrade
+
+Future updates may extend the script to report additional statistics such as
+network hashrate and peer count, turning it into a more comprehensive status
+utility.
