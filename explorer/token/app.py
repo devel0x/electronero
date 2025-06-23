@@ -64,7 +64,10 @@ def token_history_html():
         params["type"] = typ
     try:
         result = wallet.call("token_history", params)
-        history = result.get("history", []) if isinstance(result, dict) else result
+        if isinstance(result, dict):
+            history = result.get("history") or result.get("transfers") or []
+        else:
+            history = result
     except RPCError as e:
         return render_template("results.html", title="Token History", error=str(e), history=[])
     return render_template("results.html", title="Token History", history=history, error=None)
@@ -93,7 +96,10 @@ def address_history_html():
         params["type"] = typ
     try:
         result = wallet.call("token_history_addr", params)
-        history = result.get("history", []) if isinstance(result, dict) else result
+        if isinstance(result, dict):
+            history = result.get("history") or result.get("transfers") or []
+        else:
+            history = result
     except RPCError as e:
         return render_template("results.html", title="Address History", error=str(e), history=[])
     return render_template("results.html", title="Address History", history=history, error=None)

@@ -31,6 +31,9 @@ Visit <http://localhost:5000> in a browser. The home page lists all known tokens
 
 When using query parameters (`/token?token=...` or `/address?addr=...`), results render as styled HTML pages.
 
+The wallet RPC currently returns transfer history under a `transfers` field. The explorer
+handles this and displays each entry in a table.
+
 ## Future Enhancements
 
 We plan to continue improving the explorer with features such as:
