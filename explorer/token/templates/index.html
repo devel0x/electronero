@@ -54,7 +54,7 @@
     {% endif %}
     {% if tokens %}
     <input type="text" id="token-search" onkeyup="filterTokens()" placeholder="Search tokens">
-    <table>
+    <table id="index-table">
         <thead>
             <tr><th>Name</th><th>Symbol</th><th>Address</th><th>Supply</th><th>Creator Fee</th></tr>
         </thead>
@@ -63,7 +63,7 @@
             <tr>
                 <td><a href="/token?token={{ tk.address }}">{{ tk.name }}</a></td>
                 <td>{{ tk.symbol }}</td>
-                <td>{{ tk.address }}</td>
+                <td class="table-address">{{ tk.address }}</td>
                 <td>{{ tk.supply | fmt_amount }}</td>
                 <td>{{ tk.creator_fee | fmt_amount }}</td>
             </tr>
@@ -74,9 +74,9 @@
 </main>
 <footer>
     Electronero Network &bull;
-    <a href="https://x.com/electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
-    <a href="https://github.com/electronero/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
-    <a href="mailto:info@electronero.org"><i class="fa-solid fa-envelope"></i></a>
+    <a href="https://x.com/_electronero" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+    <a href="https://github.com/electronero-project/electronero" target="_blank"><i class="fa-brands fa-github"></i></a>
+    <a href="mailto:support@electronero.org"><i class="fa-solid fa-envelope"></i></a>
 </footer>
 </body>
 </html>
