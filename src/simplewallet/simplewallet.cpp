@@ -5565,7 +5565,7 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
     fail_msg_writer() << tr("token not found");
     return true;
   }
-  if (!m_tokens.transfer_by_address(args[0], from, args[1], amount))
+  if (m_tokens.balance_of_by_address(args[0], from) < amount)
   {
     fail_msg_writer() << tr("token transfer failed");
     return true;
@@ -5596,8 +5596,6 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
   cryptonote::add_token_data_to_tx_extra(extra, extra_str);
   if(!submit_token_tx(dsts, extra))
     return true;
-  if(!m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token transferred");
   return true;
 }
@@ -5668,7 +5666,20 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
     return true;
   }
   std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
-  if (!m_tokens.transfer_from_by_address(args[0], spender, args[1], args[2], amount))
+  auto oit = tk->allowances.find(args[1]);
+  if(oit == tk->allowances.end())
+  {
+    fail_msg_writer() << tr("token transfer_from failed");
+    return true;
+  }
+  auto sit = oit->second.find(spender);
+  if(sit == oit->second.end() || sit->second < amount)
+  {
+    fail_msg_writer() << tr("token transfer_from failed");
+    return true;
+  }
+  auto fit = tk->balances.find(args[1]);
+  if(fit == tk->balances.end() || fit->second < amount)
   {
     fail_msg_writer() << tr("token transfer_from failed");
     return true;
@@ -5699,8 +5710,6 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
   cryptonote::add_token_data_to_tx_extra(extra, extra_str);
   if(!submit_token_tx(dsts, extra))
     return true;
-  if(!m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token transferred from");
   return true;
 }
