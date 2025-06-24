@@ -140,6 +140,7 @@ namespace tools
         MAP_JON_RPC_WE("token_create",       on_token_create,       wallet_rpc::COMMAND_RPC_TOKEN_CREATE)
         MAP_JON_RPC_WE("token_balance",      on_token_balance,      wallet_rpc::COMMAND_RPC_TOKEN_BALANCE)
         MAP_JON_RPC_WE("token_transfer",     on_token_transfer,     wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER)
+        MAP_JON_RPC_WE("token_transfer_bulk", on_token_transfer_bulk, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_BULK)
         MAP_JON_RPC_WE("token_approve",      on_token_approve,      wallet_rpc::COMMAND_RPC_TOKEN_APPROVE)
         MAP_JON_RPC_WE("token_transfer_from",on_token_transfer_from,wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM)
         MAP_JON_RPC_WE("token_burn",        on_token_burn,        wallet_rpc::COMMAND_RPC_TOKEN_BURN)
@@ -224,6 +225,7 @@ namespace tools
       bool on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er);
       bool on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er);
+      bool on_token_transfer_bulk(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_BULK::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_BULK::response& res, epee::json_rpc::error& er);
       bool on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er);
       bool on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er);
