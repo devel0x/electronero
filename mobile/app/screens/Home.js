@@ -4,22 +4,95 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 export default function Home({ navigation, route }) {
   const [balance, setBalance] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
+  const [etnxBalance, setEtnxBalance] = useState(0);
+  const [etnxpBalance, setEtnxpBalance] = useState(0);
+  const [etnxAindex, setEtnxAindex] = useState(0);
+  const [etnxpAindex, setEtnxpAindex] = useState(0);
+  const [etnxUserId, setEtnxUserId] = useState(0);
+  const [etnxpUserId, setEtnxpUserId] = useState(0);
   const [transactions, setTransactions] = useState([]);
 
   useEffect(() => {
     if (route.params) {
-      setBalance(route.params.balance);
+      setPin(route.params.code);
+      setEmail(route.params.email);
+      setPassword(route.params.password);
+      setEtnxUserId(route.params.etnx_user_id);
+      setEtnxpUserId(route.params.etnxp_user_id);
+      setEtnxAindex(route.params.etnx_aindex);
+      setEtnxpAindex(route.params.etnxp_aindex);
+      setEtnxBalance(route.params.etnx_balance);
+      setEtnxpBalance(route.params.etnxp_balance);
       setTransactions(route.params.transactions);
+          const payload = new URLSearchParams();
+          payload.append('method', 'getBalances_nohistory');
+          payload.append('email', email);
+          payload.append('password', password);
+          payload.append('code', pin);
+          payload.append('coin', 'etnx');
+        
+          fetch('https://passport.electronero.org/passport/api.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: payload.toString()
+          })
+            .then(res => res.json())
+            .then(data => {
+              console.log(data);
+              if (data.status.success) {
+                navigation.navigate('Home', {
+                  email: email,
+                  password: password,
+                  code: pin,
+                  etnx_balance: data.data.etnx_balance,
+                  etnxp_balance: data.data.etnxp_balance,
+                  etnx_aindex: data.data.etnx_aindex,
+                  etnxp_aindex: data.data.etnxp_aindex,
+                  etnx_user_id: data.data.etnx_uid, 
+                  etnxp_user_id: data.data.etnxp_uid, 
+                  transactions: []
+                });
+              }
+            })
+            .catch(err => console.error(err));
     } else {
-      fetch('https://example.com/api/balance')
-        .then(res => res.json())
-        .then(data => setBalance(data.balance))
-        .catch(err => console.error(err));
-
-      fetch('https://example.com/api/transactions')
-        .then(res => res.json())
-        .then(data => setTransactions(data.transactions))
-        .catch(err => console.error(err));
+          const payload = new URLSearchParams();
+          payload.append('method', 'getBalance_webnero');
+          payload.append('email', email);
+          payload.append('password', password);
+          payload.append('code', pin);
+        
+          fetch('https://passport.electronero.org/passport/api.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: payload.toString()
+          })
+            .then(res => res.json())
+            .then(data => {
+              console.log(data);
+              if (data.status.success) {
+                navigation.navigate('Home', {
+                  email: email,
+                  password: password,
+                  code: pin,
+                  etnx_balance: data.data.etnx_balance,
+                  etnxp_balance: data.data.etnxp_balance,
+                  etnx_aindex: data.data.etnx_aindex,
+                  etnxp_aindex: data.data.etnxp_aindex,
+                  etnx_user_id: data.data.etnx_uid, 
+                  etnxp_user_id: data.data.etnxp_uid, 
+                  transactions: []
+                });
+              }
+            })
+            .catch(err => console.error(err));
     }
   }, [route.params]);
 
