@@ -3035,7 +3035,10 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     er.message = "token not found";
     return false;
   }
-  res.success = m_tokens.transfer_by_address(req.token_address, from, req.to, req.amount);
+  if(m_tokens.balance_of_by_address(req.token_address, from) >= req.amount)
+    res.success = true;
+  else
+    res.success = false;
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
   cryptonote::address_parse_info ginfo;
@@ -3075,7 +3078,9 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     }
   }
   if(res.success && !m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    // token state will update once transaction is processed
+  }
   return true;
 }
 //---------------------------------------------------------------------------------
@@ -3114,7 +3119,9 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
     }
   }
   if(res.success && !m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    // token state will update once transaction is processed
+  }
   return true;
 }
 //---------------------------------------------------------------------------------
@@ -3132,7 +3139,23 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
     er.message = "token not found";
     return false;
   }
-  res.success = m_tokens.transfer_from_by_address(req.token_address, spender, req.from, req.to, req.amount);
+  auto oit = tk->allowances.find(req.from);
+  if(oit != tk->allowances.end())
+  {
+    auto sit = oit->second.find(spender);
+    if(sit != oit->second.end() && sit->second >= req.amount)
+    {
+      auto fit = tk->balances.find(req.from);
+      if(fit != tk->balances.end() && fit->second >= req.amount)
+        res.success = true;
+      else
+        res.success = false;
+    }
+    else
+      res.success = false;
+  }
+  else
+    res.success = false;
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
   cryptonote::address_parse_info ginfo;
@@ -3172,7 +3195,9 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
     }
   }
   if(res.success && !m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    // token state will update once transaction is processed
+  }
   return true;
 }
 
@@ -3437,7 +3462,7 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
     }
   }
   if(res.success && !m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+    ;
   return true;
 }
 
@@ -3486,7 +3511,9 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
     }
   }
   if(res.success && !m_tokens_path.empty())
-    m_tokens.save(m_tokens_path);
+  {
+    // token state will update once transaction is processed
+  }
   return true;
 }
 
