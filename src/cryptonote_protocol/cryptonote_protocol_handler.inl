@@ -795,12 +795,6 @@ namespace cryptonote
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
       m_core.handle_incoming_tx(*tx_blob_it, tvc, false, true, false);
-      cryptonote::transaction tx;
-      crypto::hash h, ph;
-      if (cryptonote::parse_and_validate_tx_from_blob(*tx_blob_it, tx, h, ph))
-      {
-        // token operations are applied once the transaction is in a block
-      }
       if(tvc.m_verifivation_failed)
       {
         LOG_PRINT_CCONTEXT_L1("Tx verification failed, dropping connection");
