@@ -163,6 +163,7 @@ namespace cryptonote
     bool token_create(const std::vector<std::string> &args);
     bool token_balance(const std::vector<std::string> &args);
     bool token_transfer(const std::vector<std::string> &args);
+    bool token_transfer_bulk(const std::vector<std::string> &args);
     bool token_approve(const std::vector<std::string> &args);
     bool token_transfer_from(const std::vector<std::string> &args);
     bool token_burn(const std::vector<std::string> &args);
