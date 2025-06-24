@@ -543,8 +543,9 @@ The following commands are available in both the CLI and RPC:
 * `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
 * `token_balance <token_address> [owner]` – show the balance for an address.
 * `token_transfer <token_address> <to> <amount>` – transfer tokens, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
+  If `<to>` is an integrated address the underlying base address is automatically approved to spend the deposited amount via `token_transfer_from`.
 * `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
-* `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account.
+* `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account. Integrated addresses may be used for either address.
 * `token_burn <token_address> <amount>` – destroy tokens you own.
 * `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.

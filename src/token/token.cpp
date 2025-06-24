@@ -12,9 +12,29 @@
 #include <boost/filesystem.hpp>
 #include "common/util.h"
 #include "misc_log_ex.h"
+#include "cryptonote_basic/cryptonote_basic_impl.h"
+#include "cryptonote_config.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.token"
+
+namespace {
+bool parse_any_address(const std::string &str,
+                       cryptonote::address_parse_info &info,
+                       cryptonote::network_type &net)
+{
+    const cryptonote::network_type nets[] = {cryptonote::MAINNET, cryptonote::TESTNET, cryptonote::STAGENET};
+    for (auto n : nets)
+    {
+        if (cryptonote::get_account_address_from_str(info, n, str))
+        {
+            net = n;
+            return true;
+        }
+    }
+    return false;
+}
+}
 
 bool token_store::load(const std::string &file) {
     std::ifstream ifs(file, std::ios::binary);
@@ -155,6 +175,13 @@ bool token_store::transfer(const std::string &name, const std::string &from, con
     fit->second -= amount;
     tok->balances[to] += amount;
     record_transfer(tok->address, from, to, amount);
+    cryptonote::address_parse_info info;
+    cryptonote::network_type net;
+    if (parse_any_address(to, info, net) && info.has_payment_id)
+    {
+        std::string base = cryptonote::get_account_address_as_str(net, info.is_subaddress, info.address);
+        tok->allowances[to][base] += amount;
+    }
     return true;
 }
 
@@ -166,6 +193,13 @@ bool token_store::transfer_by_address(const std::string &address, const std::str
     fit->second -= amount;
     tok->balances[to] += amount;
     record_transfer(address, from, to, amount);
+    cryptonote::address_parse_info info;
+    cryptonote::network_type net;
+    if (parse_any_address(to, info, net) && info.has_payment_id)
+    {
+        std::string base = cryptonote::get_account_address_as_str(net, info.is_subaddress, info.address);
+        tok->allowances[to][base] += amount;
+    }
     return true;
 }
 
@@ -309,7 +343,19 @@ std::string make_token_extra(token_op_type op, const std::vector<std::string> &f
     return oss.str();
 }
 
-bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields)
+std::string make_signed_token_extra(token_op_type op, const std::vector<std::string> &fields,
+                                    const crypto::public_key &pub, const crypto::secret_key &sec)
+{
+    std::string base = make_token_extra(op, fields);
+    crypto::hash h;
+    crypto::cn_fast_hash(base.data(), base.size(), h);
+    crypto::signature sig;
+    crypto::generate_signature(h, pub, sec, sig);
+    return base + '\t' + epee::string_tools::pod_to_hex(sig);
+}
+
+bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields,
+                       crypto::signature &sig, bool &has_sig)
 {
     std::istringstream iss(data);
     int op_int;
@@ -321,7 +367,26 @@ bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<s
     std::string field;
     while(std::getline(iss, field, '\t'))
         fields.push_back(field);
+    has_sig = false;
+    if(!fields.empty())
+    {
+        std::string sig_hex = fields.back();
+        if(sig_hex.size() == sizeof(crypto::signature) * 2 && epee::string_tools::hex_to_pod(sig_hex, sig))
+        {
+            fields.pop_back();
+            has_sig = true;
+        }
+    }
     return true;
+}
+
+bool verify_token_extra(token_op_type op, const std::vector<std::string> &fields,
+                        const crypto::public_key &pub, const crypto::signature &sig)
+{
+    std::string base = make_token_extra(op, fields);
+    crypto::hash h;
+    crypto::cn_fast_hash(base.data(), base.size(), h);
+    return crypto::check_signature(h, pub, sig);
 }
 
 void token_store::record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount)
