@@ -163,6 +163,7 @@ namespace cryptonote
     bool token_create(const std::vector<std::string> &args);
     bool token_balance(const std::vector<std::string> &args);
     bool token_transfer(const std::vector<std::string> &args);
+    bool token_transfer_bulk(const std::vector<std::string> &args);
     bool token_approve(const std::vector<std::string> &args);
     bool token_transfer_from(const std::vector<std::string> &args);
     bool token_burn(const std::vector<std::string> &args);
@@ -175,7 +176,8 @@ namespace cryptonote
     bool token_set_fee(const std::vector<std::string> &args);
     bool token_transfer_ownership(const std::vector<std::string> &args);
 
-    bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
+    bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra,
+        const std::string &token_address = std::string(), const std::string &dest_address = std::string(), uint64_t amount = 0);
     bool sign_transfer(const std::vector<std::string> &args);
     bool submit_transfer(const std::vector<std::string> &args);
     std::vector<std::vector<cryptonote::tx_destination_entry>> split_amounts(

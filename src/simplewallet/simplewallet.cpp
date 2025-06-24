@@ -2146,6 +2146,10 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer, this, _1),
                           tr("token_transfer <token_address> <to> <amount>"),
                           tr("Transfer tokens."));
+  m_cmd_binder.set_handler("token_transfer_bulk",
+                          boost::bind(&simple_wallet::token_transfer_bulk, this, _1),
+                          tr("token_transfer_bulk <file.json>"),
+                          tr("Transfer tokens to multiple destinations defined in a JSON file."));
   m_cmd_binder.set_handler("token_info",
                           boost::bind(&simple_wallet::token_info, this, _1),
                           tr("token_info <token_address>"),
@@ -5433,7 +5437,8 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
   return true;
 }
 //--------------------------------------------------------------------------------
-bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra)
+bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra,
+    const std::string &token_address, const std::string &dest_address, uint64_t amount)
 {
   try
   {
@@ -5452,6 +5457,13 @@ bool simple_wallet::submit_token_tx(const std::vector<cryptonote::tx_destination
     }
     uint64_t network_fee = ptx_vector[0].fee;
     uint64_t total_fee = token_fee + network_fee;
+
+    if(!token_address.empty() && !dest_address.empty())
+    {
+      message_writer() << tr("Sending amount: ") << cryptonote::print_money(amount);
+      message_writer() << tr("Token: ") << token_address;
+      message_writer() << tr("Destination: ") << dest_address;
+    }
 
     std::string prompt = (boost::format(tr("Token transaction fee is %s (network %s + token %s). Is this okay?  (Y/Yes/N/No): "))
         % print_money(total_fee) % print_money(network_fee) % print_money(token_fee)).str();
@@ -5602,11 +5614,124 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
     make_token_extra(token_op_type::transfer, std::vector<std::string>{args[0], from, args[1], std::to_string(amount)});
   std::vector<uint8_t> extra;
   cryptonote::add_token_data_to_tx_extra(extra, extra_str);
-  if(!submit_token_tx(dsts, extra))
+  if(!submit_token_tx(dsts, extra, args[0], args[1], amount))
     return true;
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token transferred");
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::token_transfer_bulk(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_transfer_bulk called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_transfer_bulk <file.json>");
+    return true;
+  }
+
+  std::string buf;
+  if(!epee::file_io_utils::load_file_to_string(args[0], buf))
+  {
+    fail_msg_writer() << tr("failed to read file");
+    return true;
+  }
+  rapidjson::Document json;
+  if(json.Parse(buf.c_str()).HasParseError() || !json.IsObject())
+  {
+    fail_msg_writer() << tr("failed to parse json");
+    return true;
+  }
+  GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, token_address, std::string, String, true, std::string());
+  if(!json.HasMember("destinations") || !json["destinations"].IsArray())
+  {
+    fail_msg_writer() << tr("destinations not found or invalid");
+    return true;
+  }
+
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(field_token_address);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+
+  size_t index = 0;
+  for(auto& d : json["destinations"].GetArray())
+  {
+    ++index;
+    if(!d.IsString())
+    {
+      fail_msg_writer() << tr("invalid destination entry");
+      return true;
+    }
+    std::string entry = d.GetString();
+    auto pos = entry.find(':');
+    if(pos == std::string::npos)
+    {
+      fail_msg_writer() << tr("invalid destination format");
+      return true;
+    }
+    std::string address = entry.substr(0, pos);
+    std::string amount_str = entry.substr(pos + 1);
+    uint64_t amount = 0;
+    if(!cryptonote::parse_amount(amount, amount_str))
+    {
+      fail_msg_writer() << tr("invalid amount");
+      return true;
+    }
+    cryptonote::address_parse_info to_info;
+    if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), address))
+    {
+      fail_msg_writer() << tr("Invalid address");
+      return true;
+    }
+
+    if (!m_tokens.transfer_by_address(field_token_address, from, address, amount))
+    {
+      fail_msg_writer() << tr("token transfer failed at entry ") << index;
+      break;
+    }
+    std::vector<cryptonote::tx_destination_entry> dsts;
+    dsts.push_back({TOKEN_TRANSFER_FEE, ginfo.address, ginfo.is_subaddress});
+    if(tk->creator_fee > 0)
+      dsts.push_back({tk->creator_fee, creator_info.address, creator_info.is_subaddress});
+    dsts.push_back({1, self.address, self.is_subaddress});
+    std::string extra_str = sign ?
+      make_signed_token_extra(token_op_type::transfer, std::vector<std::string>{field_token_address, from, address, std::to_string(amount)}, pub, sec) :
+      make_token_extra(token_op_type::transfer, std::vector<std::string>{field_token_address, from, address, std::to_string(amount)});
+    std::vector<uint8_t> extra;
+    cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+    if(!submit_token_tx(dsts, extra, field_token_address, address, amount))
+    {
+      fail_msg_writer() << tr("failed to submit transaction at entry ") << index;
+      break;
+    }
+  }
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  if(index == json["destinations"].Size())
+    success_msg_writer() << tr("token bulk transfer complete");
+  else
+    fail_msg_writer() << tr("token bulk transfer stopped at entry ") << index;
   return true;
 }
 //------------------------------------------------------------------------------------
