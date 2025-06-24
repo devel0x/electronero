@@ -27,16 +27,15 @@ class _SignInScreenState extends State<SignInScreen> {
     if (data['status'] == 'success') {
       Navigator.pushReplacementNamed(
         context,
-        '/home',
-        arguments: {
-          'balance': data['data']['balance'],
-          'transactions': data['data']['transactions'],
-        },
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(data['message'] ?? 'Login failed')),
-      );
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.yellow, Colors.grey, Colors.black],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        child: GestureDetector(
     }
   }
   

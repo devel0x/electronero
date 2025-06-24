@@ -31,18 +31,17 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
     if (details == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.yellow, Colors.grey, Colors.black],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+    return Scaffold(
+      appBar: AppBar(title: const Text('Transaction Details')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.yellow, Colors.grey, Colors.black],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(title: const Text('Transaction Details')),
-        body: Padding(
+        child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
