@@ -20,7 +20,8 @@ enum class token_op_type : uint8_t {
     set_fee = 4,
     burn = 5,
     mint = 6,
-    transfer_ownership = 7
+    transfer_ownership = 7,
+    lock_fee = 8
 };
 
 struct token_info {
@@ -30,21 +31,26 @@ struct token_info {
     std::string creator;
     uint64_t total_supply = 0;
     uint64_t creator_fee = 0;
+    bool creator_fee_locked = false;
     std::unordered_map<std::string, uint64_t> balances;
     std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allowances;
 
     template<class Archive>
-    void serialize(Archive &a, const unsigned int /*version*/) {
+    void serialize(Archive &a, const unsigned int version) {
         a & name;
         a & symbol;
         a & total_supply;
         a & address;
         a & creator;
         a & creator_fee;
+        if(version > 0)
+            a & creator_fee_locked;
         a & balances;
         a & allowances;
     }
 };
+
+BOOST_CLASS_VERSION(token_info, 1)
 
 struct token_transfer_record {
     std::string token_address;
@@ -106,6 +112,7 @@ public:
     bool mint(const std::string &address, const std::string &creator, uint64_t amount);
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
+    bool lock_creator_fee(const std::string &address, const std::string &creator);
 
     bool transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner);
 
