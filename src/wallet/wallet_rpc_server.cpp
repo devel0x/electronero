@@ -152,6 +152,8 @@ namespace tools
       m_wallet->store();
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
+    if(!m_sfts_path.empty())
+        m_sfts.save(m_sfts_path);
       delete m_wallet;
       m_wallet = NULL;
     }
@@ -170,6 +172,10 @@ namespace tools
       token_path /= "tokens.bin";
       m_tokens_path = token_path.string();
       m_tokens.load(m_tokens_path);
+      boost::filesystem::path sft_path = tools::get_default_data_dir();
+      sft_path /= "sfts.bin";
+      m_sfts_path = sft_path.string();
+      m_sfts.load(m_sfts_path);
     }
     tools::wallet2 *walvars;
     std::unique_ptr<tools::wallet2> tmpwal;
@@ -2430,6 +2436,10 @@ namespace tools
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -2492,6 +2502,10 @@ namespace tools
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
     return true;
   }
   //----------------------------------------------------------------------------------------------------
@@ -3506,6 +3520,188 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
   if(res.success && !m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   return true;
+}
+
+bool wallet_rpc_server::on_sft_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREATE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_CREATE::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_create(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BALANCE::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_balance(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_transfer(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_approve(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_transfer_from(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_burn(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINT::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_mint(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::request& req, wallet_rpc::COMMAND_RPC_TOKEN_INFO::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_info(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_all_sfts(const wallet_rpc::COMMAND_RPC_TOKEN_ALL::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALL::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_all_tokens(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_my_sfts(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINE::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_my_tokens(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_history(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_history_addr(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_set_fee(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool wallet_rpc_server::on_sft_transfer_ownership(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::response& res, epee::json_rpc::error& er)
+{
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = on_token_transfer_ownership(req, res, er);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
 }
 
 }

@@ -2174,6 +2174,59 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer_ownership, this, _1),
                           tr("token_transfer_ownership <token_address> <new_owner>"),
                           tr("Transfer token ownership to another address."));
+
+  m_cmd_binder.set_handler("sft_create",
+                          boost::bind(&simple_wallet::sft_create, this, _1),
+                          tr("sft_create <name> <symbol> <supply> [creator_fee]"),
+                          tr("Create a new semi-fungible token."));
+  m_cmd_binder.set_handler("sft_balance",
+                          boost::bind(&simple_wallet::sft_balance, this, _1),
+                          tr("sft_balance <token_address> [owner]"),
+                          tr("Show sft balance."));
+  m_cmd_binder.set_handler("sft_transfer",
+                          boost::bind(&simple_wallet::sft_transfer, this, _1),
+                          tr("sft_transfer <token_address> <to> <amount>"),
+                          tr("Transfer sft."));
+  m_cmd_binder.set_handler("sft_approve",
+                          boost::bind(&simple_wallet::sft_approve, this, _1),
+                          tr("sft_approve <name> <spender> <amount>"),
+                          tr("Approve sft spending."));
+  m_cmd_binder.set_handler("sft_transfer_from",
+                          boost::bind(&simple_wallet::sft_transfer_from, this, _1),
+                          tr("sft_transfer_from <token_address> <from> <to> <amount>"),
+                          tr("Transfer sft using allowance."));
+  m_cmd_binder.set_handler("sft_burn",
+                          boost::bind(&simple_wallet::sft_burn, this, _1),
+                          tr("sft_burn <token_address> <amount>"),
+                          tr("Burn sft."));
+  m_cmd_binder.set_handler("sft_mint",
+                          boost::bind(&simple_wallet::sft_mint, this, _1),
+                          tr("sft_mint <token_address> <amount>"),
+                          tr("Mint new sft."));
+  m_cmd_binder.set_handler("sft_set_fee",
+                          boost::bind(&simple_wallet::sft_set_fee, this, _1),
+                          tr("sft_set_fee <token_address> <creator_fee>"),
+                          tr("Set sft creator fee."));
+  m_cmd_binder.set_handler("sft_transfer_ownership",
+                          boost::bind(&simple_wallet::sft_transfer_ownership, this, _1),
+                          tr("sft_transfer_ownership <token_address> <new_owner>"),
+                          tr("Transfer sft ownership."));
+  m_cmd_binder.set_handler("all_sfts",
+                           boost::bind(&simple_wallet::all_sfts, this, _1),
+                           tr("all_sfts"),
+                           tr("List all sfts."));
+  m_cmd_binder.set_handler("my_sfts",
+                           boost::bind(&simple_wallet::my_sfts, this, _1),
+                           tr("my_sfts"),
+                           tr("List sfts created by this wallet."));
+  m_cmd_binder.set_handler("sft_history",
+                           boost::bind(&simple_wallet::sft_history, this, _1),
+                           tr("sft_history <token_address>"),
+                           tr("Show transfer history for a sft."));
+  m_cmd_binder.set_handler("sft_history_addr",
+                           boost::bind(&simple_wallet::sft_history_addr, this, _1),
+                           tr("sft_history_addr <address>"),
+                           tr("Show sft transfers involving an address."));
   m_cmd_binder.set_handler("all_tokens",
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
@@ -3314,6 +3367,18 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3411,6 +3476,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3503,6 +3572,10 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -6028,6 +6101,174 @@ bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &arg
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token ownership transferred");
   return true;
+}
+
+bool simple_wallet::sft_create(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_create(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_balance(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_balance(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_transfer(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_transfer(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_approve(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_approve(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_transfer_from(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_transfer_from(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_burn(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_burn(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_mint(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_mint(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_info(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_info(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::all_sfts(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = all_tokens(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::my_sfts(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = my_tokens(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_history(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_history(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_history_addr(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_history_addr(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_set_fee(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_set_fee(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
+}
+
+bool simple_wallet::sft_transfer_ownership(const std::vector<std::string> &args) {
+  auto old_store = m_tokens;
+  auto old_path = m_tokens_path;
+  m_tokens = m_sfts;
+  m_tokens_path = m_sfts_path;
+  bool r = token_transfer_ownership(args);
+  m_sfts = m_tokens;
+  m_tokens = old_store;
+  m_tokens_path = old_path;
+  return r;
 }
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::accept_loaded_tx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data&(size_t)> &get_tx, const std::string &extra_message)

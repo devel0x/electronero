@@ -561,3 +561,7 @@ Running `rescan_token_operations` wipes the local token data and replays all tok
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+## New Features
+
+The network now supports **Semi-Fungible Tokens (SFTs)** alongside classic tokens. SFTs use the same transaction formats and fees but are stored in a separate `sfts.bin` file.  All token commands have matching `sft_*` variants in the CLI and RPC.  Future upgrades will introduce governance methods to manage SFT collections.

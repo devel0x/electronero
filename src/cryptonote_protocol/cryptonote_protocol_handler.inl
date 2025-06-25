@@ -80,6 +80,10 @@ namespace cryptonote
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -93,6 +97,8 @@ namespace cryptonote
   {
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_sfts_path.empty())
+      m_sfts.save(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1773,6 +1779,7 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
     return;
   auto process_tx = [this](const cryptonote::transaction &tx, uint64_t h){
     process_token_tx(tx, h);
+    process_sft_tx(tx, h);
   };
 
   uint64_t end = top - 1;
@@ -1822,8 +1829,11 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
     {
       std::vector<token_info> list;
       m_tokens.list_all(list);
+      std::vector<sft_info> slist;
+      m_sfts.list_all(slist);
       std::cout << "\r" << scanned_blocks << "/" << total_blocks << " blocks scanned, "
-                << list.size() << " tokens found, " << scanned_txs << " transactions" << std::flush;
+                << list.size() << " tokens found, " << slist.size() << " sfts found, "
+                << scanned_txs << " transactions" << std::flush;
     }
     return true;
   });
@@ -1831,6 +1841,174 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
 
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_sft_tx(const cryptonote::transaction &tx, uint64_t height)
+{
+  std::vector<cryptonote::tx_extra_field> fields;
+  if(!cryptonote::parse_tx_extra(tx.extra, fields))
+    return;
+  cryptonote::tx_extra_token_data tdata;
+  if(!find_tx_extra_field_by_type(fields, tdata))
+    return;
+  token_op_type op;
+  std::vector<std::string> parts;
+  crypto::signature sig;
+  bool has_sig;
+  if(!parse_token_extra(tdata.data, op, parts, sig, has_sig))
+    return;
+  MDEBUG("SFT op " << static_cast<int>(op));
+
+  std::string signer;
+  switch(op)
+  {
+    case token_op_type::create: if(parts.size() >= 5) signer = parts[4]; break;
+    case token_op_type::transfer: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::approve: if(parts.size() == 4) signer = parts[1]; break;
+    case token_op_type::transfer_from: if(parts.size() == 5) signer = parts[1]; break;
+    case token_op_type::set_fee: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::transfer_ownership: if(parts.size() == 3) signer = parts[1]; break;
+  }
+  cryptonote::address_parse_info info;
+  if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
+    return;
+  bool require_sig = height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  if(has_sig)
+  {
+    if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
+      return;
+  }
+  else if(require_sig)
+  {
+    return;
+  }
+  switch(op)
+  {
+    case token_op_type::create:
+      if(parts.size() >= 5)
+      {
+        uint64_t creator_fee = parts.size() == 6 ? std::stoull(parts[5]) : 0;
+        m_sfts.create(parts[1], parts[2], std::stoull(parts[3]), parts[4], creator_fee, parts[0]);
+      }
+      break;
+    case token_op_type::transfer:
+      if(parts.size() == 4)
+        m_sfts.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+      break;
+    case token_op_type::approve:
+      if(parts.size() == 4)
+        m_sfts.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]), parts[1]);
+      break;
+    case token_op_type::transfer_from:
+      if(parts.size() == 5)
+        m_sfts.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
+      break;
+    case token_op_type::set_fee:
+      if(parts.size() == 3)
+        m_sfts.set_creator_fee(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case token_op_type::burn:
+      if(parts.size() == 3)
+        m_sfts.burn(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case token_op_type::mint:
+      if(parts.size() == 3)
+        m_sfts.mint(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case token_op_type::transfer_ownership:
+      if(parts.size() == 3)
+        m_sfts.transfer_ownership(parts[0], parts[1], parts[2]);
+      break;
+  }
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::rescan_sft_operations(uint64_t from_height)
+{
+  if(!m_sfts_path.empty())
+  {
+    sft_store loaded;
+    if(loaded.load(m_sfts_path))
+      m_sfts = std::move(loaded);
+    else
+      m_sfts = sft_store();
+  }
+  else
+  {
+    m_sfts = sft_store();
+  }
+  auto &bc = m_core.get_blockchain_storage();
+  if(from_height > 0 && m_sfts.size() == 0)
+  {
+    from_height = 3540000;
+  }
+  uint64_t top = bc.get_current_blockchain_height();
+  if (from_height >= top)
+    return;
+  auto process_tx = [this](const cryptonote::transaction &tx, uint64_t h){
+    process_sft_tx(tx, h);
+  };
+
+  uint64_t end = top - 1;
+  uint64_t total_blocks = end - from_height + 1;
+  uint64_t scanned_blocks = 0;
+  uint64_t scanned_txs = 0;
+  const uint64_t progress_interval = 1000;
+  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx, &scanned_blocks, &scanned_txs, total_blocks, progress_interval](uint64_t height, const crypto::hash&, const cryptonote::block& b){
+    process_tx(b.miner_tx, height);
+    ++scanned_txs;
+    ++scanned_blocks;
+    std::list<cryptonote::transaction> txs;
+    std::list<crypto::hash> missed;
+    bc.get_transactions(b.tx_hashes, txs, missed);
+
+    auto get_op = [](const cryptonote::transaction &t, token_op_type &op) {
+      std::vector<cryptonote::tx_extra_field> fs;
+      if(!cryptonote::parse_tx_extra(t.extra, fs))
+        return false;
+      cryptonote::tx_extra_token_data td;
+      if(!find_tx_extra_field_by_type(fs, td))
+        return false;
+      std::vector<std::string> tmp;
+      crypto::signature sg;
+      bool hs;
+      if(!parse_token_extra(td.data, op, tmp, sg, hs))
+        return false;
+      return true;
+    };
+
+    for(const auto &tx : txs)
+    {
+      token_op_type op;
+      if(get_op(tx, op) && op == token_op_type::create)
+        process_tx(tx, height);
+    }
+    for(const auto &tx : txs)
+    {
+      token_op_type op;
+      if(!get_op(tx, op) || op != token_op_type::create)
+        process_tx(tx, height);
+    }
+
+    scanned_txs += txs.size();
+    if (scanned_blocks % progress_interval == 0 || scanned_blocks == total_blocks)
+    {
+      std::vector<sft_info> list;
+      m_sfts.list_all(list);
+      std::cout << "\r" << scanned_blocks << "/" << total_blocks << " blocks scanned, "
+                << list.size() << " sfts found, " << scanned_txs << " transactions" << std::flush;
+    }
+    return true;
+  });
+  std::cout << std::endl;
+
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
 
 //----------------------------------------------------------------------------------------------------
