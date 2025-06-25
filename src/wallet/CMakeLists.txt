@@ -86,6 +86,7 @@ target_link_libraries(wallet_rpc_server
   PRIVATE
     wallet
     token
+    sft
     epee
     rpc_base
     cryptonote_core

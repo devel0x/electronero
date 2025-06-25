@@ -561,3 +561,9 @@ Rescanning from a nonzero height keeps the existing token store and only applies
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+### New Features
+Electronero now supports Semi-Fungible Tokens (SFTs) similar to ERC‑1155. Wallet and RPC commands allow creating an SFT contract with a base URI, minting individual token IDs, and transferring or approving specific IDs. Each SFT keeps metadata under its URI so `sft_uri <address> <id>` returns `<uri>/<id>.json`. SFT data is stored in `~/.bitelectronero/sfts.bin` and synchronized via the network.
+
+### Future SFT Improvements
+Upcoming releases will expand SFT functionality with on-chain marketplaces and richer metadata schemas.

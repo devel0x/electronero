@@ -3508,6 +3508,155 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
   return true;
 }
 
+bool wallet_rpc_server::on_sft_create(const wallet_rpc::COMMAND_RPC_SFT_CREATE::request& req, wallet_rpc::COMMAND_RPC_SFT_CREATE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info &tk = m_sfts.create(req.name, req.symbol, creator, req.uri);
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::create, std::vector<std::string>{tk.address, req.name, req.symbol, req.uri, creator}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+  if(ptx_vector.empty())
+  {
+    er.code = WALLET_RPC_ERROR_CODE_TX_NOT_POSSIBLE;
+    er.message = "Failed to create fee transaction";
+    return false;
+  }
+  const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+  m_wallet->commit_tx(ptx_vector[0]);
+  res.tx_hash = epee::string_tools::pod_to_hex(txid);
+  res.status = WALLET_RPC_STATUS_OK;
+  res.sft_address = tk.address;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_mint_id(const wallet_rpc::COMMAND_RPC_SFT_MINT_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_MINT_ID::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_sfts.mint_id(req.sft_address, creator, req.id, req.amount))
+  {
+    res.success = false;
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::mint_id, std::vector<std::string>{req.sft_address, creator, std::to_string(req.id), std::to_string(req.amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+  if(ptx_vector.empty())
+    res.success = false;
+  else
+  {
+    const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+    m_wallet->commit_tx(ptx_vector[0]);
+    res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    res.success = true;
+    if(!m_sfts_path.empty())
+      m_sfts.save(m_sfts_path);
+  }
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_transfer_id(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER_ID::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_sfts.transfer_id_by_address(req.sft_address, req.id, from, req.to, req.amount);
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer_id, std::vector<std::string>{req.sft_address, from, req.to, std::to_string(req.id), std::to_string(req.amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    cryptonote::address_parse_info self;
+    cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+    std::vector<cryptonote::tx_destination_entry> dsts;
+    dsts.push_back({1, self.address, self.is_subaddress});
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_transfer_from_id(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER_FROM_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER_FROM_ID::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_sfts.transfer_from_id_by_address(req.sft_address, req.id, spender, req.from, req.to, req.amount);
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer_from_id, std::vector<std::string>{req.sft_address, spender, req.from, req.to, std::to_string(req.id), std::to_string(req.amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    cryptonote::address_parse_info self;
+    cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
+    std::vector<cryptonote::tx_destination_entry> dsts;
+    dsts.push_back({1, self.address, self.is_subaddress});
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_sft_uri(const wallet_rpc::COMMAND_RPC_SFT_URI::request& req, wallet_rpc::COMMAND_RPC_SFT_URI::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  res.uri = m_sfts.uri(req.sft_address, req.id);
+  return true;
+}
+
 }
 
 int main(int argc, char** argv) {
