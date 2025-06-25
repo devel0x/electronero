@@ -1764,9 +1764,9 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
   m_tokens = token_store();
 
   auto &bc = m_core.get_blockchain_storage();
-  if(from_height > 0 && from_height < 3540000)
+  if(from_height > 0 && from_height <= 3542000)
   {
-    from_height = 3540000; // TODO: hard code this SMART_CHAIN_HEIGHT in cryptonote_config.h
+    from_height = 3542000; // TODO: hard code this SMART_CHAIN_HEIGHT in cryptonote_config.h
   }
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
