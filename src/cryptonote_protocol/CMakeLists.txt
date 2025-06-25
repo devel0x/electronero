@@ -38,5 +38,6 @@ target_link_libraries(cryptonote_protocol
   PUBLIC
     p2p
     token
+    sft
   PRIVATE
     ${EXTRA_LIBRARIES})
