@@ -12,9 +12,29 @@
 #include <boost/filesystem.hpp>
 #include "common/util.h"
 #include "misc_log_ex.h"
+#include "cryptonote_basic/cryptonote_basic_impl.h"
+#include "cryptonote_config.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.token"
+
+namespace {
+bool parse_any_address(const std::string &str,
+                       cryptonote::address_parse_info &info,
+                       cryptonote::network_type &net)
+{
+    const cryptonote::network_type nets[] = {cryptonote::MAINNET, cryptonote::TESTNET, cryptonote::STAGENET};
+    for (auto n : nets)
+    {
+        if (cryptonote::get_account_address_from_str(info, n, str))
+        {
+            net = n;
+            return true;
+        }
+    }
+    return false;
+}
+}
 
 bool token_store::load(const std::string &file) {
     std::ifstream ifs(file, std::ios::binary);
@@ -155,6 +175,13 @@ bool token_store::transfer(const std::string &name, const std::string &from, con
     fit->second -= amount;
     tok->balances[to] += amount;
     record_transfer(tok->address, from, to, amount);
+    cryptonote::address_parse_info info;
+    cryptonote::network_type net;
+    if (parse_any_address(to, info, net) && info.has_payment_id)
+    {
+        std::string base = cryptonote::get_account_address_as_str(net, info.is_subaddress, info.address);
+        tok->allowances[to][base] += amount;
+    }
     return true;
 }
 
@@ -166,6 +193,13 @@ bool token_store::transfer_by_address(const std::string &address, const std::str
     fit->second -= amount;
     tok->balances[to] += amount;
     record_transfer(address, from, to, amount);
+    cryptonote::address_parse_info info;
+    cryptonote::network_type net;
+    if (parse_any_address(to, info, net) && info.has_payment_id)
+    {
+        std::string base = cryptonote::get_account_address_as_str(net, info.is_subaddress, info.address);
+        tok->allowances[to][base] += amount;
+    }
     return true;
 }
 

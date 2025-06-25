@@ -5565,6 +5565,14 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
     fail_msg_writer() << tr("token not found");
     return true;
   }
+
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), args[1]))
+  {
+    fail_msg_writer() << tr("Invalid address");
+    return true;
+  }
+
   if (!m_tokens.transfer_by_address(args[0], from, args[1], amount))
   {
     fail_msg_writer() << tr("token transfer failed");
@@ -5667,6 +5675,14 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
     fail_msg_writer() << tr("token not found");
     return true;
   }
+
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), args[2]))
+  {
+    fail_msg_writer() << tr("Invalid address");
+    return true;
+  }
+
   std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   if (!m_tokens.transfer_from_by_address(args[0], spender, args[1], args[2], amount))
   {
