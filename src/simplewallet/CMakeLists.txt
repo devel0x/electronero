@@ -49,6 +49,7 @@ target_link_libraries(simplewallet
     common
     mnemonics
     token
+    sft
     epee
     ${EPEE_READLINE}
     version

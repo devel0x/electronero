@@ -46,6 +46,8 @@ namespace cryptonote
     //virtual bool request_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, cryptonote_connection_context& context)=0;
     virtual void rescan_token_operations(uint64_t from_height) = 0;
     virtual void process_token_tx(const cryptonote::transaction &tx, uint64_t height) = 0;
+    virtual void rescan_sft_operations(uint64_t from_height) = 0;
+    virtual void process_sft_tx(const cryptonote::transaction &tx, uint64_t height) = 0;
   };
 
   /************************************************************************/
@@ -63,6 +65,8 @@ namespace cryptonote
     }
     virtual void rescan_token_operations(uint64_t) override {}
     virtual void process_token_tx(const cryptonote::transaction &, uint64_t) override {}
+    virtual void rescan_sft_operations(uint64_t) override {}
+    virtual void process_sft_tx(const cryptonote::transaction &, uint64_t) override {}
 
   };
 }
