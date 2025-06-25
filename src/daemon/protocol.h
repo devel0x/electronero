@@ -33,6 +33,11 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "daemon"
 
+#include "cryptonote_protocol/cryptonote_protocol_handler.h"
+#include "p2p/net_node.h"
+#include "common/command_line.h"
+#include <boost/filesystem.hpp>
+
 namespace daemonize
 {
 
@@ -55,6 +60,10 @@ public:
     {
       throw std::runtime_error("Failed to initialize cryptonote protocol.");
     }
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // falls back to tools::get_default_data_dir() when --data-dir is not given
+    token_path /= "tokens.bin";
+    m_protocol.set_tokens_path(token_path.string());
     MGINFO("Cryptonote protocol initialized OK");
   }
 

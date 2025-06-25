@@ -95,6 +95,15 @@ namespace cryptonote
       m_tokens.save(m_tokens_path);
     return true;
   }
+//----------------------------------------------------------------------------------------------
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::set_tokens_path(const std::string &path)
+{
+  m_tokens_path = path;
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+}
+
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   void t_cryptonote_protocol_handler<t_core>::set_p2p_endpoint(nodetool::i_p2p_endpoint<connection_context>* p2p)
