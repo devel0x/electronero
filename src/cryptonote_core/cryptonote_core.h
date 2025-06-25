@@ -765,7 +765,7 @@ namespace cryptonote
       * @return free space in bytes
       */
     uint64_t get_free_space() const;
-    const std::string &get_data_dir() const { return m_config_folder; }
+    const std::string &get_data_dir() const;
 
      /**
       * @brief get whether the core is running offline
