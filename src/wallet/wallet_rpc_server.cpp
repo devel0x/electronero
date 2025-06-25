@@ -3366,6 +3366,22 @@ bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_TOKEN_MINE::r
   return true;
 }
 
+bool wallet_rpc_server::on_tokens_held(const wallet_rpc::COMMAND_RPC_TOKENS_HELD::request& req, wallet_rpc::COMMAND_RPC_TOKENS_HELD::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::vector<::token_info> list;
+  m_tokens.list_all(list);
+  for(const auto &t : list)
+  {
+    if(m_tokens.balance_of_by_address(t.address, owner) > 0)
+      res.addresses.push_back(t.address);
+  }
+  return true;
+}
+
 bool wallet_rpc_server::on_token_history(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);
