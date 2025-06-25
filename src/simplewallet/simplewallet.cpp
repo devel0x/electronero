@@ -2312,6 +2312,9 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("wallet_info",
                            boost::bind(&simple_wallet::wallet_info, this, _1),
                            tr("Show the wallet's information."));
+  m_cmd_binder.set_handler("daemon_info",
+                           boost::bind(&simple_wallet::daemon_info, this, _1),
+                           tr("Show connected daemon information."));
   m_cmd_binder.set_handler("sign",
                            boost::bind(&simple_wallet::sign, this, _1),
                            tr("sign <file>"),
@@ -7763,6 +7766,28 @@ bool simple_wallet::wallet_info(const std::vector<std::string> &args)
   message_writer() << tr("Network type: ") << (
     m_wallet->nettype() == cryptonote::TESTNET ? tr("Testnet") :
     m_wallet->nettype() == cryptonote::STAGENET ? tr("Stagenet") : tr("Mainnet"));
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::daemon_info(const std::vector<std::string> &args)
+{
+  if (!try_connect_to_daemon())
+    return true;
+
+  COMMAND_RPC_GET_INFO::request req;
+  COMMAND_RPC_GET_INFO::response res = boost::value_initialized<COMMAND_RPC_GET_INFO::response>();
+  bool r = m_wallet->invoke_http_json("/getinfo", req, res);
+  std::string err = interpret_rpc_response(r, res.status);
+  if (err.empty())
+  {
+    message_writer() << tr("Incoming connections: ") << res.incoming_connections_count;
+    message_writer() << tr("Outgoing connections: ") << res.outgoing_connections_count;
+    message_writer() << tr("RPC connections: ") << res.rpc_connections_count;
+  }
+  else
+  {
+    fail_msg_writer() << tr("failed to get daemon info: ") << err;
+  }
   return true;
 }
 //----------------------------------------------------------------------------------------------------
