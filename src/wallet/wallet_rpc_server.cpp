@@ -37,6 +37,7 @@ using namespace epee;
 
 #include "wallet_rpc_server.h"
 #include "token/token.h"
+#include "cryptonote_core/cryptonote_core.h"
 #include "wallet/wallet_args.h"
 #include "common/util.h"
 #include "common/command_line.h"
@@ -166,7 +167,8 @@ namespace tools
     m_vm = vm;
     if (m_tokens_path.empty())
     {
-      boost::filesystem::path token_path = tools::get_default_data_dir();
+      boost::filesystem::path token_path = command_line::get_arg(*vm, cryptonote::arg_data_dir);
+      // defaults to the standard data directory if --data-dir is not specified
       token_path /= "tokens.bin";
       m_tokens_path = token_path.string();
       m_tokens.load(m_tokens_path);
@@ -2426,7 +2428,8 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(*m_vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -2488,7 +2491,8 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(*m_vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3526,6 +3530,7 @@ int main(int argc, char** argv) {
   command_line::add_arg(desc_params, arg_from_json);
   command_line::add_arg(desc_params, arg_wallet_dir);
   command_line::add_arg(desc_params, arg_prompt_for_password);
+  command_line::add_arg(desc_params, cryptonote::arg_data_dir);
 
   const auto vm = wallet_args::main(
     argc, argv,

@@ -53,6 +53,7 @@
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "simplewallet.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "cryptonote_core/cryptonote_core.h"
 #include "cryptonote_config.h"
 #include "storages/http_abstract_invoke.h"
 #include "rpc/core_rpc_server_commands_defs.h"
@@ -3310,7 +3311,8 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3407,7 +3409,8 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3458,7 +3461,8 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3499,7 +3503,8 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3579,7 +3584,8 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     if (m_wallet->get_account().get_device()) {
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, cryptonote::arg_data_dir);
+    // defaults to the standard data directory if --data-dir is not specified
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -8280,6 +8286,7 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_create_address_file);
   command_line::add_arg(desc_params, arg_subaddress_lookahead);
   command_line::add_arg(desc_params, arg_use_english_language_names);
+  command_line::add_arg(desc_params, cryptonote::arg_data_dir);
 
   po::positional_options_description positional_options;
   positional_options.add(arg_command.name, -1);
