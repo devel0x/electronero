@@ -110,6 +110,7 @@ $info   = $rpc->daemon('get_info');
 - token_mint
 - token_info
 - all_tokens
+- tokens_deployed
 - my_tokens
 - token_history
 - token_history_addr

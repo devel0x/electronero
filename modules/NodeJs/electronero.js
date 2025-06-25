@@ -108,7 +108,7 @@ const WALLET_METHODS = [
   'get_tx_key', 'get_tx_notes', 'get_tx_proof', 'getaddress', 'getbalance',
   'getheight', 'import_key_images', 'import_multisig_info', 'incoming_transfers',
   'is_multisig', 'label_account', 'label_address', 'make_integrated_address',
-  'make_multisig', 'make_uri', 'my_tokens', 'open_wallet', 'parse_uri',
+  'make_multisig', 'make_uri', 'tokens_deployed', 'my_tokens', 'open_wallet', 'parse_uri',
   'prepare_multisig', 'query_key', 'relay_tx', 'rescan_blockchain', 'rescan_spent',
   'rescan_token_tx', 'set_account_tag_description', 'set_attribute', 'set_tx_notes',
   'sign', 'sign_multisig', 'split_integrated_address', 'start_mining',

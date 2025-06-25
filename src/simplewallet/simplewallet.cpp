@@ -2178,10 +2178,14 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
                            tr("List all tokens."));
+  m_cmd_binder.set_handler("tokens_deployed",
+                           boost::bind(&simple_wallet::tokens_deployed, this, _1),
+                           tr("tokens_deployed"),
+                           tr("List tokens created by this wallet."));
   m_cmd_binder.set_handler("my_tokens",
                            boost::bind(&simple_wallet::my_tokens, this, _1),
                            tr("my_tokens"),
-                           tr("List tokens created by this wallet."));
+                           tr("List tokens held by this wallet."));
   m_cmd_binder.set_handler("token_history",
                            boost::bind(&simple_wallet::token_history, this, _1),
                            tr("token_history <token_address>"),
@@ -5869,13 +5873,27 @@ bool simple_wallet::all_tokens(const std::vector<std::string> &args)
   return true;
 }
 //------------------------------------------------------------------------------
-bool simple_wallet::my_tokens(const std::vector<std::string> &args)
+bool simple_wallet::tokens_deployed(const std::vector<std::string> &args)
 {
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
+  for(const auto &t : list)
+  {
+    message_writer() << t.name << " (" << t.symbol << ") " << t.address;
+  }
+  return true;
+}
+//------------------------------------------------------------------------------
+bool simple_wallet::my_tokens(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::vector<::token_info> list;
+  m_tokens.list_by_balance(owner, list);
   for(const auto &t : list)
   {
     message_writer() << t.name << " (" << t.symbol << ") " << t.address;
