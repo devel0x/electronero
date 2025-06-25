@@ -930,6 +930,7 @@ namespace tools
     const boost::optional<epee::net_utils::http::login>& get_daemon_login() const { return m_daemon_login; }
     uint64_t get_daemon_blockchain_height(std::string& err) const;
     uint64_t get_daemon_blockchain_target_height(std::string& err);
+    std::string get_daemon_data_dir(std::string &err) const;
    /*!
     * \brief Calculates the approximate blockchain height from current date/time.
     */

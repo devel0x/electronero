@@ -3310,7 +3310,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    std::string derr;
+    std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+    boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3407,7 +3409,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    std::string derr;
+    std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+    boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3499,7 +3503,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    std::string derr;
+    std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+    boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -3579,7 +3585,9 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     if (m_wallet->get_account().get_device()) {
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    std::string derr;
+    std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+    boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
