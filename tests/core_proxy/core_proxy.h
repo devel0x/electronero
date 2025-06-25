@@ -103,5 +103,9 @@ namespace tests
     cryptonote::difficulty_type get_block_cumulative_difficulty(uint64_t height) const { return 0; }
     bool fluffy_blocks_enabled() const { return false; }
     uint64_t prevalidate_block_hashes(uint64_t height, const std::list<crypto::hash> &hashes) { return 0; }
+    const std::string& get_data_dir() const {
+        static const std::string dummy_dir = "/tmp/proxy_test_data";
+        return dummy_dir;
+    }
   };
 }
