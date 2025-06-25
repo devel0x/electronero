@@ -125,7 +125,14 @@ private:
     void record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount);
 };
 
+#include "crypto/crypto.h"
+
 std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields);
-bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields);
+std::string make_signed_token_extra(token_op_type op, const std::vector<std::string> &fields,
+                                    const crypto::public_key &pub, const crypto::secret_key &sec);
+bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<std::string> &fields,
+                       crypto::signature &sig, bool &has_sig);
+bool verify_token_extra(token_op_type op, const std::vector<std::string> &fields,
+                        const crypto::public_key &pub, const crypto::signature &sig);
 
 #endif // TOKEN_H

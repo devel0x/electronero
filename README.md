@@ -556,7 +556,7 @@ The following commands are available in both the CLI and RPC:
 
 Token state is stored in the `~/.bitelectronero/tokens.bin` file and kept in sync across nodes. Earlier versions also exchanged a token blob in the handshake, but that field has been removed to avoid large payloads. Nodes now learn about tokens from transactions or by running `rescan_token_operations`. Each operation remains private thanks to ring signatures and normal transaction handling.
 
-Rescanning from a nonzero height keeps the existing token store and only applies new operations from that point forward.
+Running `rescan_token_operations` wipes the local token data and replays all token transactions from the supplied start height. Replaying from height `0` rebuilds the complete token history.
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
