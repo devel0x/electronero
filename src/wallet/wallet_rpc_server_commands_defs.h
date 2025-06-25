@@ -1084,6 +1084,145 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_SFT_CREATE
+  {
+    struct request
+    {
+      std::string name;
+      std::string symbol;
+      std::string uri;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(name)
+        KV_SERIALIZE(symbol)
+        KV_SERIALIZE(uri)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string status;
+      std::string sft_address;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(status)
+        KV_SERIALIZE(sft_address)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_SFT_MINT_ID
+  {
+    struct request
+    {
+      std::string sft_address;
+      uint64_t id;
+      uint64_t amount;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(sft_address)
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(amount)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_SFT_TRANSFER_ID
+  {
+    struct request
+    {
+      std::string sft_address;
+      std::string to;
+      uint64_t id;
+      uint64_t amount;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(sft_address)
+        KV_SERIALIZE(to)
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(amount)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_SFT_TRANSFER_FROM_ID
+  {
+    struct request
+    {
+      std::string sft_address;
+      std::string from;
+      std::string to;
+      uint64_t id;
+      uint64_t amount;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(sft_address)
+        KV_SERIALIZE(from)
+        KV_SERIALIZE(to)
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(amount)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_SFT_URI
+  {
+    struct request
+    {
+      std::string sft_address;
+      uint64_t id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(sft_address)
+        KV_SERIALIZE(id)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string uri;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(uri)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_STORE
   {
     struct request

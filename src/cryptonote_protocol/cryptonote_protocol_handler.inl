@@ -80,6 +80,10 @@ namespace cryptonote
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
+    boost::filesystem::path sft_path = tools::get_default_data_dir();
+    sft_path /= "sfts.bin";
+    m_sfts_path = sft_path.string();
+    m_sfts.load(m_sfts_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
@@ -93,6 +97,8 @@ namespace cryptonote
   {
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_sfts_path.empty())
+      m_sfts.save(m_sfts_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1916,6 +1922,132 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::rescan_sft_operations(uint64_t from_height)
+{
+  if(!m_sfts_path.empty())
+  {
+    sft_store loaded;
+    if(loaded.load(m_sfts_path))
+      m_sfts = std::move(loaded);
+    else
+      m_sfts = sft_store();
+  }
+  else
+  {
+    m_sfts = sft_store();
+  }
+  auto &bc = m_core.get_blockchain_storage();
+  uint64_t top = bc.get_current_blockchain_height();
+  if (from_height >= top)
+    return;
+  auto process_tx = [this](const cryptonote::transaction &tx, uint64_t h){
+    process_sft_tx(tx, h);
+  };
+  uint64_t end = top - 1;
+  bc.for_blocks_range(from_height, end, [this, &bc, &process_tx](uint64_t height, const crypto::hash&, const cryptonote::block& b){
+    process_tx(b.miner_tx, height);
+    std::list<cryptonote::transaction> txs;
+    std::list<crypto::hash> missed;
+    bc.get_transactions(b.tx_hashes, txs, missed);
+    for(const auto &tx : txs)
+      process_tx(tx, height);
+    return true;
+  });
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_sft_tx(const cryptonote::transaction &tx, uint64_t height)
+{
+  std::vector<cryptonote::tx_extra_field> fields;
+  if(!cryptonote::parse_tx_extra(tx.extra, fields))
+    return;
+  cryptonote::tx_extra_token_data tdata;
+  if(!find_tx_extra_field_by_type(fields, tdata))
+    return;
+  sft_op_type op;
+  std::vector<std::string> parts;
+  crypto::signature sig;
+  bool has_sig;
+  if(!parse_sft_extra(tdata.data, op, parts, sig, has_sig))
+    return;
+
+  std::string signer;
+  switch(op)
+  {
+    case sft_op_type::create: if(parts.size() >= 5) signer = parts[4]; break;
+    case sft_op_type::transfer: if(parts.size() == 4) signer = parts[1]; break;
+    case sft_op_type::approve: if(parts.size() == 4) signer = parts[1]; break;
+    case sft_op_type::transfer_from: if(parts.size() == 5) signer = parts[1]; break;
+    case sft_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
+    case sft_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
+    case sft_op_type::mint_id: if(parts.size() == 4) signer = parts[1]; break;
+    case sft_op_type::transfer_id: if(parts.size() == 5) signer = parts[1]; break;
+    case sft_op_type::approve_id: if(parts.size() == 5) signer = parts[1]; break;
+    case sft_op_type::transfer_from_id: if(parts.size() == 6) signer = parts[1]; break;
+    case sft_op_type::set_uri: if(parts.size() == 3) signer = parts[1]; break;
+  }
+  cryptonote::address_parse_info info;
+  if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
+    return;
+  if(has_sig)
+  {
+    if(!verify_sft_extra(op, parts, info.address.m_spend_public_key, sig))
+      return;
+  }
+  switch(op)
+  {
+    case sft_op_type::create:
+      if(parts.size() >= 5)
+        m_sfts.create(parts[1], parts[2], parts[4], parts[3], 0, parts[0]);
+      break;
+    case sft_op_type::transfer:
+      if(parts.size() == 4)
+        m_sfts.transfer_by_address(parts[0], parts[1], parts[2], std::stoull(parts[3]));
+      break;
+    case sft_op_type::approve:
+      if(parts.size() == 4)
+        m_sfts.approve(parts[0], parts[1], parts[2], std::stoull(parts[3]), parts[1]);
+      break;
+    case sft_op_type::transfer_from:
+      if(parts.size() == 5)
+        m_sfts.transfer_from_by_address(parts[0], parts[1], parts[2], parts[3], std::stoull(parts[4]));
+      break;
+    case sft_op_type::burn:
+      if(parts.size() == 3)
+        m_sfts.burn(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case sft_op_type::mint:
+      if(parts.size() == 3)
+        m_sfts.mint(parts[0], parts[1], std::stoull(parts[2]));
+      break;
+    case sft_op_type::mint_id:
+      if(parts.size() == 4)
+        m_sfts.mint_id(parts[0], parts[1], std::stoull(parts[2]), std::stoull(parts[3]));
+      break;
+    case sft_op_type::transfer_id:
+      if(parts.size() == 5)
+        m_sfts.transfer_id_by_address(parts[0], std::stoull(parts[3]), parts[1], parts[2], std::stoull(parts[4]));
+      break;
+    case sft_op_type::approve_id:
+      if(parts.size() == 5)
+        m_sfts.approve_id(parts[0], std::stoull(parts[3]), parts[1], parts[2], std::stoull(parts[4]), parts[1]);
+      break;
+    case sft_op_type::transfer_from_id:
+      if(parts.size() == 6)
+        m_sfts.transfer_from_id_by_address(parts[0], std::stoull(parts[4]), parts[1], parts[2], parts[3], std::stoull(parts[5]));
+      break;
+    case sft_op_type::set_uri:
+      if(parts.size() == 3)
+        m_sfts.set_uri(parts[0], parts[1], parts[2]);
+      break;
+  }
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
 }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>

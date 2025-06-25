@@ -151,6 +151,11 @@ namespace tools
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
         MAP_JON_RPC_WE("token_transfer_ownership", on_token_transfer_ownership, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP)
+        MAP_JON_RPC_WE("sft_create",       on_sft_create,       wallet_rpc::COMMAND_RPC_SFT_CREATE)
+        MAP_JON_RPC_WE("sft_mint_id",      on_sft_mint_id,      wallet_rpc::COMMAND_RPC_SFT_MINT_ID)
+        MAP_JON_RPC_WE("sft_transfer_id",  on_sft_transfer_id,  wallet_rpc::COMMAND_RPC_SFT_TRANSFER_ID)
+        MAP_JON_RPC_WE("sft_transfer_from_id", on_sft_transfer_from_id, wallet_rpc::COMMAND_RPC_SFT_TRANSFER_FROM_ID)
+        MAP_JON_RPC_WE("sft_uri",          on_sft_uri,          wallet_rpc::COMMAND_RPC_SFT_URI)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -235,6 +240,11 @@ namespace tools
       bool on_token_history_addr(const wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::request& req, wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR::response& res, epee::json_rpc::error& er);
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer_ownership(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::response& res, epee::json_rpc::error& er);
+      bool on_sft_create(const wallet_rpc::COMMAND_RPC_SFT_CREATE::request& req, wallet_rpc::COMMAND_RPC_SFT_CREATE::response& res, epee::json_rpc::error& er);
+      bool on_sft_mint_id(const wallet_rpc::COMMAND_RPC_SFT_MINT_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_MINT_ID::response& res, epee::json_rpc::error& er);
+      bool on_sft_transfer_id(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER_ID::response& res, epee::json_rpc::error& er);
+      bool on_sft_transfer_from_id(const wallet_rpc::COMMAND_RPC_SFT_TRANSFER_FROM_ID::request& req, wallet_rpc::COMMAND_RPC_SFT_TRANSFER_FROM_ID::response& res, epee::json_rpc::error& er);
+      bool on_sft_uri(const wallet_rpc::COMMAND_RPC_SFT_URI::request& req, wallet_rpc::COMMAND_RPC_SFT_URI::response& res, epee::json_rpc::error& er);
 
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);

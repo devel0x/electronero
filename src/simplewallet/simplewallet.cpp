@@ -2174,10 +2174,54 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer_ownership, this, _1),
                           tr("token_transfer_ownership <token_address> <new_owner>"),
                           tr("Transfer token ownership to another address."));
+  m_cmd_binder.set_handler("sft_transfer",
+                          boost::bind(&simple_wallet::sft_transfer, this, _1),
+                          tr("sft_transfer <sft_address> <to> <amount>"),
+                          tr("Transfer SFT units."));
+  m_cmd_binder.set_handler("sft_create",
+                          boost::bind(&simple_wallet::sft_create, this, _1),
+                          tr("sft_create <name> <symbol> <uri>"),
+                          tr("Create a new SFT contract."));
+  m_cmd_binder.set_handler("sft_mint_id",
+                          boost::bind(&simple_wallet::sft_mint_id, this, _1),
+                          tr("sft_mint_id <sft_address> <id> <amount>"),
+                          tr("Mint SFT units for a specific id."));
+  m_cmd_binder.set_handler("sft_transfer_id",
+                          boost::bind(&simple_wallet::sft_transfer_id, this, _1),
+                          tr("sft_transfer_id <sft_address> <to> <id> <amount>"),
+                          tr("Transfer SFT id units."));
+  m_cmd_binder.set_handler("sft_transfer_from_id",
+                          boost::bind(&simple_wallet::sft_transfer_from_id, this, _1),
+                          tr("sft_transfer_from_id <sft_address> <from> <to> <id> <amount>"),
+                          tr("Transfer SFT id using allowance."));
+  m_cmd_binder.set_handler("sft_set_uri",
+                          boost::bind(&simple_wallet::sft_set_uri, this, _1),
+                          tr("sft_set_uri <sft_address> <uri>"),
+                          tr("Update SFT base URI."));
+  m_cmd_binder.set_handler("sft_uri",
+                          boost::bind(&simple_wallet::sft_uri_cmd, this, _1),
+                          tr("sft_uri <sft_address> <id>"),
+                          tr("Show full URI for an SFT id."));
   m_cmd_binder.set_handler("all_tokens",
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
                            tr("List all tokens."));
+  m_cmd_binder.set_handler("sft_transfer_from",
+                          boost::bind(&simple_wallet::sft_transfer_from, this, _1),
+                          tr("sft_transfer_from <sft_address> <from> <to> <amount>"),
+                          tr("Transfer SFT using allowance."));
+  m_cmd_binder.set_handler("sft_mint",
+                          boost::bind(&simple_wallet::sft_mint, this, _1),
+                          tr("sft_mint <sft_address> <amount>"),
+                          tr("Mint SFT (creator only)."));
+  m_cmd_binder.set_handler("all_sft",
+                           boost::bind(&simple_wallet::all_sft, this, _1),
+                           tr("all_sft"),
+                           tr("List all SFTs."));
+  m_cmd_binder.set_handler("my_sft",
+                           boost::bind(&simple_wallet::my_sft, this, _1),
+                           tr("my_sft"),
+                           tr("List SFTs created by this wallet."));
   m_cmd_binder.set_handler("my_tokens",
                            boost::bind(&simple_wallet::my_tokens, this, _1),
                            tr("my_tokens"),
@@ -5855,6 +5899,348 @@ bool simple_wallet::token_info(const std::vector<std::string> &args)
   message_writer() << tr("Creator fee: ") << cryptonote::print_money(info->creator_fee);
   return true;
 }
+
+bool simple_wallet::sft_mint(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: sft_mint <sft_address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk || tk->creator != creator)
+  {
+    fail_msg_writer() << tr("not sft creator or sft not found");
+    return true;
+  }
+  if(!m_sfts.mint(args[0], creator, amount))
+  {
+    fail_msg_writer() << tr("sft mint failed");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::mint, std::vector<std::string>{args[0], creator, std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft minted");
+  return true;
+}
+
+bool simple_wallet::sft_create(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: sft_create <name> <symbol> <uri>");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info &info = m_sfts.create(args[0], args[1], creator, args[2]);
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::create, std::vector<std::string>{info.address, args[0], args[1], args[2], creator}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("SFT created with address: ") << info.address;
+  return true;
+}
+
+bool simple_wallet::sft_mint_id(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: sft_mint_id <sft_address> <id> <amount>");
+    return true;
+  }
+  uint64_t id = std::stoull(args[1]);
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk || tk->creator != creator)
+  {
+    fail_msg_writer() << tr("not sft creator or sft not found");
+    return true;
+  }
+  if(!m_sfts.mint_id(args[0], creator, id, amount))
+  {
+    fail_msg_writer() << tr("sft mint failed");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::mint_id, std::vector<std::string>{args[0], creator, std::to_string(id), std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft id minted");
+  return true;
+}
+
+bool simple_wallet::sft_transfer_id(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 4)
+  {
+    fail_msg_writer() << tr("usage: sft_transfer_id <sft_address> <to> <id> <amount>");
+    return true;
+  }
+  uint64_t id = std::stoull(args[2]);
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[3]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("sft not found");
+    return true;
+  }
+  if(!m_sfts.transfer_id_by_address(args[0], id, from, args[1], amount))
+  {
+    fail_msg_writer() << tr("sft transfer failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer_id, std::vector<std::string>{args[0], from, args[1], std::to_string(id), std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft id transferred");
+  return true;
+}
+
+bool simple_wallet::sft_transfer_from_id(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 5)
+  {
+    fail_msg_writer() << tr("usage: sft_transfer_from_id <sft_address> <from> <to> <id> <amount>");
+    return true;
+  }
+  uint64_t id = std::stoull(args[3]);
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[4]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("sft not found");
+    return true;
+  }
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_sfts.transfer_from_id_by_address(args[0], id, spender, args[1], args[2], amount))
+  {
+    fail_msg_writer() << tr("sft transfer_from failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer_from_id, std::vector<std::string>{args[0], spender, args[1], args[2], std::to_string(id), std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft id transferred from");
+  return true;
+}
+
+bool simple_wallet::sft_set_uri(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: sft_set_uri <sft_address> <uri>");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_sfts.set_uri(args[0], creator, args[1]))
+  {
+    fail_msg_writer() << tr("failed to set uri");
+    return true;
+  }
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::set_uri, std::vector<std::string>{args[0], creator, args[1]}, pub, sec);
+  std::vector<uint8_t> extra; cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft uri updated");
+  return true;
+}
+
+bool simple_wallet::sft_uri_cmd(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: sft_uri <sft_address> <id>");
+    return true;
+  }
+  uint64_t id = std::stoull(args[1]);
+  std::string uri = m_sfts.uri(args[0], id);
+  message_writer() << uri;
+  return true;
+}
+
+bool simple_wallet::sft_transfer_from(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if (args.size() != 4)
+  {
+    fail_msg_writer() << tr("usage: sft_transfer_from <sft_address> <from> <to> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[3]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("sft not found");
+    return true;
+  }
+  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (!m_sfts.transfer_from_by_address(args[0], spender, args[1], args[2], amount))
+  {
+    fail_msg_writer() << tr("sft transfer_from failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), spender);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer_from, std::vector<std::string>{args[0], spender, args[1], args[2], std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft transferred from");
+  return true;
+}
+//----------------------------------------------------------------------
+bool simple_wallet::sft_transfer(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  if (args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: sft_transfer <sft_address> <to> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if (!cryptonote::parse_amount(amount, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::sft_info *tk = m_sfts.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("sft not found");
+    return true;
+  }
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), args[1]))
+  {
+    fail_msg_writer() << tr("Invalid address");
+    return true;
+  }
+  if (!m_sfts.transfer_by_address(args[0], from, args[1], amount))
+  {
+    fail_msg_writer() << tr("sft transfer failed");
+    return true;
+  }
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), from);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string extra_str = make_signed_sft_extra(sft_op_type::transfer, std::vector<std::string>{args[0], from, args[1], std::to_string(amount)}, pub, sec);
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_sfts_path.empty())
+    m_sfts.save(m_sfts_path);
+  success_msg_writer() << tr("sft transferred");
+  return true;
+}
 //------------------------------------------------------------------------------
 bool simple_wallet::all_tokens(const std::vector<std::string> &args)
 {
@@ -5986,6 +6372,27 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+bool simple_wallet::all_sft(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::vector<::sft_info> list;
+  m_sfts.list_all(list);
+  for(const auto &t : list)
+    message_writer() << t.name << " (" << t.symbol << ") " << t.address;
+  return true;
+}
+bool simple_wallet::my_sft(const std::vector<std::string> &args)
+{
+  if(!m_sfts_path.empty())
+    m_sfts.load(m_sfts_path);
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::vector<::sft_info> list;
+  m_sfts.list_by_creator(creator, list);
+  for(const auto &t : list)
+    message_writer() << t.name << " (" << t.symbol << ") " << t.address;
   return true;
 }
 
