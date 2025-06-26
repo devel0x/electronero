@@ -37,6 +37,8 @@
 #include <boost/program_options/variables_map.hpp>
 #include <string>
 
+#include "common/command_line.h"
+
 #include "math_helper.h"
 #include "storages/levin_abstract_invoke2.h"
 #include "warnings.h"
@@ -80,7 +82,8 @@ namespace cryptonote
     typedef t_cryptonote_protocol_handler<t_core> cryptonote_protocol_handler;
     typedef CORE_SYNC_DATA payload_type;
 
-    t_cryptonote_protocol_handler(t_core& rcore, nodetool::i_p2p_endpoint<connection_context>* p_net_layout, bool offline = false);
+    t_cryptonote_protocol_handler(t_core& rcore, nodetool::i_p2p_endpoint<connection_context>* p_net_layout,
+        const boost::program_options::variables_map& vm, bool offline = false);
 
     BEGIN_INVOKE_MAP2(cryptonote_protocol_handler)
       HANDLE_NOTIFY_T2(NOTIFY_NEW_BLOCK, &cryptonote_protocol_handler::handle_notify_new_block)

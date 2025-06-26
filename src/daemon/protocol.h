@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <boost/program_options/variables_map.hpp>
+
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "daemon"
 
@@ -48,7 +50,7 @@ public:
       boost::program_options::variables_map const & vm
     , t_core & core, bool offline = false
     )
-    : m_protocol{core.get(), nullptr, offline}
+    : m_protocol{core.get(), nullptr, vm, offline}
   {
     MGINFO("Initializing cryptonote protocol...");
     if (!m_protocol.init(vm))
