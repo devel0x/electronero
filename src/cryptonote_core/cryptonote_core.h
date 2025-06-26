@@ -771,9 +771,12 @@ namespace cryptonote
       *
       * @return whether the core is running offline
       */
-     bool offline() const { return m_offline; }
+    bool offline() const { return m_offline; }
 
-   private:
+    //! Returns the configured data directory path
+    const std::string &get_config_folder() const { return m_config_folder; }
+
+  private:
 
      /**
       * @copydoc add_new_tx(transaction&, tx_verification_context&, bool)

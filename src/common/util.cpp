@@ -524,6 +524,12 @@ std::string get_nix_version_display_string()
     return std::error_code(code, std::system_category());
   }
 
+  std::string get_tokens_cache_path(const std::string &data_dir)
+  {
+    boost::filesystem::path path = boost::filesystem::path(data_dir) / "tokens.bin";
+    return path.string();
+  }
+
   static bool unbound_built_with_threads()
   {
     ub_ctx *ctx = ub_ctx_create();

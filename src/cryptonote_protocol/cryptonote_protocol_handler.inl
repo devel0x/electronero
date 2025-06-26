@@ -76,9 +76,7 @@ namespace cryptonote
     {
       m_p2p = &m_p2p_stub;
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(m_core.get_config_folder());
     m_tokens.load(m_tokens_path);
   }
   //-----------------------------------------------------------------------------------------------------------------------
