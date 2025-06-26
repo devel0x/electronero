@@ -164,13 +164,6 @@ namespace tools
       return false;
 
     m_vm = vm;
-    if (m_tokens_path.empty())
-    {
-      boost::filesystem::path token_path = tools::get_default_data_dir();
-      token_path /= "tokens.bin";
-      m_tokens_path = token_path.string();
-      m_tokens.load(m_tokens_path);
-    }
     tools::wallet2 *walvars;
     std::unique_ptr<tools::wallet2> tmpwal;
 
@@ -180,6 +173,17 @@ namespace tools
     {
       tmpwal = tools::wallet2::make_dummy(*m_vm, password_prompter);
       walvars = tmpwal.get();
+    }
+
+    if (m_tokens_path.empty())
+    {
+      boost::filesystem::path token_path;
+      std::string derr;
+      std::string daemon_dir = walvars->get_daemon_data_dir(derr);
+      token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
+      token_path /= "tokens.bin";
+      m_tokens_path = token_path.string();
+      m_tokens.load(m_tokens_path);
     }
     boost::optional<epee::net_utils::http::login> http_login{};
     std::string bind_port = command_line::get_arg(*m_vm, arg_rpc_bind_port);
@@ -2426,7 +2430,9 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    std::string derr;
+    std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+    boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);
@@ -2485,15 +2491,17 @@ namespace tools
       er.message = "Failed to open wallet";
       return false;
     }
-    if (m_wallet)
-      delete m_wallet;
-    m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
-    m_tokens.load(m_tokens_path);
-    return true;
-  }
+  if (m_wallet)
+    delete m_wallet;
+  m_wallet = wal.release();
+  std::string derr;
+  std::string daemon_dir = m_wallet->get_daemon_data_dir(derr);
+  boost::filesystem::path token_path = derr.empty() && !daemon_dir.empty() ? daemon_dir : tools::get_default_data_dir();
+  token_path /= "tokens.bin";
+  m_tokens_path = token_path.string();
+  m_tokens.load(m_tokens_path);
+  return true;
+}
   //----------------------------------------------------------------------------------------------------
   bool wallet_rpc_server::on_rescan_token_tx(const wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::request& req, wallet_rpc::COMMAND_RPC_RESCAN_TOKEN_TX::response& res, epee::json_rpc::error& er)
   {
