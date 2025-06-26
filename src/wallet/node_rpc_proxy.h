@@ -64,6 +64,8 @@ private:
   mutable uint32_t m_rpc_version;
   mutable uint64_t m_target_height;
   mutable time_t m_target_height_time;
+  mutable std::string m_data_dir;
+  mutable bool m_data_dir_fetched;
 };
 
 }
