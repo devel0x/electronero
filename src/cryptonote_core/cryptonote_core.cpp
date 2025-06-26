@@ -1563,6 +1563,11 @@ namespace cryptonote
     boost::filesystem::space_info si = boost::filesystem::space(path);
     return si.available;
   }
+//-----------------------------------------------------------------------------------
+  const std::string& core::get_data_dir() const
+  {
+    return m_config_folder;
+  }
   //-----------------------------------------------------------------------------------------------
   std::time_t core::get_start_time() const
   {
