@@ -92,6 +92,7 @@ public:
 
     void list_all(std::vector<token_info> &out) const;
     void list_by_creator(const std::string &creator, std::vector<token_info> &out) const;
+    void list_by_balance(const std::string &account, std::vector<token_info> &out) const;
 
     bool transfer(const std::string &name, const std::string &from, const std::string &to, uint64_t amount);
     bool transfer_by_address(const std::string &address, const std::string &from, const std::string &to, uint64_t amount);

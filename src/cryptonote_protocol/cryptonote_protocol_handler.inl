@@ -1760,22 +1760,13 @@ skip:
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t from_height)
 {
-  if(!m_tokens_path.empty())
-  {
-    token_store loaded;
-    if(loaded.load(m_tokens_path))
-      m_tokens = std::move(loaded);
-    else
-      m_tokens = token_store();
-  }
-  else
-  {
-    m_tokens = token_store();
-  }
+  // start with a clean store to avoid replaying operations twice
+  m_tokens = token_store();
+
   auto &bc = m_core.get_blockchain_storage();
-  if(from_height > 0 && m_tokens.size() == 0)
+  if(from_height > 0 && from_height <= 3540000)
   {
-    from_height = 3540000; // todo hard code this SMART_CHAIN_HEIGHT in cryptonote_config.h
+    from_height = 3540000; // TODO: hard code this SMART_CHAIN_HEIGHT in cryptonote_config.h
   }
   uint64_t top = bc.get_current_blockchain_height();
   if (from_height >= top)
