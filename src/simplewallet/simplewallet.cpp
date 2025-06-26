@@ -3317,6 +3317,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(epee::console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3412,6 +3413,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(epee::console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3461,6 +3463,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(epee::console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3500,6 +3503,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(epee::console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3578,6 +3582,7 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     }
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(epee::console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.
     // NOTE: this is_deprecated() refers to the wallet file format before becoming JSON. It does not refer to the "old english" seed words form of "deprecated" used elsewhere.

@@ -41,6 +41,7 @@
 #include <ctime>
 #include <boost/filesystem.hpp>
 #include "common/util.h"
+#include "common/scoped_message_writer.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_core/blockchain.h"
@@ -83,6 +84,7 @@ namespace cryptonote
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    tools::scoped_message_writer(epee::console_color_blue, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
