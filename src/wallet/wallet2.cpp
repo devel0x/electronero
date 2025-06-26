@@ -91,6 +91,9 @@ using namespace cryptonote;
 // manual fee padding added for transfer_split users
 #define FEE_PADDING ((uint64_t)15000)
 
+// manual fee padding added for transfer_split users
+#define FEE_PADDING ((uint64_t)15000)
+
 // arbitrary, used to generate different hashes from the same input
 #define CHACHA8_KEY_TAIL 0x8c
 
