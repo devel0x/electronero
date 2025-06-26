@@ -120,7 +120,8 @@ static bool is_blocked(Server &server, const epee::net_utils::network_address &a
 TEST(ban, add)
 {
   test_core pr_core;
-  cryptonote::t_cryptonote_protocol_handler<test_core> cprotocol(pr_core, NULL);
+  boost::program_options::variables_map vm;
+  cryptonote::t_cryptonote_protocol_handler<test_core> cprotocol(pr_core, NULL, vm);
   Server server(cprotocol);
   cprotocol.set_p2p_endpoint(&server);
 
