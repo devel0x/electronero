@@ -206,4 +206,24 @@ boost::optional<std::string> NodeRPCProxy::get_data_dir(std::string &data_dir) c
   return boost::optional<std::string>();
 }
 
+boost::optional<std::string> NodeRPCProxy::get_data_dir(std::string &data_dir) const
+{
+  if (!m_data_dir_fetched)
+  {
+    cryptonote::COMMAND_RPC_GET_INFO::request req_t = AUTO_VAL_INIT(req_t);
+    cryptonote::COMMAND_RPC_GET_INFO::response resp_t = AUTO_VAL_INIT(resp_t);
+
+    m_daemon_rpc_mutex.lock();
+    bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_info", req_t, resp_t, m_http_client, rpc_timeout);
+    m_daemon_rpc_mutex.unlock();
+    CHECK_AND_ASSERT_MES(r, std::string(), "Failed to connect to daemon");
+    CHECK_AND_ASSERT_MES(resp_t.status != CORE_RPC_STATUS_BUSY, resp_t.status, "Failed to connect to daemon");
+    CHECK_AND_ASSERT_MES(resp_t.status == CORE_RPC_STATUS_OK, resp_t.status, "Failed to get daemon info");
+    m_data_dir = resp_t.data_dir;
+    m_data_dir_fetched = true;
+  }
+  data_dir = m_data_dir;
+  return boost::optional<std::string>();
+}
+
 }

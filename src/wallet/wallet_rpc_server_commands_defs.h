@@ -938,7 +938,25 @@ namespace wallet_rpc
     };
   };
 
-  struct COMMAND_RPC_TOKEN_MINE
+  struct COMMAND_RPC_TOKENS_DEPLOYED
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<COMMAND_RPC_TOKEN_ALL::entry> tokens;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(tokens)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_MY_TOKENS
   {
     struct request
     {

@@ -334,6 +334,14 @@ void token_store::list_by_creator(const std::string &creator, std::vector<token_
     }
 }
 
+void token_store::list_by_balance(const std::string &account, std::vector<token_info> &out) const {
+    for(const auto &kv : tokens) {
+        auto it = kv.second.balances.find(account);
+        if(it != kv.second.balances.end() && it->second > 0)
+            out.push_back(kv.second);
+    }
+}
+
 std::string make_token_extra(token_op_type op, const std::vector<std::string> &fields)
 {
     std::ostringstream oss;
