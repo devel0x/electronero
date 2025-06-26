@@ -33,6 +33,7 @@
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 #include <system_error>
+#include <boost/filesystem.hpp>
 #include <csignal>
 #include <cstdio>
 #include <functional>
@@ -131,6 +132,9 @@ namespace tools
   /*! \brief std::rename wrapper for nix and something strange for windows.
    */
   std::error_code replace_file(const std::string& replacement_name, const std::string& replaced_name);
+
+  //! Return tokens storage file path inside given data directory
+  std::string get_tokens_cache_path(const std::string &data_dir);
 
   bool sanitize_locale();
 
