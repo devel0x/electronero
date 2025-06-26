@@ -9181,6 +9181,20 @@ uint64_t wallet2::get_daemon_blockchain_target_height(string &err)
   return resp_t.target_height;
 }
 
+std::string wallet2::get_daemon_data_dir(string &err) const
+{
+  std::string dir;
+  boost::optional<std::string> result = m_node_rpc_proxy.get_data_dir(dir);
+  if (result)
+  {
+    err = *result;
+    return std::string();
+  }
+
+  err.clear();
+  return dir;
+}
+
 uint64_t wallet2::get_approximate_blockchain_height() const
 {
   // time of v2 fork
