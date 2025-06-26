@@ -64,8 +64,9 @@ namespace cryptonote
 
 
   //-----------------------------------------------------------------------------------------------------------------------
-  template<class t_core>
-    t_cryptonote_protocol_handler<t_core>::t_cryptonote_protocol_handler(t_core& rcore, nodetool::i_p2p_endpoint<connection_context>* p_net_layout, bool offline):m_core(rcore),
+template<class t_core>
+  t_cryptonote_protocol_handler<t_core>::t_cryptonote_protocol_handler(t_core& rcore, nodetool::i_p2p_endpoint<connection_context>* p_net_layout,
+      const boost::program_options::variables_map& vm, bool offline):m_core(rcore),
                                                                                                               m_p2p(p_net_layout),
                                                                                                               m_syncronized_connections_count(0),
                                                                                                               m_synchronized(offline),
@@ -76,7 +77,7 @@ namespace cryptonote
     {
       m_p2p = &m_p2p_stub;
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
+    boost::filesystem::path token_path = command_line::get_arg(vm, arg_data_dir);
     token_path /= "tokens.bin";
     m_tokens_path = token_path.string();
     m_tokens.load(m_tokens_path);

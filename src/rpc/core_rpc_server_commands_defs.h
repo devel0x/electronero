@@ -960,6 +960,7 @@ namespace cryptonote
       uint64_t block_size_median;
       uint64_t start_time;
       uint64_t free_space;
+      std::string data_dir;
       bool offline;
       bool untrusted;
       std::string bootstrap_daemon_address;
@@ -990,6 +991,7 @@ namespace cryptonote
         KV_SERIALIZE(block_size_median)
         KV_SERIALIZE(start_time)
         KV_SERIALIZE(free_space)
+        KV_SERIALIZE(data_dir)
         KV_SERIALIZE(offline)
         KV_SERIALIZE(untrusted)
         KV_SERIALIZE(bootstrap_daemon_address)
