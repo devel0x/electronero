@@ -1128,7 +1128,7 @@ namespace cryptonote
       {
         static bool warned = false;
         if (!warned)
-          MWARNING("  failed to find tx meta: " << sorted_it->second << " (will only print once)");
+          MWARNING("  failed to find tx meta: " << sorted_it->second);
         warned = true;
         continue;
       }
