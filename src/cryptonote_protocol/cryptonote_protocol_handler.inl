@@ -76,15 +76,14 @@ namespace cryptonote
     {
       m_p2p = &m_p2p_stub;
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
-    m_tokens.load(m_tokens_path);
+    // tokens will be initialized in init() once command line options are available
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::variables_map& vm)
   {
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_tokens.load(m_tokens_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
