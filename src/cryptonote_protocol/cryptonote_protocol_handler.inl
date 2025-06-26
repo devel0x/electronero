@@ -76,7 +76,6 @@ namespace cryptonote
     {
       m_p2p = &m_p2p_stub;
     }
-    // tokens will be initialized in init() once command line options are available
   }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
