@@ -51,6 +51,7 @@
 #include "common/base58.h"
 #include "common/scoped_message_writer.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
+#include "cryptonote_core/cryptonote_core.h"
 #include "simplewallet.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_config.h"
@@ -3314,10 +3315,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3411,10 +3411,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3462,10 +3461,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3503,10 +3501,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
   }
 
   if (!m_subaddress_lookahead.empty())
@@ -3583,10 +3580,9 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     if (m_wallet->get_account().get_device()) {
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    message_writer(console_color_white, true) << "Loaded Tokens from cEVM path " << m_tokens_path;
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.
     // NOTE: this is_deprecated() refers to the wallet file format before becoming JSON. It does not refer to the "old english" seed words form of "deprecated" used elsewhere.
@@ -8298,6 +8294,8 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_create_address_file);
   command_line::add_arg(desc_params, arg_subaddress_lookahead);
   command_line::add_arg(desc_params, arg_use_english_language_names);
+  // allow wallets to override the data directory so token cache aligns with the daemon
+  command_line::add_arg(desc_params, cryptonote::arg_data_dir);
 
   po::positional_options_description positional_options;
   positional_options.add(arg_command.name, -1);
