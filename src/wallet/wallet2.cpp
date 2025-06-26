@@ -7817,13 +7817,14 @@ skip_tx:
     TX &tx = *i;
     cryptonote::transaction test_tx;
     pending_tx test_ptx;
+    uint64_t tx_fee = tx.ptx.fee; // use the fee calculated for this tx
     if (use_rct) {
       transfer_selected_rct(tx.dsts,                    /* NOMOD std::vector<cryptonote::tx_destination_entry> dsts,*/
                             tx.selected_transfers,      /* const std::list<size_t> selected_transfers */
                             fake_outs_count,            /* CONST size_t fake_outputs_count, */
                             tx.outs,                    /* MOD   std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, */
                             unlock_time,                /* CONST uint64_t unlock_time,  */
-                            needed_fee,                 /* CONST uint64_t fee, */
+                            tx_fee,                     /* CONST uint64_t fee, */
                             extra,                      /* const std::vector<uint8_t>& extra, */
                             test_tx,                    /* OUT   cryptonote::transaction& tx, */
                             test_ptx,                   /* OUT   cryptonote::transaction& tx, */
@@ -7834,7 +7835,7 @@ skip_tx:
                         fake_outs_count,
                         tx.outs,
                         unlock_time,
-                        needed_fee,
+                        tx_fee,
                         extra,
                         detail::digit_split_strategy,
                         tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD),
