@@ -91,6 +91,9 @@ using namespace cryptonote;
 // manual fee padding added for transfer_split users
 #define FEE_PADDING ((uint64_t)15000)
 
+// manual fee padding added for transfer_split users
+#define FEE_PADDING ((uint64_t)15000)
+
 // arbitrary, used to generate different hashes from the same input
 #define CHACHA8_KEY_TAIL 0x8c
 
@@ -173,7 +176,7 @@ void do_prepare_file_names(const std::string& file_path, std::string& keys_file,
 uint64_t calculate_fee(uint64_t fee_per_kb, size_t bytes, uint64_t fee_multiplier)
 {
   uint64_t kB = (bytes + 1023) / 1024;
-  return kB * fee_per_kb * fee_multiplier + FEE_PADDING; 
+  return kB * fee_per_kb * fee_multiplier + FEE_PADDING;
 }
 
 uint64_t calculate_fee(uint64_t fee_per_kb, const cryptonote::blobdata &blob, uint64_t fee_multiplier)
@@ -5338,23 +5341,14 @@ uint64_t wallet2::get_fee_multiplier(uint32_t priority, int fee_algorithm) const
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_dynamic_per_kb_fee_estimate() const
 {
-  uint64_t fee;
-  boost::optional<std::string> result = m_node_rpc_proxy.get_dynamic_per_kb_fee_estimate(FEE_ESTIMATE_GRACE_BLOCKS, fee);
-  if (!result)
-    return fee;
-  LOG_PRINT_L1("Failed to query per kB fee, using " << print_money(FEE_PER_KB));
+  // Bypass daemon fee estimate and use the built-in constant
   return FEE_PER_KB;
 }
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_per_kb_fee() const
 {
-  if(m_light_wallet)
-    return m_light_wallet_per_kb_fee;
-  bool use_dyn_fee = use_fork_rules(HF_VERSION_DYNAMIC_FEE, -720 * 1);
-  if (!use_dyn_fee)
-    return FEE_PER_KB;
-
-  return get_dynamic_per_kb_fee_estimate();
+  // Always return the constant fee per kB, ignoring dynamic fee logic
+  return FEE_PER_KB;
 }
 //----------------------------------------------------------------------------------------------------
 int wallet2::get_fee_algorithm() const
@@ -9188,6 +9182,20 @@ uint64_t wallet2::get_daemon_blockchain_target_height(string &err)
     err = "possibly lost connection to daemon";
   }
   return resp_t.target_height;
+}
+
+std::string wallet2::get_daemon_data_dir(string &err) const
+{
+  std::string dir;
+  boost::optional<std::string> result = m_node_rpc_proxy.get_data_dir(dir);
+  if (result)
+  {
+    err = *result;
+    return std::string();
+  }
+
+  err.clear();
+  return dir;
 }
 
 uint64_t wallet2::get_approximate_blockchain_height() const
