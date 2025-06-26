@@ -92,6 +92,10 @@ public:
   cryptonote::difficulty_type get_block_cumulative_difficulty(uint64_t height) const { return 0; }
   bool fluffy_blocks_enabled() const { return false; }
   uint64_t prevalidate_block_hashes(uint64_t height, const std::list<crypto::hash> &hashes) { return 0; }
+  const std::string& get_config_folder() const {
+      static const std::string dummy = "/tmp/test_core_config";
+      return dummy;
+  }
   void stop() {}
 };
 

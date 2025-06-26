@@ -41,6 +41,7 @@
 #include <ctime>
 #include <boost/filesystem.hpp>
 #include "common/util.h"
+#include "common/scoped_message_writer.h"
 
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_core/blockchain.h"
@@ -78,13 +79,14 @@ namespace cryptonote
     }
     // tokens will be initialized in init() once command line options are available
   }
+  }
   //-----------------------------------------------------------------------------------------------------------------------
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::variables_map& vm)
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
-    MGINFO_BLUE("Loaded Tokens from cEVM path \"" << m_tokens_path << "\"");
+    MGINFO_BLUE("cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated \"" << m_tokens_path << "\"");
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
