@@ -3314,9 +3314,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
   }
 
@@ -3411,9 +3409,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
   }
 
@@ -3462,9 +3458,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
   }
 
@@ -3503,9 +3497,7 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
   {
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
   }
 
@@ -3583,9 +3575,7 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     if (m_wallet->get_account().get_device()) {
        message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
     }
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.

@@ -166,9 +166,7 @@ namespace tools
     m_vm = vm;
     if (m_tokens_path.empty())
     {
-      boost::filesystem::path token_path = tools::get_default_data_dir();
-      token_path /= "tokens.bin";
-      m_tokens_path = token_path.string();
+      m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
       m_tokens.load(m_tokens_path);
     }
     tools::wallet2 *walvars;
@@ -2426,9 +2424,7 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
     return true;
   }
@@ -2488,9 +2484,7 @@ namespace tools
     if (m_wallet)
       delete m_wallet;
     m_wallet = wal.release();
-    boost::filesystem::path token_path = tools::get_default_data_dir();
-    token_path /= "tokens.bin";
-    m_tokens_path = token_path.string();
+    m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
     return true;
   }
