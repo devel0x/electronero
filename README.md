@@ -561,3 +561,14 @@ Running `rescan_token_operations` wipes the local token data and replays all tok
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+## Daemon Height Utility
+
+A new helper script `modules/python/check_height.py` queries a running daemon and
+prints the current block height. This simple command is useful for monitoring or
+integration with other tools that need to verify a node is synchronized.
+
+### Planned Upgrade
+
+The script currently reports only the block height. Future versions may return a
+full status report including peer information and network hashrate.
