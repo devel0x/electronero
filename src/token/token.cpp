@@ -50,6 +50,7 @@ bool token_store::load(const std::string &file) {
         ia >> data;
         tokens = std::move(data.tokens);
         transfer_history = std::move(data.transfers);
+        stakes = std::move(data.stakes);
         rebuild_indexes();
     }
     catch(const std::exception &e)
@@ -67,6 +68,7 @@ bool token_store::load_from_string(const std::string &blob) {
     ia >> data;
     tokens = std::move(data.tokens);
     transfer_history = std::move(data.transfers);
+    stakes = std::move(data.stakes);
     rebuild_indexes();
     return true;
 }
@@ -81,6 +83,12 @@ bool token_store::merge_from_string(const std::string &blob) {
             tokens.emplace(kv);
     }
     transfer_history.insert(transfer_history.end(), data.transfers.begin(), data.transfers.end());
+    for (const auto &kv : data.stakes) {
+        auto &m = stakes[kv.first];
+        for (const auto &sv : kv.second)
+            if (m.find(sv.first) == m.end())
+                m.emplace(sv);
+    }
     rebuild_indexes();
     return true;
 }
@@ -95,7 +103,7 @@ bool token_store::save(const std::string &file) {
     try
     {
         boost::archive::binary_oarchive oa(ofs);
-        token_store_data data{tokens, transfer_history};
+        token_store_data data{tokens, transfer_history, stakes};
         oa << data;
     }
     catch(const std::exception &e)
@@ -109,7 +117,7 @@ bool token_store::save(const std::string &file) {
 bool token_store::store_to_string(std::string &blob) const {
     std::ostringstream oss;
     boost::archive::binary_oarchive oa(oss);
-    token_store_data data{tokens, transfer_history};
+    token_store_data data{tokens, transfer_history, stakes};
     oa << data;
     blob = oss.str();
     return true;
@@ -124,6 +132,7 @@ token_info &token_store::create(const std::string &name, const std::string &symb
     tok.creator = creator;
     tok.total_supply = supply;
     tok.creator_fee = creator_fee;
+    tok.reward_rate = TOKEN_STAKE_REWARD_RATE;
     tok.balances[creator] = supply;
     if (address.empty()) {
         // incorporate some random bytes to ensure unique hash even when called repeatedly
@@ -294,6 +303,15 @@ bool token_store::set_creator_fee(const std::string &address, const std::string 
     return true;
 }
 
+bool token_store::set_reward_rate(const std::string &address, const std::string &creator, double rate)
+{
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator)
+        return false;
+    tok->reward_rate = rate;
+    return true;
+}
+
 bool token_store::transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner)
 {
     token_info *tok = get_by_address(address);
@@ -308,6 +326,52 @@ bool token_store::transfer_ownership(const std::string &address, const std::stri
     tok->creator = new_owner;
     creator_tokens[new_owner].push_back(name);
     return true;
+}
+
+bool token_store::stake(const std::string &address, const std::string &owner, uint64_t amount, uint64_t height)
+{
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->reward_rate == 0.0) return false;
+    auto it = tok->balances.find(owner);
+    if(it == tok->balances.end() || it->second < amount) return false;
+    it->second -= amount;
+    auto &rec = stakes[address][owner];
+    rec.amount += amount;
+    if(rec.start_height == 0)
+        rec.start_height = height;
+    return true;
+}
+
+uint64_t token_store::pending_reward(const std::string &address, const std::string &owner, uint64_t height) const
+{
+    auto it_addr = stakes.find(address);
+    if(it_addr == stakes.end()) return 0;
+    auto it = it_addr->second.find(owner);
+    if(it == it_addr->second.end()) return 0;
+    const token_info *tok = get_by_address(address);
+    double rate = tok ? tok->reward_rate : TOKEN_STAKE_REWARD_RATE;
+    uint64_t blocks = height > it->second.start_height ? height - it->second.start_height : 0;
+    return static_cast<uint64_t>(it->second.amount * rate * blocks);
+}
+
+uint64_t token_store::unstake(const std::string &address, const std::string &owner, uint64_t height)
+{
+    auto it_addr = stakes.find(address);
+    if(it_addr == stakes.end()) return 0;
+    auto it = it_addr->second.find(owner);
+    if(it == it_addr->second.end()) return 0;
+    uint64_t reward = pending_reward(address, owner, height);
+    uint64_t amt = it->second.amount;
+    it_addr->second.erase(it);
+    if(it_addr->second.empty())
+        stakes.erase(it_addr);
+    token_info *tok = get_by_address(address);
+    if(tok)
+    {
+        tok->balances[owner] += amt + reward;
+        tok->total_supply += reward;
+    }
+    return amt + reward;
 }
 
 void token_store::rebuild_indexes() {
