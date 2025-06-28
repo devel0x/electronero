@@ -47,6 +47,7 @@
 #include "common/i18n.h"
 #include "common/command_line.h"
 #include "common/util.h"
+#include "token/token_marketplace.h"
 #include "common/dns_utils.h"
 #include "common/base58.h"
 #include "common/scoped_message_writer.h"
@@ -2195,6 +2196,26 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::token_history_addr, this, _1),
                            tr("token_history_addr <address>"),
                            tr("Show token transfers involving an address."));
+  m_cmd_binder.set_handler("market_sell",
+                           boost::bind(&simple_wallet::market_sell, this, _1),
+                           tr("market_sell <token_address> <amount> <price>"),
+                           tr("Place a sell order on the marketplace."));
+  m_cmd_binder.set_handler("market_cancel",
+                           boost::bind(&simple_wallet::market_cancel, this, _1),
+                           tr("market_cancel <order_id>"),
+                           tr("Cancel a sell order."));
+  m_cmd_binder.set_handler("market_buy",
+                           boost::bind(&simple_wallet::market_buy, this, _1),
+                           tr("market_buy <order_id> <amount>"),
+                           tr("Buy from a sell order."));
+  m_cmd_binder.set_handler("market_pairs",
+                           boost::bind(&simple_wallet::market_pairs, this, _1),
+                           tr("market_pairs"),
+                           tr("List marketplace token pairs."));
+  m_cmd_binder.set_handler("market_orders",
+                           boost::bind(&simple_wallet::market_orders, this, _1),
+                           tr("market_orders <token_address>"),
+                           tr("List orders for a token."));
   m_cmd_binder.set_handler("set",
                            boost::bind(&simple_wallet::set_variable, this, _1),
                            tr("set <option> [<value>]"),
@@ -3317,6 +3338,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     message_writer(console_color_white, true) << "cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated " << m_tokens_path;
   }
 
@@ -3413,6 +3437,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     message_writer(console_color_white, true) << "cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated " << m_tokens_path;
   }
 
@@ -3463,6 +3490,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     message_writer(console_color_white, true) << "cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated " << m_tokens_path;
   }
 
@@ -3503,6 +3533,9 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     message_writer(console_color_white, true) << "cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated " << m_tokens_path;
   }
 
@@ -3582,6 +3615,9 @@ bool simple_wallet::open_wallet(const boost::program_options::variables_map& vm)
     }
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     message_writer(console_color_white, true) << "cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated " << m_tokens_path;
     // If the wallet file is deprecated, we should ask for mnemonic language again and store
     // everything in the new format.
@@ -3661,6 +3697,8 @@ bool simple_wallet::close_wallet()
     m_wallet->store();
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
   }
   catch (const std::exception& e)
   {
@@ -3679,6 +3717,8 @@ bool simple_wallet::save(const std::vector<std::string> &args)
     m_wallet->store();
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
     success_msg_writer() << tr("Wallet data saved");
   }
   catch (const std::exception& e)
@@ -5522,6 +5562,8 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
   {
     if(!m_tokens.save(m_tokens_path))
       fail_msg_writer() << tr("Failed to save token data to ") << m_tokens_path;
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
   }
   success_msg_writer() << tr("Token created with address: ") << info.address;
   return true;
@@ -5605,7 +5647,11 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token transferred");
   return true;
 }
@@ -5648,7 +5694,11 @@ bool simple_wallet::token_approve(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token approval set");
   return true;
 }
@@ -5716,7 +5766,11 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token transferred from");
   return true;
 }
@@ -5776,7 +5830,11 @@ bool simple_wallet::token_burn(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token burned");
   return true;
 }
@@ -5829,7 +5887,11 @@ bool simple_wallet::token_mint(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token minted");
   return true;
 }
@@ -5998,7 +6060,11 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("creator fee updated");
   return true;
 }
@@ -6039,8 +6105,175 @@ bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &arg
   if(!submit_token_tx(dsts, extra))
     return true;
   if(!m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   success_msg_writer() << tr("token ownership transferred");
+  return true;
+}
+
+bool simple_wallet::submit_market_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra)
+{
+  try
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, m_current_subaddress_account, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+    {
+      fail_msg_writer() << tr("failed to create marketplace transaction");
+      return false;
+    }
+    uint64_t network_fee = ptx_vector[0].fee;
+    std::string prompt = (boost::format(tr("Transaction fee is %s. Is this okay?  (Y/Yes/N/No): "))
+        % print_money(network_fee)).str();
+    std::string accepted = input_line(prompt);
+    if (std::cin.eof() || !command_line::is_yes(accepted))
+    {
+      fail_msg_writer() << tr("transaction cancelled.");
+      return false;
+    }
+    const crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    m_wallet->commit_tx(ptx_vector[0]);
+    success_msg_writer(true) << tr("Transaction ID: ") << txid;
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    fail_msg_writer() << e.what();
+    return false;
+  }
+}
+
+bool simple_wallet::market_sell(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("market_sell called, marketplace path: " << m_marketplace_path);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  if(args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: market_sell <token_address> <amount> <price>");
+    return true;
+  }
+  uint64_t amount = 0, price = 0;
+  if(!cryptonote::parse_amount(amount, args[1]) || !cryptonote::parse_amount(price, args[2]))
+  {
+    fail_msg_writer() << tr("invalid amount or price");
+    return true;
+  }
+  std::string seller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  uint64_t id = 0;
+  try { id = m_marketplace.place_sell_order(seller, args[0], amount, price); }
+  catch(const std::exception &e) { fail_msg_writer() << e.what(); return true; }
+  cryptonote::address_parse_info self; cryptonote::get_account_address_from_str(self, m_wallet->nettype(), seller);
+  std::vector<cryptonote::tx_destination_entry> dsts; dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::place, {seller, args[0], args[1], args[2]}));
+  if(!submit_market_tx(dsts, extra))
+    return true;
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  success_msg_writer() << tr("sell order placed with id: ") << id;
+  return true;
+}
+
+bool simple_wallet::market_cancel(const std::vector<std::string> &args)
+{
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: market_cancel <order_id>");
+    return true;
+  }
+  uint64_t id = 0;
+  if(!epee::string_tools::get_xtype_from_string(id, args[0]))
+  {
+    fail_msg_writer() << tr("invalid order id");
+    return true;
+  }
+  if(!m_marketplace.cancel_sell_order(id))
+  {
+    fail_msg_writer() << tr("order not found or already filled");
+    return true;
+  }
+  std::string me = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  cryptonote::address_parse_info self; cryptonote::get_account_address_from_str(self, m_wallet->nettype(), me);
+  std::vector<cryptonote::tx_destination_entry> dsts; dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::cancel, {args[0]}));
+  if(!submit_market_tx(dsts, extra))
+    return true;
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  success_msg_writer() << tr("order cancelled");
+  return true;
+}
+
+bool simple_wallet::market_buy(const std::vector<std::string> &args)
+{
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: market_buy <order_id> <amount>");
+    return true;
+  }
+  uint64_t id = 0, amount = 0;
+  if(!epee::string_tools::get_xtype_from_string(id, args[0]) || !cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid id or amount");
+    return true;
+  }
+  market_order ord;
+  if(!m_marketplace.get_order(id, ord))
+  {
+    fail_msg_writer() << tr("order not found");
+    return true;
+  }
+  std::string buyer = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_marketplace.buy(id, buyer, amount))
+  {
+    fail_msg_writer() << tr("purchase failed");
+    return true;
+  }
+  cryptonote::address_parse_info seller_info; cryptonote::get_account_address_from_str(seller_info, m_wallet->nettype(), ord.seller);
+  cryptonote::address_parse_info ginfo; cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  dsts.push_back({amount * ord.price, seller_info.address, seller_info.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::buy, {args[0], buyer, args[1]}));
+  if(!submit_market_tx(dsts, extra))
+    return true;
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  success_msg_writer() << tr("order filled");
+  return true;
+}
+
+bool simple_wallet::market_pairs(const std::vector<std::string> &args)
+{
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  std::vector<market_pair> list;
+  m_marketplace.list_tokens(list);
+  for(const auto &p : list)
+    message_writer() << p.token;
+  return true;
+}
+
+bool simple_wallet::market_orders(const std::vector<std::string> &args)
+{
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: market_orders <token_address>");
+    return true;
+  }
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  std::vector<market_order> list;
+  m_marketplace.list_orders(args[0], list);
+  for(const auto &o : list)
+    message_writer() << o.id << " " << o.seller << " " << cryptonote::print_money(o.remaining) << " @ " << cryptonote::print_money(o.price);
   return true;
 }
 //----------------------------------------------------------------------------------------------------
