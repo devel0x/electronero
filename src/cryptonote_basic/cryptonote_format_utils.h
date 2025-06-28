@@ -75,6 +75,7 @@ namespace cryptonote
   bool add_additional_tx_pub_keys_to_extra(std::vector<uint8_t>& tx_extra, const std::vector<crypto::public_key>& additional_pub_keys);
   bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata& extra_nonce);
   bool add_token_data_to_tx_extra(std::vector<uint8_t>& tx_extra, const std::string& data);
+  bool add_market_data_to_tx_extra(std::vector<uint8_t>& tx_extra, const std::string& data);
   bool remove_field_from_tx_extra(std::vector<uint8_t>& tx_extra, const std::type_info &type);
   void set_payment_id_to_tx_extra_nonce(blobdata& extra_nonce, const crypto::hash& payment_id);
   void set_encrypted_payment_id_to_tx_extra_nonce(blobdata& extra_nonce, const crypto::hash8& payment_id);
