@@ -1943,4 +1943,30 @@ bool t_rpc_command_executor::sync_info()
     return true;
 }
 
+bool t_rpc_command_executor::rpc_version()
+{
+    cryptonote::COMMAND_RPC_GET_VERSION::request req;
+    cryptonote::COMMAND_RPC_GET_VERSION::response res;
+    epee::json_rpc::error error_resp;
+
+    std::string fail_message = "Failed to get RPC version";
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->json_rpc_request(req, res, "get_version", fail_message.c_str()))
+            return true;
+    }
+    else
+    {
+        if (!m_rpc_server->on_get_version(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    tools::success_msg_writer() << "Daemon RPC v" << res.version;
+    return true;
+}
+
 }// namespace daemonize

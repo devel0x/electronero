@@ -291,6 +291,11 @@ t_command_server::t_command_server(
     , std::bind(&t_command_parser_executor::version, &m_parser, p::_1)
     , "Print version information."
     );
+    m_command_lookup.set_handler(
+      "rpc_version"
+    , std::bind(&t_command_parser_executor::rpc_version, &m_parser, p::_1)
+    , "Query the daemon for its RPC version."
+    );
 }
 
 bool t_command_server::process_command_str(const std::string& cmd)

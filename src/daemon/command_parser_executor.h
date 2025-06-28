@@ -141,6 +141,8 @@ public:
   bool sync_info(const std::vector<std::string>& args);
 
   bool version(const std::vector<std::string>& args);
+
+  bool rpc_version(const std::vector<std::string>& args);
 };
 
 } // namespace daemonize
