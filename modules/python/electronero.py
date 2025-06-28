@@ -102,3 +102,16 @@ class WalletRPC(RPCClient):
         }
         params.update(options)
         return self.call("transfer", params)
+
+    def get_transfers(self, **params: Any) -> Dict[str, Any]:
+        """Return incoming and outgoing transfers matching the given filters."""
+        return self.call("get_transfers", params)
+
+    def token_allowance(self, token_address: str, owner: str, spender: str) -> int:
+        params = {
+            "token_address": token_address,
+            "owner": owner,
+            "spender": spender,
+        }
+        result = self.call("token_allowance", params)
+        return result.get("allowance")

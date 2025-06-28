@@ -3454,6 +3454,15 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
   return true;
 }
 
+bool wallet_rpc_server::on_token_allowance(const wallet_rpc::COMMAND_RPC_TOKEN_ALLOWANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALLOWANCE::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  res.allowance = m_tokens.allowance_of_by_address(req.token_address, req.owner, req.spender);
+  return true;
+}
+
 bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_MY_TOKENS::request& req, wallet_rpc::COMMAND_RPC_MY_TOKENS::response& res, epee::json_rpc::error& er)
 {
   if (!m_wallet) return not_open(er);

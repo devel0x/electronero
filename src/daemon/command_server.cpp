@@ -287,9 +287,24 @@ t_command_server::t_command_server(
     , "Print information about the blockchain sync state."
     );
     m_command_lookup.set_handler(
+      "uptime"
+    , std::bind(&t_command_parser_executor::print_uptime, &m_parser, p::_1)
+    , "Show how long the daemon has been running."
+    );
+    m_command_lookup.set_handler(
+      "start_time"
+    , std::bind(&t_command_parser_executor::print_start_time, &m_parser, p::_1)
+    , "Show the daemon start time."
+    );
+    m_command_lookup.set_handler(
       "version"
     , std::bind(&t_command_parser_executor::version, &m_parser, p::_1)
     , "Print version information."
+    );
+    m_command_lookup.set_handler(
+      "rpc_version"
+    , std::bind(&t_command_parser_executor::rpc_version, &m_parser, p::_1)
+    , "Query the daemon for its RPC version."
     );
 }
 

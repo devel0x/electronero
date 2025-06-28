@@ -1943,4 +1943,91 @@ bool t_rpc_command_executor::sync_info()
     return true;
 }
 
+bool t_rpc_command_executor::print_uptime()
+{
+    cryptonote::COMMAND_RPC_GET_INFO::request req;
+    cryptonote::COMMAND_RPC_GET_INFO::response res;
+    epee::json_rpc::error error_resp;
+    std::string fail_message = "Problem fetching info";
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->rpc_request(req, res, "/getinfo", fail_message.c_str()))
+            return true;
+    }
+    else
+    {
+        if (!m_rpc_server->on_get_info(req, res) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    std::time_t uptime = std::time(nullptr) - res.start_time;
+    tools::success_msg_writer() << boost::format("Uptime %ud %uh %um %us")
+        % (unsigned int)floor(uptime / 60.0 / 60.0 / 24.0)
+        % (unsigned int)floor(fmod((uptime / 60.0 / 60.0), 24.0))
+        % (unsigned int)floor(fmod((uptime / 60.0), 60.0))
+        % (unsigned int)fmod(uptime, 60.0);
+    return true;
+}
+
+bool t_rpc_command_executor::print_start_time()
+{
+    cryptonote::COMMAND_RPC_GET_INFO::request req;
+    cryptonote::COMMAND_RPC_GET_INFO::response res;
+    epee::json_rpc::error error_resp;
+    std::string fail_message = "Problem fetching info";
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->rpc_request(req, res, "/getinfo", fail_message.c_str()))
+            return true;
+    }
+    else
+    {
+        if (!m_rpc_server->on_get_info(req, res) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    const std::time_t st = res.start_time;
+    char buffer[64];
+    const std::tm *tm = std::localtime(&st);
+    if (tm && std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm))
+        tools::success_msg_writer() << "Daemon start time: " << buffer;
+    else
+        tools::success_msg_writer() << "Daemon start time: " << st;
+    return true;
+}
+
+bool t_rpc_command_executor::rpc_version()
+{
+    cryptonote::COMMAND_RPC_GET_VERSION::request req;
+    cryptonote::COMMAND_RPC_GET_VERSION::response res;
+    epee::json_rpc::error error_resp;
+
+    std::string fail_message = "Failed to get RPC version";
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->json_rpc_request(req, res, "get_version", fail_message.c_str()))
+            return true;
+    }
+    else
+    {
+        if (!m_rpc_server->on_get_version(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    tools::success_msg_writer() << "Daemon RPC v" << res.version;
+    return true;
+}
+
 }// namespace daemonize

@@ -527,7 +527,7 @@ If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
 
 ## XRC-20 Token Smart Contracts
-Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, `tokens_deployed`, and `my_tokens` commands to manage ERC20-like tokens.
+Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_allowance`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, `tokens_deployed`, and `my_tokens` commands to manage ERC20-like tokens.
 Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
 Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
 Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `<data-dir>/tokens.bin` (default `~/.bitelectronero/tokens.bin`) and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet, `tokens_deployed` to see those you created, and `my_tokens` to list the tokens you hold.
@@ -546,6 +546,7 @@ The following commands are available in both the CLI and RPC:
   If `<to>` is an integrated address the underlying base address is automatically approved to spend the deposited amount via `token_transfer_from`.
 * `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account. Integrated addresses may be used for either address.
+* `token_allowance <token_address> <owner> <spender>` – view the remaining allowance for a spender.
 * `token_burn <token_address> <amount>` – destroy tokens you own.
 * `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
@@ -561,3 +562,23 @@ Running `rescan_token_operations` wipes the local token data and replays all tok
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+Possible enhancements include freezing accounts or supporting time-locked token transfers.
+
+## Python RPC Helpers
+Electronero now ships with a lightweight Python module located in `modules/python/electronero.py`.
+It provides `DaemonRPC` and `WalletRPC` classes for easy access to JSON RPC endpoints.
+The `WalletRPC` class includes a new `get_transfers()` helper for listing incoming and outgoing transfers.
+See `modules/python.md` for usage examples.
+
+## Daemon RPC Utilities
+The command-line daemon now supports `rpc_version` to query the RPC interface version
+reported by the running daemon. This helps scripts verify compatibility with the
+exposed API. It also adds an `uptime` command for quickly checking how long the daemon has been running
+and a `start_time` command to print when the daemon was first launched.
+
+### Future Python Improvements
+Upcoming updates may introduce asynchronous RPC helpers built on `asyncio` to better integrate with modern event loops.
+
+### Future C++ Improvements
+Planned enhancements may expose additional runtime metrics through new RPC endpoints,
+including system load and memory usage statistics.

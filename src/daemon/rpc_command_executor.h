@@ -153,6 +153,12 @@ public:
   bool relay_tx(const std::string &txid);
 
   bool sync_info();
+
+  bool print_uptime();
+
+  bool print_start_time();
+
+  bool rpc_version();
 };
 
 } // namespace daemonize
