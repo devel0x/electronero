@@ -12,6 +12,8 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 
+constexpr double TOKEN_STAKE_REWARD_RATE = 0.01; // default reward per block
+
 enum class token_op_type : uint8_t {
     create = 0,
     transfer = 1,
@@ -20,7 +22,10 @@ enum class token_op_type : uint8_t {
     set_fee = 4,
     burn = 5,
     mint = 6,
-    transfer_ownership = 7
+    transfer_ownership = 7,
+    stake = 8,
+    unstake = 9,
+    set_reward = 10
 };
 
 struct token_info {
@@ -30,6 +35,7 @@ struct token_info {
     std::string creator;
     uint64_t total_supply = 0;
     uint64_t creator_fee = 0;
+    double reward_rate = TOKEN_STAKE_REWARD_RATE;
     std::unordered_map<std::string, uint64_t> balances;
     std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allowances;
 
@@ -41,6 +47,7 @@ struct token_info {
         a & address;
         a & creator;
         a & creator_fee;
+        a & reward_rate;
         a & balances;
         a & allowances;
     }
@@ -61,15 +68,28 @@ struct token_transfer_record {
     }
 };
 
+struct token_stake_record {
+    uint64_t amount = 0;
+    uint64_t start_height = 0;
+
+    template<class Archive>
+    void serialize(Archive &a, const unsigned int /*version*/) {
+        a & amount;
+        a & start_height;
+    }
+};
+
 struct token_store_data
 {
     std::unordered_map<std::string, token_info> tokens;
     std::vector<token_transfer_record> transfers;
+    std::unordered_map<std::string, std::unordered_map<std::string, token_stake_record>> stakes;
 
     template<class Archive>
     void serialize(Archive &a, const unsigned int /*version*/) {
         a & tokens;
         a & transfers;
+        a & stakes;
     }
 };
 
@@ -106,7 +126,12 @@ public:
     bool burn(const std::string &address, const std::string &owner, uint64_t amount);
     bool mint(const std::string &address, const std::string &creator, uint64_t amount);
 
+    bool stake(const std::string &address, const std::string &owner, uint64_t amount, uint64_t height);
+    uint64_t unstake(const std::string &address, const std::string &owner, uint64_t height);
+    uint64_t pending_reward(const std::string &address, const std::string &owner, uint64_t height) const;
+
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
+    bool set_reward_rate(const std::string &address, const std::string &creator, double rate);
 
     bool transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner);
 
@@ -121,6 +146,7 @@ private:
     std::unordered_map<std::string, std::string> address_index;
     std::unordered_map<std::string, std::vector<std::string>> creator_tokens;
     std::vector<token_transfer_record> transfer_history;
+    std::unordered_map<std::string, std::unordered_map<std::string, token_stake_record>> stakes;
 
     void rebuild_indexes();
     void record_transfer(const std::string &token_address, const std::string &from, const std::string &to, uint64_t amount);

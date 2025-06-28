@@ -197,6 +197,7 @@ enable_testing()
 
 option(BUILD_DOCUMENTATION "Build the Doxygen documentation." ON)
 option(BUILD_TESTS "Build tests." OFF)
+option(BUILD_EXAMPLES "Build example programs." OFF)
 
 # Check whether we're on a 32-bit or 64-bit system
 if(CMAKE_SIZEOF_VOID_P EQUAL "8")
@@ -855,6 +856,10 @@ endif()
 
 add_subdirectory(contrib)
 add_subdirectory(src)
+
+if(BUILD_EXAMPLES)
+  add_subdirectory(examples/staking)
+endif()
 
 if(BUILD_TESTS)
   add_subdirectory(tests)
