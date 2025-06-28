@@ -1861,6 +1861,8 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
     case token_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
     case token_op_type::transfer_ownership: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::pause: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::freeze: if(parts.size() == 4) signer = parts[1]; break;
   }
   cryptonote::address_parse_info info;
   if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
@@ -1911,6 +1913,14 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::transfer_ownership:
       if(parts.size() == 3)
         m_tokens.transfer_ownership(parts[0], parts[1], parts[2]);
+      break;
+    case token_op_type::pause:
+      if(parts.size() == 3)
+        m_tokens.set_paused(parts[0], parts[1], std::stoull(parts[2]) != 0);
+      break;
+    case token_op_type::freeze:
+      if(parts.size() == 4)
+        m_tokens.set_frozen(parts[0], parts[1], parts[2], std::stoull(parts[3]) != 0);
       break;
   }
   if(!m_tokens_path.empty())
