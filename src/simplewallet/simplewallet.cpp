@@ -2167,6 +2167,14 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_mint, this, _1),
                           tr("token_mint <token_address> <amount>"),
                           tr("Mint new tokens (creator only)."));
+  m_cmd_binder.set_handler("token_stake",
+                          boost::bind(&simple_wallet::token_stake, this, _1),
+                          tr("token_stake <token_address> <amount>"),
+                          tr("Stake tokens to earn rewards."));
+  m_cmd_binder.set_handler("token_unstake",
+                          boost::bind(&simple_wallet::token_unstake, this, _1),
+                          tr("token_unstake <token_address>"),
+                          tr("Withdraw staked tokens and rewards."));
   m_cmd_binder.set_handler("token_set_fee",
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
@@ -5831,6 +5839,87 @@ bool simple_wallet::token_mint(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token minted");
+  return true;
+}
+
+bool simple_wallet::token_stake(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_stake called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_stake <token_address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  if(!m_tokens.stake(args[0], owner, amount, height))
+  {
+    fail_msg_writer() << tr("token stake failed");
+    return true;
+  }
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::stake, std::vector<std::string>{args[0], owner, std::to_string(amount)}, pub, sec) :
+    make_token_extra(token_op_type::stake, std::vector<std::string>{args[0], owner, std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("tokens staked");
+  return true;
+}
+
+bool simple_wallet::token_unstake(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_unstake called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_unstake <token_address>");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  uint64_t total = m_tokens.unstake(args[0], owner, height);
+  if(total == 0)
+  {
+    fail_msg_writer() << tr("no stake found or token not found");
+    return true;
+  }
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::unstake, std::vector<std::string>{args[0], owner}, pub, sec) :
+    make_token_extra(token_op_type::unstake, std::vector<std::string>{args[0], owner});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  cryptonote::address_parse_info self;
+  cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({1, self.address, self.is_subaddress});
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("unstaked amount: ") << cryptonote::print_money(total);
   return true;
 }
 //----------------------------------------------------------------------------------------------------

@@ -548,6 +548,8 @@ The following commands are available in both the CLI and RPC:
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account. Integrated addresses may be used for either address.
 * `token_burn <token_address> <amount>` – destroy tokens you own.
 * `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_stake <token_address> <amount>` – lock tokens to earn rewards.
+* `token_unstake <token_address>` – withdraw staked tokens and rewards.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
 * `token_history <token_address>` – list transfers for a token.
@@ -561,3 +563,20 @@ Running `rescan_token_operations` wipes the local token data and replays all tok
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+### Staking Example
+
+A minimal demonstration of a staking pool can be found under
+`examples/staking`. Enable example builds and compile it with:
+
+```
+mkdir -p build && cd build
+cmake -DBUILD_EXAMPLES=ON ..
+make staking_example
+```
+
+Run the example from the build directory:
+
+```
+./examples/staking/staking_example
+```
