@@ -548,6 +548,8 @@ The following commands are available in both the CLI and RPC:
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account. Integrated addresses may be used for either address.
 * `token_burn <token_address> <amount>` – destroy tokens you own.
 * `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
+* `manage_token_minting <token_address> <rate> <deadline>` – set public mint rate (coins per token) and deadline.
+* `mint_public <token_address> <amount>` – mint tokens at the public rate.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
 * `token_history <token_address>` – list transfers for a token.

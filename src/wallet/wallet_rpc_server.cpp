@@ -3523,6 +3523,109 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
   return true;
 }
 
+bool wallet_rpc_server::on_manage_token_minting(const wallet_rpc::COMMAND_RPC_MANAGE_TOKEN_MINTING::request& req, wallet_rpc::COMMAND_RPC_MANAGE_TOKEN_MINTING::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC manage_token_minting called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  ::token_info *tk = m_tokens.get_by_address(req.token_address);
+  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  {
+    res.success = false;
+    return true;
+  }
+  res.success = m_tokens.manage_mint(req.token_address, tk->creator, req.rate, req.deadline);
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = m_wallet->get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::manage_mint, std::vector<std::string>{req.token_address, tk->creator, std::to_string(req.rate), std::to_string(req.deadline)}, pub, sec) :
+    make_token_extra(token_op_type::manage_mint, std::vector<std::string>{req.token_address, tk->creator, std::to_string(req.rate), std::to_string(req.deadline)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_mint_public(const wallet_rpc::COMMAND_RPC_MINT_PUBLIC::request& req, wallet_rpc::COMMAND_RPC_MINT_PUBLIC::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC mint_public called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(req.token_address);
+  if(!tk)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+    er.message = "token not found";
+    return false;
+  }
+  std::string err; uint64_t height = m_wallet->get_daemon_blockchain_height(err);
+  res.success = m_tokens.mint_public(req.token_address, owner, req.amount, height);
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  dsts.push_back({tk->public_mint_rate * req.amount, creator_info.address, creator_info.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::mint_public, std::vector<std::string>{req.token_address, owner, std::to_string(req.amount)}, pub, sec) :
+    make_token_extra(token_op_type::mint_public, std::vector<std::string>{req.token_address, owner, std::to_string(req.amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, height + 100, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
 }
 
 int main(int argc, char** argv) {

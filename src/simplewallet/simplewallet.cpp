@@ -2167,6 +2167,14 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_mint, this, _1),
                           tr("token_mint <token_address> <amount>"),
                           tr("Mint new tokens (creator only)."));
+  m_cmd_binder.set_handler("manage_token_minting",
+                          boost::bind(&simple_wallet::manage_token_minting, this, _1),
+                          tr("manage_token_minting <token_address> <rate> <deadline>"),
+                          tr("Set public mint rate and deadline."));
+  m_cmd_binder.set_handler("mint_public",
+                          boost::bind(&simple_wallet::mint_public, this, _1),
+                          tr("mint_public <token_address> <amount>"),
+                          tr("Mint tokens at the public rate."));
   m_cmd_binder.set_handler("token_set_fee",
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
@@ -6041,6 +6049,117 @@ bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &arg
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token ownership transferred");
+  return true;
+}
+
+bool simple_wallet::manage_token_minting(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("manage_token_minting called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() < 1 || args.size() > 3)
+  {
+    fail_msg_writer() << tr("usage: manage_token_minting <token_address> [rate] [deadline]");
+    return true;
+  }
+  uint64_t rate = 100000000;
+  if(args.size() >= 2 && !cryptonote::parse_amount(rate, args[1]))
+  {
+    fail_msg_writer() << tr("invalid rate");
+    return true;
+  }
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  uint64_t deadline = args.size() == 3 ? std::stoull(args[2]) : height + 10080;
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_tokens.manage_mint(args[0], creator, rate, deadline))
+  {
+    fail_msg_writer() << tr("not token creator or token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::manage_mint, std::vector<std::string>{args[0], creator, std::to_string(rate), std::to_string(deadline)}, pub, sec) :
+    make_token_extra(token_op_type::manage_mint, std::vector<std::string>{args[0], creator, std::to_string(rate), std::to_string(deadline)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("public mint parameters set");
+  return true;
+}
+
+bool simple_wallet::mint_public(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("mint_public called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: mint_public <token_address> <amount>");
+    return true;
+  }
+  uint64_t amount = 0;
+  if(!cryptonote::parse_amount(amount, args[1]))
+  {
+    fail_msg_writer() << tr("invalid amount");
+    return true;
+  }
+  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk)
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  if(!m_tokens.mint_public(args[0], owner, amount, height))
+  {
+    fail_msg_writer() << tr("public mint closed");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  cryptonote::address_parse_info creator_info;
+  cryptonote::get_account_address_from_str(creator_info, m_wallet->nettype(), tk->creator);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  dsts.push_back({tk->public_mint_rate * amount, creator_info.address, creator_info.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::mint_public, std::vector<std::string>{args[0], owner, std::to_string(amount)}, pub, sec) :
+    make_token_extra(token_op_type::mint_public, std::vector<std::string>{args[0], owner, std::to_string(amount)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, height + 100, m_wallet->adjust_priority(0), extra, m_current_subaddress_account, {}, m_trusted_daemon);
+  if(ptx_vector.empty())
+  {
+    fail_msg_writer() << tr("failed to create transaction");
+    return true;
+  }
+  const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+  m_wallet->commit_tx(ptx_vector[0]);
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("Transaction ID: ") << txid;
   return true;
 }
 //----------------------------------------------------------------------------------------------------
