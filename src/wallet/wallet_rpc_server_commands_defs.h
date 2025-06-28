@@ -1102,6 +1102,146 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_MARKET_SELL
+  {
+    struct request
+    {
+      std::string token;
+      uint64_t amount;
+      uint64_t price;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token)
+        KV_SERIALIZE(amount)
+        KV_SERIALIZE(price)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      uint64_t order_id;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(order_id)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_MARKET_CANCEL
+  {
+    struct request
+    {
+      uint64_t order_id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(order_id)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_MARKET_BUY
+  {
+    struct request
+    {
+      uint64_t order_id;
+      uint64_t amount;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(order_id)
+        KV_SERIALIZE(amount)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_MARKET_LIST_PAIRS
+  {
+    struct request
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct entry
+    {
+      std::string token;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<entry> pairs;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(pairs)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_MARKET_LIST_ORDERS
+  {
+    struct request
+    {
+      std::string token;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct order_entry
+    {
+      uint64_t id;
+      std::string seller;
+      uint64_t price;
+      uint64_t remaining;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(id)
+        KV_SERIALIZE(seller)
+        KV_SERIALIZE(price)
+        KV_SERIALIZE(remaining)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::vector<order_entry> orders;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(orders)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_STORE
   {
     struct request

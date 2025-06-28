@@ -153,6 +153,8 @@ namespace tools
       m_wallet->store();
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
+      if(!m_marketplace_path.empty())
+        m_marketplace.save(m_marketplace_path);
       delete m_wallet;
       m_wallet = NULL;
     }
@@ -169,6 +171,9 @@ namespace tools
     {
       m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
       m_tokens.load(m_tokens_path);
+      m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
+      m_marketplace = token_marketplace(m_tokens, "market.address");
+      m_marketplace.load(m_marketplace_path);
     }
     tools::wallet2 *walvars;
     std::unique_ptr<tools::wallet2> tmpwal;
@@ -1507,6 +1512,8 @@ namespace tools
       m_wallet->store();
       if(!m_tokens_path.empty())
         m_tokens.save(m_tokens_path);
+      if(!m_marketplace_path.empty())
+        m_marketplace.save(m_marketplace_path);
       m_stop.store(true, std::memory_order_relaxed);
     }
     catch (const std::exception& e)
@@ -2427,6 +2434,9 @@ namespace tools
     m_wallet = wal.release();
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -2487,6 +2497,9 @@ namespace tools
     m_wallet = wal.release();
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(*m_vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "market.address");
+    m_marketplace.load(m_marketplace_path);
     return true;
   }
   //----------------------------------------------------------------------------------------------------
@@ -3000,6 +3013,8 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
   {
     if(!m_tokens.save(m_tokens_path))
       MERROR("Failed to save token data to " << m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
   }
   res.status = WALLET_RPC_STATUS_OK;
   res.token_address = tk.address;
@@ -3079,7 +3094,11 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
     }
   }
   if(res.success && !m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   return true;
 }
 //---------------------------------------------------------------------------------
@@ -3118,7 +3137,11 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
     }
   }
   if(res.success && !m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   return true;
 }
 //---------------------------------------------------------------------------------
@@ -3185,7 +3208,11 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
     }
   }
   if(res.success && !m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   return true;
 }
 
@@ -3450,7 +3477,131 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
     }
   }
   if(res.success && !m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
+  return true;
+}
+
+bool wallet_rpc_server::on_market_sell(const wallet_rpc::COMMAND_RPC_MARKET_SELL::request& req, wallet_rpc::COMMAND_RPC_MARKET_SELL::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  std::string seller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  uint64_t id = 0;
+  try { id = m_marketplace.place_sell_order(seller, req.token, req.amount, req.price); }
+  catch(const std::exception &e) { er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR; er.message = e.what(); return false; }
+  cryptonote::address_parse_info self; cryptonote::get_account_address_from_str(self, m_wallet->nettype(), seller);
+  std::vector<cryptonote::tx_destination_entry> dsts; dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::place, {seller, req.token, std::to_string(req.amount), std::to_string(req.price)}));
+  size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+  auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+  if(ptx_vector.empty()) { res.success = false; return true; }
+  const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+  m_wallet->commit_tx(ptx_vector[0]);
+  res.tx_hash = epee::string_tools::pod_to_hex(txid);
+  res.order_id = id;
+  res.success = true;
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_market_cancel(const wallet_rpc::COMMAND_RPC_MARKET_CANCEL::request& req, wallet_rpc::COMMAND_RPC_MARKET_CANCEL::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  res.success = m_marketplace.cancel_sell_order(req.order_id);
+  std::string me = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  cryptonote::address_parse_info self; cryptonote::get_account_address_from_str(self, m_wallet->nettype(), me);
+  std::vector<cryptonote::tx_destination_entry> dsts; dsts.push_back({1, self.address, self.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::cancel, {std::to_string(req.order_id)}));
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_market_buy(const wallet_rpc::COMMAND_RPC_MARKET_BUY::request& req, wallet_rpc::COMMAND_RPC_MARKET_BUY::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  market_order ord;
+  if(!m_marketplace.get_order(req.order_id, ord))
+  {
+    res.success = false;
+    return true;
+  }
+  std::string buyer = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  res.success = m_marketplace.buy(req.order_id, buyer, req.amount);
+  cryptonote::address_parse_info seller_info; cryptonote::get_account_address_from_str(seller_info, m_wallet->nettype(), ord.seller);
+  cryptonote::address_parse_info ginfo; cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS);
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  dsts.push_back({req.amount * ord.price, seller_info.address, seller_info.is_subaddress});
+  std::vector<uint8_t> extra; cryptonote::add_market_data_to_tx_extra(extra, make_marketplace_extra(marketplace_op_type::buy, {std::to_string(req.order_id), buyer, std::to_string(req.amount)}));
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_market_pairs(const wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS::request&, wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  std::vector<market_pair> list;
+  m_marketplace.list_tokens(list);
+  for(const auto &p : list)
+  {
+    wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS::entry e; e.token = p.token; res.pairs.push_back(e);
+  }
+  return true;
+}
+
+bool wallet_rpc_server::on_market_orders(const wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS::request& req, wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS::response& res, epee::json_rpc::error& er)
+{
+  if (!m_wallet) return not_open(er);
+  if(!m_marketplace_path.empty())
+    m_marketplace.load(m_marketplace_path);
+  std::vector<market_order> list;
+  m_marketplace.list_orders(req.token, list);
+  for(const auto &o : list)
+  {
+    wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS::order_entry e;
+    e.id = o.id; e.seller = o.seller; e.price = o.price; e.remaining = o.remaining;
+    res.orders.push_back(e);
+  }
   return true;
 }
 
@@ -3519,7 +3670,11 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
     }
   }
   if(res.success && !m_tokens_path.empty())
+  {
     m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
+  }
   return true;
 }
 
