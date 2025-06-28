@@ -3319,6 +3319,7 @@ bool wallet_rpc_server::on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::
   res.symbol = info->symbol;
   res.supply = info->total_supply;
   res.creator_fee = info->creator_fee;
+  res.creator_fee_locked = info->creator_fee_locked;
   return true;
 }
 
@@ -3434,6 +3435,55 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
   std::string extra_str = sign ?
     make_signed_token_extra(token_op_type::set_fee, std::vector<std::string>{req.token_address, tk->creator, std::to_string(req.creator_fee)}, pub, sec) :
     make_token_extra(token_op_type::set_fee, std::vector<std::string>{req.token_address, tk->creator, std::to_string(req.creator_fee)});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(res.success)
+  {
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    if(ptx_vector.empty())
+      res.success = false;
+    else
+    {
+      const crypto::hash txid = cryptonote::get_transaction_hash(ptx_vector[0].tx);
+      m_wallet->commit_tx(ptx_vector[0]);
+      res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    }
+  }
+  if(res.success && !m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  return true;
+}
+
+bool wallet_rpc_server::on_token_lock_fee(const wallet_rpc::COMMAND_RPC_TOKEN_LOCK_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_LOCK_FEE::response& res, epee::json_rpc::error& er)
+{
+  LOG_PRINT_L0("RPC token_lock_fee called, tokens path: " << m_tokens_path);
+  if (!m_wallet) return not_open(er);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  ::token_info *tk = m_tokens.get_by_address(req.token_address);
+  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  {
+    res.success = false;
+    return true;
+  }
+  res.success = m_tokens.lock_creator_fee(req.token_address, tk->creator);
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid governance address";
+    return false;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = m_wallet->get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::lock_fee, std::vector<std::string>{req.token_address, tk->creator}, pub, sec) :
+    make_token_extra(token_op_type::lock_fee, std::vector<std::string>{req.token_address, tk->creator});
   std::vector<uint8_t> extra;
   cryptonote::add_token_data_to_tx_extra(extra, extra_str);
   if(res.success)

@@ -2171,6 +2171,10 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_set_fee, this, _1),
                           tr("token_set_fee <token_address> <creator_fee>"),
                           tr("Set or update creator fee."));
+  m_cmd_binder.set_handler("token_lock_fee",
+                          boost::bind(&simple_wallet::token_lock_fee, this, _1),
+                          tr("token_lock_fee <token_address>"),
+                          tr("Lock creator fee permanently."));
   m_cmd_binder.set_handler("token_transfer_ownership",
                           boost::bind(&simple_wallet::token_transfer_ownership, this, _1),
                           tr("token_transfer_ownership <token_address> <new_owner>"),
@@ -5853,6 +5857,7 @@ bool simple_wallet::token_info(const std::vector<std::string> &args)
   message_writer() << tr("Symbol: ") << info->symbol;
   message_writer() << tr("Supply: ") << cryptonote::print_money(info->total_supply);
   message_writer() << tr("Creator fee: ") << cryptonote::print_money(info->creator_fee);
+  message_writer() << tr("Fee status: ") << (info->creator_fee_locked ? tr("locked") : tr("unlocked"));
   return true;
 }
 //------------------------------------------------------------------------------
@@ -6000,6 +6005,47 @@ bool simple_wallet::token_set_fee(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("creator fee updated");
+  return true;
+}
+
+bool simple_wallet::token_lock_fee(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_lock_fee called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_lock_fee <token_address>");
+    return true;
+  }
+  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!m_tokens.lock_creator_fee(args[0], creator))
+  {
+    fail_msg_writer() << tr("not token creator or token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::lock_fee, std::vector<std::string>{args[0], creator}, pub, sec) :
+    make_token_extra(token_op_type::lock_fee, std::vector<std::string>{args[0], creator});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("creator fee locked");
   return true;
 }
 
