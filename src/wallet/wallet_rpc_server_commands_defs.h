@@ -699,6 +699,7 @@ namespace wallet_rpc
       std::string symbol;
       uint64_t supply;
       uint64_t creator_fee;
+      double reward_rate;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
@@ -901,6 +902,7 @@ namespace wallet_rpc
         KV_SERIALIZE(symbol)
         KV_SERIALIZE(supply)
         KV_SERIALIZE(creator_fee)
+        KV_SERIALIZE(reward_rate)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -919,12 +921,14 @@ namespace wallet_rpc
       std::string symbol;
       std::string address;
       uint64_t supply;
+      double reward_rate;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
         KV_SERIALIZE(symbol)
         KV_SERIALIZE(address)
         KV_SERIALIZE(supply)
+        KV_SERIALIZE(reward_rate)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -952,6 +956,56 @@ namespace wallet_rpc
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(tokens)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_TOKEN_STAKE
+  {
+    struct request
+    {
+      std::string token_address;
+      uint64_t amount;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
+        KV_SERIALIZE(amount)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_TOKEN_UNSTAKE
+  {
+    struct request
+    {
+      std::string token_address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      uint64_t total;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(total)
+        KV_SERIALIZE(tx_hash)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1062,6 +1116,31 @@ namespace wallet_rpc
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(creator_fee)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_TOKEN_SET_REWARD
+  {
+    struct request
+    {
+      std::string token_address;
+      double reward_rate;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
+        KV_SERIALIZE(reward_rate)
       END_KV_SERIALIZE_MAP()
     };
 
