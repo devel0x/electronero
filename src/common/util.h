@@ -135,6 +135,8 @@ namespace tools
 
   //! Return tokens storage file path inside given data directory
   std::string get_tokens_cache_path(const std::string &data_dir);
+  //! Return marketplace storage file path inside given data directory
+  std::string get_marketplace_cache_path(const std::string &data_dir);
 
   bool sanitize_locale();
 
