@@ -828,6 +828,31 @@ namespace wallet_rpc
     };
   };
 
+  struct COMMAND_RPC_TOKEN_ALLOWANCE
+  {
+    struct request
+    {
+      std::string token_address;
+      std::string owner;
+      std::string spender;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
+        KV_SERIALIZE(owner)
+        KV_SERIALIZE(spender)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      uint64_t allowance;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(allowance)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
   struct COMMAND_RPC_TOKEN_BURN
   {
     struct request

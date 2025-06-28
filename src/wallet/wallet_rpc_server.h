@@ -142,6 +142,7 @@ namespace tools
         MAP_JON_RPC_WE("token_transfer",     on_token_transfer,     wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER)
         MAP_JON_RPC_WE("token_approve",      on_token_approve,      wallet_rpc::COMMAND_RPC_TOKEN_APPROVE)
         MAP_JON_RPC_WE("token_transfer_from",on_token_transfer_from,wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM)
+        MAP_JON_RPC_WE("token_allowance",   on_token_allowance,   wallet_rpc::COMMAND_RPC_TOKEN_ALLOWANCE)
         MAP_JON_RPC_WE("token_burn",        on_token_burn,        wallet_rpc::COMMAND_RPC_TOKEN_BURN)
         MAP_JON_RPC_WE("token_mint",        on_token_mint,        wallet_rpc::COMMAND_RPC_TOKEN_MINT)
         MAP_JON_RPC_WE("token_info",        on_token_info,        wallet_rpc::COMMAND_RPC_TOKEN_INFO)
@@ -227,6 +228,7 @@ namespace tools
       bool on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER::response& res, epee::json_rpc::error& er);
       bool on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_APPROVE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_FROM::response& res, epee::json_rpc::error& er);
+      bool on_token_allowance(const wallet_rpc::COMMAND_RPC_TOKEN_ALLOWANCE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_ALLOWANCE::response& res, epee::json_rpc::error& er);
       bool on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::request& req, wallet_rpc::COMMAND_RPC_TOKEN_BURN::response& res, epee::json_rpc::error& er);
       bool on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::request& req, wallet_rpc::COMMAND_RPC_TOKEN_MINT::response& res, epee::json_rpc::error& er);
       bool on_token_info(const wallet_rpc::COMMAND_RPC_TOKEN_INFO::request& req, wallet_rpc::COMMAND_RPC_TOKEN_INFO::response& res, epee::json_rpc::error& er);
