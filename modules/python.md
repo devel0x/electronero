@@ -48,6 +48,13 @@ result = wallet.transfer([
 print(result)
 ```
 
+List recent transfers:
+
+```python
+history = wallet.get_transfers(in=True, out=True, filter_by_height=True, min_height=0)
+print(history["in"])
+```
+
 Every RPC method defined in the Electronero daemon and wallet servers can be
 called using the :py:meth:`~modules.python.electronero.RPCClient.call` method or
 attribute access. For example:

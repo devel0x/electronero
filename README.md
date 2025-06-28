@@ -561,3 +561,21 @@ Running `rescan_token_operations` wipes the local token data and replays all tok
 
 ### Future Token Improvements
 Tokens can now be burned or minted as needed. Future updates may extend the token system with additional governance features.
+
+## Python RPC Helpers
+Electronero now ships with a lightweight Python module located in `modules/python/electronero.py`.
+It provides `DaemonRPC` and `WalletRPC` classes for easy access to JSON RPC endpoints.
+The `WalletRPC` class includes a new `get_transfers()` helper for listing incoming and outgoing transfers.
+See `modules/python.md` for usage examples.
+
+## Daemon RPC Utilities
+The command-line daemon now supports `rpc_version` to query the RPC interface version
+reported by the running daemon. This helps scripts verify compatibility with the
+exposed API. It also adds an `uptime` command for quickly checking how long the daemon has been running.
+
+### Future Python Improvements
+Upcoming updates may introduce asynchronous RPC helpers built on `asyncio` to better integrate with modern event loops.
+
+### Future C++ Improvements
+Planned enhancements may expose additional runtime metrics through new RPC endpoints,
+such as configurable uptime reports with start times and system load information.
