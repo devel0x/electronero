@@ -124,6 +124,7 @@ token_info &token_store::create(const std::string &name, const std::string &symb
     tok.creator = creator;
     tok.total_supply = supply;
     tok.creator_fee = creator_fee;
+    tok.paused = false;
     tok.balances[creator] = supply;
     if (address.empty()) {
         // incorporate some random bytes to ensure unique hash even when called repeatedly
@@ -169,7 +170,7 @@ const token_info *token_store::get_by_address(const std::string &address) const 
 
 bool token_store::transfer(const std::string &name, const std::string &from, const std::string &to, uint64_t amount) {
     token_info *tok = get(name);
-    if (!tok) return false;
+    if (!tok || tok->paused) return false;
     auto fit = tok->balances.find(from);
     if (fit == tok->balances.end() || fit->second < amount) return false;
     fit->second -= amount;
@@ -187,7 +188,7 @@ bool token_store::transfer(const std::string &name, const std::string &from, con
 
 bool token_store::transfer_by_address(const std::string &address, const std::string &from, const std::string &to, uint64_t amount) {
     token_info *tok = get_by_address(address);
-    if (!tok) return false;
+    if (!tok || tok->paused) return false;
     auto fit = tok->balances.find(from);
     if (fit == tok->balances.end() || fit->second < amount) return false;
     fit->second -= amount;
@@ -217,7 +218,7 @@ bool token_store::approve(const std::string &name, const std::string &owner, con
 
 bool token_store::transfer_from(const std::string &name, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount) {
     token_info *tok = get(name);
-    if (!tok) return false;
+    if (!tok || tok->paused) return false;
     auto &allowed = tok->allowances[from][spender];
     if (allowed < amount) return false;
     auto fit = tok->balances.find(from);
@@ -231,7 +232,7 @@ bool token_store::transfer_from(const std::string &name, const std::string &spen
 
 bool token_store::transfer_from_by_address(const std::string &address, const std::string &spender, const std::string &from, const std::string &to, uint64_t amount) {
     token_info *tok = get_by_address(address);
-    if (!tok) return false;
+    if (!tok || tok->paused) return false;
     auto &allowed = tok->allowances[from][spender];
     if (allowed < amount) return false;
     auto fit = tok->balances.find(from);
@@ -291,6 +292,15 @@ bool token_store::set_creator_fee(const std::string &address, const std::string 
     if(!tok || tok->creator != creator)
         return false;
     tok->creator_fee = fee;
+    return true;
+}
+
+bool token_store::set_paused(const std::string &address, const std::string &creator, bool p)
+{
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator)
+        return false;
+    tok->paused = p;
     return true;
 }
 
