@@ -49,6 +49,7 @@
 #include "common/password.h"
 #include "crypto/crypto.h"  // for definition of crypto::secret_key
 #include "token/token.h"
+#include "token/token_marketplace.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.simplewallet"
@@ -175,6 +176,14 @@ namespace cryptonote
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
     bool token_transfer_ownership(const std::vector<std::string> &args);
+
+    bool market_sell(const std::vector<std::string> &args);
+    bool market_cancel(const std::vector<std::string> &args);
+    bool market_buy(const std::vector<std::string> &args);
+    bool market_pairs(const std::vector<std::string> &args);
+    bool market_orders(const std::vector<std::string> &args);
+
+    bool submit_market_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
 
     bool submit_token_tx(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<uint8_t> &extra);
     bool sign_transfer(const std::vector<std::string> &args);
@@ -375,5 +384,7 @@ namespace cryptonote
 
     token_store m_tokens;
     std::string m_tokens_path;
+    token_marketplace m_marketplace{m_tokens, "market.address"};
+    std::string m_marketplace_path;
   };
 }
