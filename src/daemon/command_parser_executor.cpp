@@ -678,4 +678,11 @@ bool t_command_parser_executor::version(const std::vector<std::string>& args)
   return true;
 }
 
+bool t_command_parser_executor::rpc_version(const std::vector<std::string>& args)
+{
+  if (!args.empty()) return false;
+
+  return m_executor.rpc_version();
+}
+
 } // namespace daemonize
