@@ -124,6 +124,8 @@ token_info &token_store::create(const std::string &name, const std::string &symb
     tok.creator = creator;
     tok.total_supply = supply;
     tok.creator_fee = creator_fee;
+    tok.public_mint_rate = 100000000;
+    tok.public_mint_deadline = 0;
     tok.balances[creator] = supply;
     if (address.empty()) {
         // incorporate some random bytes to ensure unique hash even when called repeatedly
@@ -282,6 +284,24 @@ bool token_store::mint(const std::string &address, const std::string &creator, u
     tok->total_supply += amount;
     tok->balances[creator] += amount;
     record_transfer(address, "", creator, amount);
+    return true;
+}
+
+bool token_store::mint_public(const std::string &address, const std::string &to, uint64_t amount, uint64_t height) {
+    token_info *tok = get_by_address(address);
+    if(!tok) return false;
+    if(height > tok->public_mint_deadline && tok->public_mint_deadline != 0) return false;
+    tok->total_supply += amount;
+    tok->balances[to] += amount;
+    record_transfer(address, "", to, amount);
+    return true;
+}
+
+bool token_store::manage_mint(const std::string &address, const std::string &creator, uint64_t rate, uint64_t deadline) {
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator) return false;
+    tok->public_mint_rate = rate;
+    tok->public_mint_deadline = deadline;
     return true;
 }
 
