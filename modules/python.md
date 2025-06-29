@@ -48,6 +48,20 @@ result = wallet.transfer([
 print(result)
 ```
 
+List recent transfers:
+
+```python
+history = wallet.get_transfers(in=True, out=True, filter_by_height=True, min_height=0)
+print(history["in"])
+```
+
+Check how many tokens an address has approved for another to spend:
+
+```python
+allowance = wallet.token_allowance("TOKEN_ADDRESS", "OWNER_ADDR", "SPENDER_ADDR")
+print(allowance)
+```
+
 Every RPC method defined in the Electronero daemon and wallet servers can be
 called using the :py:meth:`~modules.python.electronero.RPCClient.call` method or
 attribute access. For example:
