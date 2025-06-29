@@ -778,11 +778,13 @@ namespace wallet_rpc
     struct request
     {
       std::string name;
+      std::string address;
       std::string spender;
       uint64_t amount;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
+        KV_SERIALIZE(address)
         KV_SERIALIZE(spender)
         KV_SERIALIZE(amount)
       END_KV_SERIALIZE_MAP()
@@ -970,7 +972,10 @@ namespace wallet_rpc
   {
     struct request
     {
+      std::string address;
+
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(address, std::string())
       END_KV_SERIALIZE_MAP()
     };
 
@@ -988,7 +993,10 @@ namespace wallet_rpc
   {
     struct request
     {
+      std::string address;
+
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(address, std::string())
       END_KV_SERIALIZE_MAP()
     };
 
