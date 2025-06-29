@@ -266,6 +266,12 @@ uint64_t token_store::allowance_of(const std::string &name, const std::string &o
     return sit == oit->second.end() ? 0 : sit->second;
 }
 
+uint64_t token_store::allowance_of_by_address(const std::string &address, const std::string &owner, const std::string &spender) const {
+    auto itn = address_index.find(address);
+    if (itn == address_index.end()) return 0;
+    return allowance_of(itn->second, owner, spender);
+}
+
 bool token_store::burn(const std::string &address, const std::string &owner, uint64_t amount) {
     token_info *tok = get_by_address(address);
     if(!tok) return false;
