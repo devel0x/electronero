@@ -530,6 +530,12 @@ std::string get_nix_version_display_string()
     return path.string();
   }
 
+  std::string get_marketplace_cache_path(const std::string &data_dir)
+  {
+    boost::filesystem::path path = boost::filesystem::path(data_dir) / "marketplace.bin";
+    return path.string();
+  }
+
   static bool unbound_built_with_threads()
   {
     ub_ctx *ctx = ub_ctx_create();

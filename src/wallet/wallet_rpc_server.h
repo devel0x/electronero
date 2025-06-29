@@ -38,6 +38,7 @@
 #include "wallet_rpc_server_commands_defs.h"
 #include "wallet2.h"
 #include "token/token.h"
+#include "token/token_marketplace.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.rpc"
@@ -152,6 +153,11 @@ namespace tools
         MAP_JON_RPC_WE("token_history_addr",on_token_history_addr,wallet_rpc::COMMAND_RPC_TOKEN_HISTORY_ADDR)
         MAP_JON_RPC_WE("token_set_fee",     on_token_set_fee,     wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE)
         MAP_JON_RPC_WE("token_transfer_ownership", on_token_transfer_ownership, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP)
+        MAP_JON_RPC_WE("market_sell",       on_market_sell,       wallet_rpc::COMMAND_RPC_MARKET_SELL)
+        MAP_JON_RPC_WE("market_cancel",     on_market_cancel,     wallet_rpc::COMMAND_RPC_MARKET_CANCEL)
+        MAP_JON_RPC_WE("market_buy",        on_market_buy,        wallet_rpc::COMMAND_RPC_MARKET_BUY)
+        MAP_JON_RPC_WE("market_pairs",      on_market_pairs,      wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS)
+        MAP_JON_RPC_WE("market_orders",     on_market_orders,     wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -238,6 +244,12 @@ namespace tools
       bool on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::request& req, wallet_rpc::COMMAND_RPC_TOKEN_SET_FEE::response& res, epee::json_rpc::error& er);
       bool on_token_transfer_ownership(const wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::request& req, wallet_rpc::COMMAND_RPC_TOKEN_TRANSFER_OWNERSHIP::response& res, epee::json_rpc::error& er);
 
+      bool on_market_sell(const wallet_rpc::COMMAND_RPC_MARKET_SELL::request& req, wallet_rpc::COMMAND_RPC_MARKET_SELL::response& res, epee::json_rpc::error& er);
+      bool on_market_cancel(const wallet_rpc::COMMAND_RPC_MARKET_CANCEL::request& req, wallet_rpc::COMMAND_RPC_MARKET_CANCEL::response& res, epee::json_rpc::error& er);
+      bool on_market_buy(const wallet_rpc::COMMAND_RPC_MARKET_BUY::request& req, wallet_rpc::COMMAND_RPC_MARKET_BUY::response& res, epee::json_rpc::error& er);
+      bool on_market_pairs(const wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS::request& req, wallet_rpc::COMMAND_RPC_MARKET_LIST_PAIRS::response& res, epee::json_rpc::error& er);
+      bool on_market_orders(const wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS::request& req, wallet_rpc::COMMAND_RPC_MARKET_LIST_ORDERS::response& res, epee::json_rpc::error& er);
+
       //json rpc v2
       bool on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::request& req, wallet_rpc::COMMAND_RPC_QUERY_KEY::response& res, epee::json_rpc::error& er);
 
@@ -262,5 +274,7 @@ namespace tools
       const boost::program_options::variables_map *m_vm;
       token_store m_tokens;
       std::string m_tokens_path;
+      token_marketplace m_marketplace{m_tokens, "XRC20.market"};
+      std::string m_marketplace_path;
   };
 }

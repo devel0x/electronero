@@ -46,6 +46,7 @@
 #include "cryptonote_basic/connection_context.h"
 #include "cryptonote_basic/cryptonote_stat_info.h"
 #include "token/token.h"
+#include "token/token_marketplace.h"
 #include <boost/circular_buffer.hpp>
 
 PUSH_WARNINGS
@@ -110,6 +111,8 @@ namespace cryptonote
     const block_queue &get_block_queue() const { return m_block_queue; }
     void rescan_token_operations(uint64_t from_height) override;
     void process_token_tx(const cryptonote::transaction &tx, uint64_t height) override;
+    void rescan_market_operations(uint64_t from_height) override;
+    void process_market_tx(const cryptonote::transaction &tx, uint64_t height) override;
     void stop();
     void on_connection_close(cryptonote_connection_context &context);
   private:
@@ -153,6 +156,8 @@ namespace cryptonote
 
     token_store m_tokens;
     std::string m_tokens_path;
+    token_marketplace m_marketplace;
+    std::string m_marketplace_path;
 
     template<class t_parameter>
       bool post_notify(typename t_parameter::request& arg, cryptonote_connection_context& context)

@@ -83,6 +83,9 @@ namespace cryptonote
   {
     m_tokens_path = tools::get_tokens_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     m_tokens.load(m_tokens_path);
+    m_marketplace_path = tools::get_marketplace_cache_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    m_marketplace = token_marketplace(m_tokens, "XRC20.market");
+    m_marketplace.load(m_marketplace_path);
     MGINFO_BLUE("cEVM Loaded! Smart Wallet Enabled. XRC-20 Tokens activated \"" << m_tokens_path << "\"");
     return true;
   }
@@ -92,6 +95,8 @@ namespace cryptonote
   {
     if(!m_tokens_path.empty())
       m_tokens.save(m_tokens_path);
+    if(!m_marketplace_path.empty())
+      m_marketplace.save(m_marketplace_path);
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1830,6 +1835,28 @@ void t_cryptonote_protocol_handler<t_core>::rescan_token_operations(uint64_t fro
 
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::rescan_market_operations(uint64_t from_height)
+{
+  m_marketplace = token_marketplace(m_tokens, "XRC20.market");
+  auto &bc = m_core.get_blockchain_storage();
+  uint64_t top = bc.get_current_blockchain_height();
+  if(from_height >= top)
+    return;
+  for(uint64_t h = from_height; h < top; ++h)
+  {
+    cryptonote::block blk;
+    std::vector<cryptonote::transaction> txs;
+    bc.get_transactions_for_block(h, blk, txs);
+    for(const auto &tx : txs)
+      process_market_tx(tx, h);
+  }
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1915,6 +1942,38 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   }
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
+}
+
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::process_market_tx(const cryptonote::transaction &tx, uint64_t /*height*/)
+{
+  std::vector<cryptonote::tx_extra_field> fields;
+  if(!cryptonote::parse_tx_extra(tx.extra, fields))
+    return;
+  cryptonote::tx_extra_market_data mdata;
+  if(!find_tx_extra_field_by_type(fields, mdata))
+    return;
+  marketplace_op_type op;
+  std::vector<std::string> parts;
+  if(!parse_marketplace_extra(mdata.data, op, parts))
+    return;
+  switch(op)
+  {
+    case marketplace_op_type::place:
+      if(parts.size() == 4)
+        m_marketplace.place_sell_order(parts[0], parts[1], std::stoull(parts[2]), std::stoull(parts[3]));
+      break;
+    case marketplace_op_type::cancel:
+      if(parts.size() == 1)
+        m_marketplace.cancel_sell_order(std::stoull(parts[0]));
+      break;
+    case marketplace_op_type::buy:
+      if(parts.size() == 3)
+        m_marketplace.buy(std::stoull(parts[0]), parts[1], std::stoull(parts[2]));
+      break;
+  }
+  if(!m_marketplace_path.empty())
+    m_marketplace.save(m_marketplace_path);
 }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
