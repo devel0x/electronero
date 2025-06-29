@@ -2205,12 +2205,12 @@ simple_wallet::simple_wallet()
                            tr("List all tokens."));
   m_cmd_binder.set_handler("tokens_deployed",
                            boost::bind(&simple_wallet::tokens_deployed, this, _1),
-                           tr("tokens_deployed"),
-                           tr("List tokens created by this wallet."));
+                           tr("tokens_deployed [address]"),
+                           tr("List tokens created by an address (default: selected account)."));
   m_cmd_binder.set_handler("my_tokens",
                            boost::bind(&simple_wallet::my_tokens, this, _1),
-                           tr("my_tokens"),
-                           tr("List tokens held by this wallet."));
+                           tr("my_tokens [address]"),
+                           tr("List tokens held by an address (default: selected account)."));
   m_cmd_binder.set_handler("token_history",
                            boost::bind(&simple_wallet::token_history, this, _1),
                            tr("token_history <token_address>"),
@@ -5582,7 +5582,7 @@ bool simple_wallet::token_transfer(const std::vector<std::string> &args)
     fail_msg_writer() << tr("invalid amount");
     return true;
   }
-  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string from = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info *tk = m_tokens.get_by_address(args[0]);
   if(!tk)
   {
@@ -5707,7 +5707,7 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
     return true;
   }
 
-  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string spender = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   if (!m_tokens.transfer_from_by_address(args[0], spender, args[1], args[2], amount))
   {
     fail_msg_writer() << tr("token transfer_from failed");
@@ -5912,7 +5912,11 @@ bool simple_wallet::tokens_deployed(const std::vector<std::string> &args)
 {
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator;
+  if(args.size() == 1)
+    creator = args[0];
+  else
+    creator = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
   for(const auto &t : list)
@@ -5926,7 +5930,11 @@ bool simple_wallet::my_tokens(const std::vector<std::string> &args)
 {
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner;
+  if(args.size() == 1)
+    owner = args[0];
+  else
+    owner = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   std::vector<::token_info> list;
   m_tokens.list_by_balance(owner, list);
   for(const auto &t : list)
