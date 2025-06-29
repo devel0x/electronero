@@ -542,18 +542,18 @@ Token actions are encoded in the transaction `tx_extra` field and shared between
 The following commands are available in both the CLI and RPC.
 Unless otherwise noted, operations use the currently selected account's primary address:
 
-* `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token from the selected account. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
-* `token_balance <token_address> [owner]` – show the balance for an address (defaults to the selected account).
+* `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
+* `token_balance <token_address> [owner]` – show the balance for an address.
 * `token_transfer <token_address> <to> <amount>` – transfer tokens from the selected account's address, paying `TOKEN_TRANSFER_FEE` (default `10000`) and any `creator_fee`.
   If `<to>` is an integrated address the underlying base address is automatically approved to spend the deposited amount via `token_transfer_from`.
-* `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens from the selected account.
+* `token_approve <name> <spender> <amount>` – approve another account to transfer your tokens.
 * `token_transfer_from <token_address> <from> <to> <amount>` – move tokens from an approved account using the selected account's address as the spender. Integrated addresses may be used for either address.
-* `token_burn <token_address> <amount>` – destroy tokens you own from the selected account.
-* `token_mint <token_address> <amount>` – mint new tokens from the selected account (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
-* `token_set_fee <token_address> <creator_fee>` – update the creator fee using the selected account; also pays `TOKEN_DEPLOYMENT_FEE`.
-* `token_lock_fee <token_address>` – lock the current creator fee using the selected account; also pays `TOKEN_DEPLOYMENT_FEE`.
-* `token_pause <token_address>` – pause all transfers for a token using the selected account (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
-* `token_unpause <token_address>` – resume transfers for a token using the selected account (creator only), also paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_burn <token_address> <amount>` – destroy tokens you own.
+* `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
+* `token_lock_fee <token_address>` – lock the current creator fee so it cannot be changed; also pays `TOKEN_DEPLOYMENT_FEE`.
+* `token_pause <token_address>` – pause all transfers for a token (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_unpause <token_address>` – resume transfers for a token (creator only), also paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_freeze <token_address> <account>` – prevent an account from transferring or receiving the token. Requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_unfreeze <token_address> <account>` – allow a frozen account to transfer and receive again. Also requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
