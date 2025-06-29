@@ -101,6 +101,7 @@ class ElectroneroRPC {
         'token_history',
         'token_history_addr',
         'token_set_fee',
+        'token_lock_fee',
     ];
 
     /**

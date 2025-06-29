@@ -58,7 +58,8 @@ enum class token_op_type : uint8_t {
     mint = 6,
     transfer_ownership = 7,
     pause = 8,
-    freeze = 9
+    freeze = 9,
+    lock_fee = 10
 };
 
 struct token_info {
@@ -68,6 +69,7 @@ struct token_info {
     std::string creator;
     uint64_t total_supply = 0;
     uint64_t creator_fee = 0;
+    bool creator_fee_locked = false;
     bool paused = false;
     std::unordered_set<std::string> frozen_accounts;
     std::unordered_map<std::string, uint64_t> balances;
@@ -91,6 +93,10 @@ struct token_info {
             a & frozen_accounts;
         else if(Archive::is_loading::value)
             frozen_accounts.clear();
+        if(ver > 2)
+            a & creator_fee_locked;
+        else if(Archive::is_loading::value)
+            creator_fee_locked = false;
     }
 };
 
@@ -156,6 +162,7 @@ public:
     bool mint(const std::string &address, const std::string &creator, uint64_t amount);
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
+    bool lock_creator_fee(const std::string &address, const std::string &creator);
 
     bool set_paused(const std::string &address, const std::string &creator, bool p);
     bool set_frozen(const std::string &address, const std::string &creator, const std::string &account, bool f);
@@ -188,6 +195,6 @@ bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<s
 bool verify_token_extra(token_op_type op, const std::vector<std::string> &fields,
                         const crypto::public_key &pub, const crypto::signature &sig);
 
-BOOST_CLASS_VERSION(token_info, 2)
+BOOST_CLASS_VERSION(token_info, 3)
 
 #endif // TOKEN_H

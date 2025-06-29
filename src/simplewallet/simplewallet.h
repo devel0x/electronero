@@ -175,6 +175,7 @@ namespace cryptonote
     bool token_history(const std::vector<std::string> &args);
     bool token_history_addr(const std::vector<std::string> &args);
     bool token_set_fee(const std::vector<std::string> &args);
+    bool token_lock_fee(const std::vector<std::string> &args);
     bool token_transfer_ownership(const std::vector<std::string> &args);
     bool token_pause(const std::vector<std::string> &args);
     bool token_unpause(const std::vector<std::string> &args);
