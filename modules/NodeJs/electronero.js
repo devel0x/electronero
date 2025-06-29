@@ -115,7 +115,7 @@ const WALLET_METHODS = [
   'stop_mining', 'stop_wallet', 'store', 'submit_multisig', 'sweep_all',
   'sweep_dust', 'sweep_single', 'sweep_unmixable', 'tag_accounts', 'token_approve',
   'token_balance', 'token_burn', 'token_create', 'token_history', 'token_history_addr',
-  'token_info', 'token_mint', 'token_set_fee', 'token_transfer', 'token_transfer_from',
+  'token_info', 'token_mint', 'token_set_fee', 'token_lock_fee', 'token_transfer', 'token_transfer_from',
   'transfer', 'transfer_split', 'untag_accounts', 'verify'
 ];
 

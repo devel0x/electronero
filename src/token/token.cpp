@@ -159,6 +159,7 @@ token_info &token_store::create(const std::string &name, const std::string &symb
     tok.creator = creator;
     tok.total_supply = supply;
     tok.creator_fee = creator_fee;
+    tok.creator_fee_locked = false;
     tok.paused = false;
     tok.balances[creator] = supply;
     if (address.empty()) {
@@ -336,9 +337,18 @@ bool token_store::mint(const std::string &address, const std::string &creator, u
 bool token_store::set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee)
 {
     token_info *tok = get_by_address(address);
-    if(!tok || tok->creator != creator)
+    if(!tok || tok->creator != creator || tok->creator_fee_locked)
         return false;
     tok->creator_fee = fee;
+    return true;
+}
+
+bool token_store::lock_creator_fee(const std::string &address, const std::string &creator)
+{
+    token_info *tok = get_by_address(address);
+    if(!tok || tok->creator != creator || tok->creator_fee_locked)
+        return false;
+    tok->creator_fee_locked = true;
     return true;
 }
 
