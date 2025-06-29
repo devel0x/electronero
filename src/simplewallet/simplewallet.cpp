@@ -2205,8 +2205,8 @@ simple_wallet::simple_wallet()
                            tr("List all tokens."));
   m_cmd_binder.set_handler("tokens_deployed",
                            boost::bind(&simple_wallet::tokens_deployed, this, _1),
-                           tr("tokens_deployed"),
-                           tr("List tokens created by this wallet."));
+                           tr("tokens_deployed [address]"),
+                           tr("List tokens created by an address (default: this wallet)."));
   m_cmd_binder.set_handler("my_tokens",
                            boost::bind(&simple_wallet::my_tokens, this, _1),
                            tr("my_tokens"),
@@ -5912,7 +5912,8 @@ bool simple_wallet::tokens_deployed(const std::vector<std::string> &args)
 {
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = args.size() == 1 ? args[0] :
+    m_wallet->get_account().get_public_address_str(m_wallet->nettype());
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
   for(const auto &t : list)
