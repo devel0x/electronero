@@ -4,12 +4,13 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <boost/serialization/serialization.hpp>
 // #define BOOST_SERIALIZATION_VERSION_HPP
 #include <boost/serialization/version.hpp>
-#include <boost/serialization/library_version_type.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/unordered_set.hpp>
 #include <boost/serialization/unordered_map.hpp>
 
 enum class token_op_type : uint8_t {
@@ -20,7 +21,9 @@ enum class token_op_type : uint8_t {
     set_fee = 4,
     burn = 5,
     mint = 6,
-    transfer_ownership = 7
+    transfer_ownership = 7,
+    pause = 8,
+    freeze = 9
 };
 
 struct token_info {
@@ -30,11 +33,13 @@ struct token_info {
     std::string creator;
     uint64_t total_supply = 0;
     uint64_t creator_fee = 0;
+    bool paused = false;
+    std::unordered_set<std::string> frozen_accounts;
     std::unordered_map<std::string, uint64_t> balances;
     std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allowances;
 
     template<class Archive>
-    void serialize(Archive &a, const unsigned int /*version*/) {
+    void serialize(Archive &a, const unsigned int ver) {
         a & name;
         a & symbol;
         a & total_supply;
@@ -43,6 +48,14 @@ struct token_info {
         a & creator_fee;
         a & balances;
         a & allowances;
+        if(ver > 0)
+            a & paused;
+        else if(Archive::is_loading::value)
+            paused = false;
+        if(ver > 1)
+            a & frozen_accounts;
+        else if(Archive::is_loading::value)
+            frozen_accounts.clear();
     }
 };
 
@@ -108,6 +121,9 @@ public:
 
     bool set_creator_fee(const std::string &address, const std::string &creator, uint64_t fee);
 
+    bool set_paused(const std::string &address, const std::string &creator, bool p);
+    bool set_frozen(const std::string &address, const std::string &creator, const std::string &account, bool f);
+
     bool transfer_ownership(const std::string &address, const std::string &creator, const std::string &new_owner);
 
     void history_by_token(const std::string &token_address, std::vector<token_transfer_record> &out) const;
@@ -135,5 +151,7 @@ bool parse_token_extra(const std::string &data, token_op_type &op, std::vector<s
                        crypto::signature &sig, bool &has_sig);
 bool verify_token_extra(token_op_type op, const std::vector<std::string> &fields,
                         const crypto::public_key &pub, const crypto::signature &sig);
+
+BOOST_CLASS_VERSION(token_info, 2)
 
 #endif // TOKEN_H

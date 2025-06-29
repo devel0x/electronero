@@ -2175,6 +2175,22 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer_ownership, this, _1),
                           tr("token_transfer_ownership <token_address> <new_owner>"),
                           tr("Transfer token ownership to another address."));
+  m_cmd_binder.set_handler("token_pause",
+                          boost::bind(&simple_wallet::token_pause, this, _1),
+                          tr("token_pause <token_address>"),
+                          tr("Pause a token (creator only)."));
+  m_cmd_binder.set_handler("token_unpause",
+                          boost::bind(&simple_wallet::token_unpause, this, _1),
+                          tr("token_unpause <token_address>"),
+                          tr("Unpause a token (creator only)."));
+  m_cmd_binder.set_handler("token_freeze",
+                          boost::bind(&simple_wallet::token_freeze, this, _1),
+                          tr("token_freeze <token_address> <account>"),
+                          tr("Freeze an account's transfers for a token (governance only)."));
+  m_cmd_binder.set_handler("token_unfreeze",
+                          boost::bind(&simple_wallet::token_unfreeze, this, _1),
+                          tr("token_unfreeze <token_address> <account>"),
+                          tr("Unfreeze an account for a token (governance only)."));
   m_cmd_binder.set_handler("all_tokens",
                            boost::bind(&simple_wallet::all_tokens, this, _1),
                            tr("all_tokens"),
@@ -6041,6 +6057,190 @@ bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &arg
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token ownership transferred");
+  return true;
+}
+
+bool simple_wallet::token_pause(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_pause called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_pause <token_address>");
+    return true;
+  }
+  std::string addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk || tk->creator != addr)
+  {
+    fail_msg_writer() << tr("token not found or wallet is not creator");
+    return true;
+  }
+  if(!m_tokens.set_paused(args[0], addr, true))
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::pause, std::vector<std::string>{args[0], addr, "1"}, pub, sec) :
+    make_token_extra(token_op_type::pause, std::vector<std::string>{args[0], addr, "1"});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token paused");
+  return true;
+}
+
+bool simple_wallet::token_unpause(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_unpause called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: token_unpause <token_address>");
+    return true;
+  }
+  std::string addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  ::token_info *tk = m_tokens.get_by_address(args[0]);
+  if(!tk || tk->creator != addr)
+  {
+    fail_msg_writer() << tr("token not found or wallet is not creator");
+    return true;
+  }
+  if(!m_tokens.set_paused(args[0], addr, false))
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  std::string err; uint64_t height = get_daemon_blockchain_height(err);
+  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::pause, std::vector<std::string>{args[0], addr, "0"}, pub, sec) :
+    make_token_extra(token_op_type::pause, std::vector<std::string>{args[0], addr, "0"});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("token unpaused");
+  return true;
+}
+
+bool simple_wallet::token_freeze(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_freeze called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_freeze <token_address> <account>");
+    return true;
+  }
+  std::string addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(addr != GOVERNANCE_WALLET_ADDRESS)
+  {
+    fail_msg_writer() << tr("governance wallet required");
+    return true;
+  }
+  if(!m_tokens.set_frozen(args[0], addr, args[1], true))
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = true;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "1"}, pub, sec) :
+    make_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "1"});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("account frozen for token");
+  return true;
+}
+
+bool simple_wallet::token_unfreeze(const std::vector<std::string> &args)
+{
+  LOG_PRINT_L0("token_unfreeze called, tokens path: " << m_tokens_path);
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: token_unfreeze <token_address> <account>");
+    return true;
+  }
+  std::string addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(addr != GOVERNANCE_WALLET_ADDRESS)
+  {
+    fail_msg_writer() << tr("governance wallet required");
+    return true;
+  }
+  if(!m_tokens.set_frozen(args[0], addr, args[1], false))
+  {
+    fail_msg_writer() << tr("token not found");
+    return true;
+  }
+  cryptonote::address_parse_info ginfo;
+  if(!cryptonote::get_account_address_from_str(ginfo, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
+  {
+    fail_msg_writer() << tr("Invalid governance address");
+    return true;
+  }
+  std::vector<cryptonote::tx_destination_entry> dsts;
+  dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
+  crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
+  crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
+  bool sign = true;
+  std::string extra_str = sign ?
+    make_signed_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "0"}, pub, sec) :
+    make_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "0"});
+  std::vector<uint8_t> extra;
+  cryptonote::add_token_data_to_tx_extra(extra, extra_str);
+  if(!submit_token_tx(dsts, extra))
+    return true;
+  if(!m_tokens_path.empty())
+    m_tokens.save(m_tokens_path);
+  success_msg_writer() << tr("account unfrozen for token");
   return true;
 }
 //----------------------------------------------------------------------------------------------------

@@ -527,7 +527,7 @@ If you're on Mac, you may need to add the `--max-concurrency 1` option to
 electronero-wallet-cli, and possibly electronerod, if you get crashes refreshing.
 
 ## XRC-20 Token Smart Contracts
-Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, `tokens_deployed`, and `my_tokens` commands to manage ERC20-like tokens.
+Electronero now includes a simple XRC-20 token platform accessible from the CLI and RPC. Use `token_create`, `token_balance`, `token_transfer`, `token_approve`, `token_transfer_from`, `token_set_fee`, `token_pause`, `token_unpause`, `token_freeze`, `token_unfreeze`, `token_info`, `token_history`, `token_history_addr`, `all_tokens`, `tokens_deployed`, and `my_tokens` commands to manage ERC20-like tokens.
 Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
 Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
 Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `<data-dir>/tokens.bin` (default `~/.bitelectronero/tokens.bin`) and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet, `tokens_deployed` to see those you created, and `my_tokens` to list the tokens you hold.
@@ -549,6 +549,10 @@ The following commands are available in both the CLI and RPC:
 * `token_burn <token_address> <amount>` – destroy tokens you own.
 * `token_mint <token_address> <amount>` – mint new tokens (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_set_fee <token_address> <creator_fee>` – update the creator fee; also pays `TOKEN_DEPLOYMENT_FEE`.
+* `token_pause <token_address>` – pause all transfers for a token (creator only), paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_unpause <token_address>` – resume transfers for a token (creator only), also paying `TOKEN_DEPLOYMENT_FEE`.
+* `token_freeze <token_address> <account>` – prevent an account from transferring or receiving the token. Requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
+* `token_unfreeze <token_address> <account>` – allow a frozen account to transfer and receive again. Also requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_info <token_address>` – display token metadata.
 * `token_history <token_address>` – list transfers for a token.
 * `token_history_addr <address>` – list transfers involving an address.

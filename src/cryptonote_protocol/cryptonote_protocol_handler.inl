@@ -1861,11 +1861,26 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::burn: if(parts.size() == 3) signer = parts[1]; break;
     case token_op_type::mint: if(parts.size() == 3) signer = parts[1]; break;
     case token_op_type::transfer_ownership: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::pause: if(parts.size() == 3) signer = parts[1]; break;
+    case token_op_type::freeze: if(parts.size() == 4) signer = parts[1]; break;
   }
   cryptonote::address_parse_info info;
   if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
     return;
   bool require_sig = height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  if(op == token_op_type::freeze)
+  {
+    if(signer != GOVERNANCE_WALLET_ADDRESS)
+      return;
+    require_sig = true;
+  }
+  else if(op == token_op_type::mint || op == token_op_type::set_fee ||
+          op == token_op_type::transfer_ownership || op == token_op_type::pause)
+  {
+    const token_info *tinfo = m_tokens.get_by_address(parts[0]);
+    if(!tinfo || tinfo->creator != signer)
+      return;
+  }
   if(has_sig)
   {
     if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
@@ -1911,6 +1926,14 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
     case token_op_type::transfer_ownership:
       if(parts.size() == 3)
         m_tokens.transfer_ownership(parts[0], parts[1], parts[2]);
+      break;
+    case token_op_type::pause:
+      if(parts.size() == 3)
+        m_tokens.set_paused(parts[0], parts[1], std::stoull(parts[2]) != 0);
+      break;
+    case token_op_type::freeze:
+      if(parts.size() == 4)
+        m_tokens.set_frozen(parts[0], parts[1], parts[2], std::stoull(parts[3]) != 0);
       break;
   }
   if(!m_tokens_path.empty())
