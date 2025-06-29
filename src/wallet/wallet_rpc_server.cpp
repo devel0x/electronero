@@ -3598,8 +3598,7 @@ bool wallet_rpc_server::on_token_freeze(const wallet_rpc::COMMAND_RPC_TOKEN_FREE
   dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
   crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
   crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
-  std::string err; uint64_t height = m_wallet->get_daemon_blockchain_height(err);
-  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  bool sign = true;
   std::string extra_str = sign ?
     make_signed_token_extra(token_op_type::freeze, std::vector<std::string>{req.token_address, addr, req.account, req.frozen ? "1" : "0"}, pub, sec) :
     make_token_extra(token_op_type::freeze, std::vector<std::string>{req.token_address, addr, req.account, req.frozen ? "1" : "0"});

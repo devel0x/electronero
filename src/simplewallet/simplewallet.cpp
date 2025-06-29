@@ -6185,8 +6185,7 @@ bool simple_wallet::token_freeze(const std::vector<std::string> &args)
   dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
   crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
   crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
-  std::string err; uint64_t height = get_daemon_blockchain_height(err);
-  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  bool sign = true;
   std::string extra_str = sign ?
     make_signed_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "1"}, pub, sec) :
     make_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "1"});
@@ -6231,8 +6230,7 @@ bool simple_wallet::token_unfreeze(const std::vector<std::string> &args)
   dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
   crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
   crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
-  std::string err; uint64_t height = get_daemon_blockchain_height(err);
-  bool sign = err.empty() && height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  bool sign = true;
   std::string extra_str = sign ?
     make_signed_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "0"}, pub, sec) :
     make_token_extra(token_op_type::freeze, std::vector<std::string>{args[0], addr, args[1], "0"});

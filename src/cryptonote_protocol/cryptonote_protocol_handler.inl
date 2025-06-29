@@ -1868,6 +1868,12 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
   if(signer.empty() || !cryptonote::get_account_address_from_str(info, m_core.get_nettype(), signer))
     return;
   bool require_sig = height >= TOKEN_SIGNATURE_ACTIVATION_HEIGHT;
+  if(op == token_op_type::freeze)
+  {
+    if(signer != GOVERNANCE_WALLET_ADDRESS)
+      return;
+    require_sig = true;
+  }
   if(has_sig)
   {
     if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
