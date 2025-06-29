@@ -2159,6 +2159,10 @@ simple_wallet::simple_wallet()
                           boost::bind(&simple_wallet::token_transfer_from, this, _1),
                           tr("token_transfer_from <token_address> <from> <to> <amount>"),
                           tr("Transfer tokens using allowance."));
+  m_cmd_binder.set_handler("token_allowance",
+                          boost::bind(&simple_wallet::token_allowance, this, _1),
+                          tr("token_allowance <token_address> <owner> <spender>"),
+                          tr("Show remaining allowance."));
   m_cmd_binder.set_handler("token_burn",
                           boost::bind(&simple_wallet::token_burn, this, _1),
                           tr("token_burn <token_address> <amount>"),
@@ -5734,6 +5738,20 @@ bool simple_wallet::token_transfer_from(const std::vector<std::string> &args)
   if(!m_tokens_path.empty())
     m_tokens.save(m_tokens_path);
   success_msg_writer() << tr("token transferred from");
+  return true;
+}
+
+bool simple_wallet::token_allowance(const std::vector<std::string> &args)
+{
+  if(!m_tokens_path.empty())
+    m_tokens.load(m_tokens_path);
+  if(args.size() != 3)
+  {
+    fail_msg_writer() << tr("usage: token_allowance <token_address> <owner> <spender>");
+    return true;
+  }
+  uint64_t amount = m_tokens.allowance_of_by_address(args[0], args[1], args[2]);
+  message_writer() << cryptonote::print_money(amount);
   return true;
 }
 
