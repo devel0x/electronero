@@ -1874,6 +1874,13 @@ void t_cryptonote_protocol_handler<t_core>::process_token_tx(const cryptonote::t
       return;
     require_sig = true;
   }
+  else if(op == token_op_type::mint || op == token_op_type::set_fee ||
+          op == token_op_type::transfer_ownership || op == token_op_type::pause)
+  {
+    const token_info *tinfo = m_tokens.get_by_address(parts[0]);
+    if(!tinfo || tinfo->creator != signer)
+      return;
+  }
   if(has_sig)
   {
     if(!verify_token_extra(op, parts, info.address.m_spend_public_key, sig))
