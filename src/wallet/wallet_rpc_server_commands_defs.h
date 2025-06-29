@@ -969,7 +969,10 @@ namespace wallet_rpc
   {
     struct request
     {
+      std::string address;
+
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(address, std::string())
       END_KV_SERIALIZE_MAP()
     };
 

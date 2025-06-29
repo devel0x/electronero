@@ -531,7 +531,7 @@ Electronero now includes a simple XRC-20 token platform accessible from the CLI 
 
 Creating a token requires paying a fee defined by `TOKEN_DEPLOYMENT_FEE` which is automatically sent to `GOVERNANCE_WALLET_ADDRESS`.
 Every `token_transfer` and `token_transfer_from` also pays a small governance fee defined by `TOKEN_TRANSFER_FEE` to the same address. In addition each token may specify a `creator_fee` paid to its creator on every transfer. Use `token_set_fee` to change this amount; updates require paying `TOKEN_DEPLOYMENT_FEE` to governance.
-Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `<data-dir>/tokens.bin` (default `~/.bitelectronero/tokens.bin`) and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet, `tokens_deployed` to see those you created, and `my_tokens` to list the tokens you hold.
+Tokens are created with a `name`, `symbol`, initial `supply`, and an optional `creator_fee`. After paying the fee the wallet displays the token's `cEVM` address derived from the creator's wallet. Pass this address to `token_balance`, `token_transfer`, and `token_transfer_from` to operate on a token. Token data is stored in `<data-dir>/tokens.bin` (default `~/.bitelectronero/tokens.bin`) and synchronized across peers. Each token operation is serialized into the `tx_extra` field of a normal transaction so every node observes and applies the update when the transaction is relayed or confirmed. Use `all_tokens` to view every token known to the wallet, `tokens_deployed` to list tokens created by an address, and `my_tokens` to list the tokens you hold.
 Use `token_info` with the token address to query a token's metadata.
 `token_history` prints transfers for a token address while `token_history_addr` lists all token transfers involving a given wallet address. Both commands accept an optional `in` or `out` argument to filter the results by direction and `token_history` may also take an address to limit results to that participant.
 All token transactions use your wallet's default ring size (mixin) when constructing the underlying fee transaction, ensuring they are valid and private by default.
@@ -559,7 +559,7 @@ The following commands are available in both the CLI and RPC:
 * `token_allowance <token_address> <owner> <spender>` – view the remaining allowance for a spender.
 * `token_history <token_address>` – list transfers for a token.
 * `token_history_addr <address>` – list transfers involving an address.
-* `tokens_deployed` – list tokens created by the current wallet.
+* `tokens_deployed [address]` – list tokens created by an address (defaults to the current wallet).
 * `my_tokens` – list tokens held by the current wallet.
 
 Token state is stored in the `<data-dir>/tokens.bin` file and kept in sync across nodes. Earlier versions also exchanged a token blob in the handshake, but that field has been removed to avoid large payloads. Nodes now learn about tokens from transactions or by running `rescan_token_operations`. Each operation remains private thanks to ring signatures and normal transaction handling.

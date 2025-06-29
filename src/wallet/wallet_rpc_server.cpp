@@ -3347,7 +3347,8 @@ bool wallet_rpc_server::on_tokens_deployed(const wallet_rpc::COMMAND_RPC_TOKENS_
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = req.address.empty() ?
+    m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
   for(const auto &t : list)
