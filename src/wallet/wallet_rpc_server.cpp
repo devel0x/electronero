@@ -3089,7 +3089,8 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner = req.address.empty() ?
+    m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   res.success = m_tokens.approve(req.name, owner, req.spender, req.amount, owner);
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
@@ -3347,7 +3348,8 @@ bool wallet_rpc_server::on_tokens_deployed(const wallet_rpc::COMMAND_RPC_TOKENS_
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = req.address.empty() ?
+    m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
   for(const auto &t : list)
@@ -3518,7 +3520,8 @@ bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_MY_TOKENS::re
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner = req.address.empty() ?
+    m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   std::vector<::token_info> list;
   m_tokens.list_by_balance(owner, list);
   for(const auto &t : list)
