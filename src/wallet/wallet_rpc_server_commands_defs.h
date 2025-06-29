@@ -699,6 +699,7 @@ namespace wallet_rpc
       std::string symbol;
       uint64_t supply;
       uint64_t creator_fee;
+      bool fee_locked;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
@@ -920,12 +921,14 @@ namespace wallet_rpc
       std::string symbol;
       uint64_t supply;
       uint64_t creator_fee;
+      bool fee_locked;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
         KV_SERIALIZE(symbol)
         KV_SERIALIZE(supply)
         KV_SERIALIZE(creator_fee)
+        KV_SERIALIZE(fee_locked)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1087,6 +1090,29 @@ namespace wallet_rpc
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(creator_fee)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      bool success;
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(success)
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_TOKEN_LOCK_FEE
+  {
+    struct request
+    {
+      std::string token_address;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(token_address)
       END_KV_SERIALIZE_MAP()
     };
 
