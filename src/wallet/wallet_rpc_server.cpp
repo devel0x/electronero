@@ -2974,7 +2974,7 @@ bool wallet_rpc_server::on_token_create(const wallet_rpc::COMMAND_RPC_TOKEN_CREA
     return false;
   }
   dsts.push_back({TOKEN_DEPLOYMENT_FEE, info.address, info.is_subaddress});
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info &tk = m_tokens.create(req.name, req.symbol, req.supply, creator, req.creator_fee);
   crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
   crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
@@ -3011,7 +3011,8 @@ bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BAL
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string address = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
+  std::string address = req.address.empty() ?
+    m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}) : req.address;
   res.balance = m_tokens.balance_of_by_address(req.token_address, address);
   return true;
 }
@@ -3022,7 +3023,7 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string from = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string from = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
   {
@@ -3089,7 +3090,8 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner = req.address.empty() ?
+    m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}) : req.address;
   res.success = m_tokens.approve(req.name, owner, req.spender, req.amount, owner);
   cryptonote::address_parse_info self;
   cryptonote::get_account_address_from_str(self, m_wallet->nettype(), owner);
@@ -3128,7 +3130,7 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string spender = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string spender = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
   {
@@ -3195,7 +3197,7 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
   {
@@ -3253,7 +3255,7 @@ bool wallet_rpc_server::on_token_mint(const wallet_rpc::COMMAND_RPC_TOKEN_MINT::
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
   {
@@ -3347,7 +3349,8 @@ bool wallet_rpc_server::on_tokens_deployed(const wallet_rpc::COMMAND_RPC_TOKENS_
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string creator = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string creator = req.address.empty() ?
+    m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}) : req.address;
   std::vector<::token_info> list;
   m_tokens.list_by_creator(creator, list);
   for(const auto &t : list)
@@ -3413,7 +3416,7 @@ bool wallet_rpc_server::on_token_set_fee(const wallet_rpc::COMMAND_RPC_TOKEN_SET
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
-  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  if(!tk || tk->creator != m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}))
   {
     res.success = false;
     return true;
@@ -3462,7 +3465,7 @@ bool wallet_rpc_server::on_token_lock_fee(const wallet_rpc::COMMAND_RPC_TOKEN_LO
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
-  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  if(!tk || tk->creator != m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}))
   {
     res.success = false;
     return true;
@@ -3518,7 +3521,8 @@ bool wallet_rpc_server::on_my_tokens(const wallet_rpc::COMMAND_RPC_MY_TOKENS::re
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string owner = req.address.empty() ?
+    m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}) : req.address;
   std::vector<::token_info> list;
   m_tokens.list_by_balance(owner, list);
   for(const auto &t : list)
@@ -3540,7 +3544,7 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
-  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  if(!tk || tk->creator != m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0}))
   {
     res.success = false;
     return true;
@@ -3589,7 +3593,7 @@ bool wallet_rpc_server::on_token_pause(const wallet_rpc::COMMAND_RPC_TOKEN_PAUSE
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
-  std::string addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  std::string addr = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
   if(!tk || tk->creator != addr)
   {
     res.success = false;
