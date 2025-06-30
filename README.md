@@ -539,7 +539,8 @@ All token transactions use your wallet's default ring size (mixin) when construc
 ## Token Smart Contracts
 Electronero provides a lightweight XRC-20 token system similar to ERC‑20. 
 Token actions are encoded in the transaction `tx_extra` field and shared between peers. 
-The following commands are available in both the CLI and RPC:
+The following commands are available in both the CLI and RPC.
+Unless otherwise noted, operations use the currently selected account's primary address:
 
 * `token_create <name> <symbol> <supply> [creator_fee]` – deploy a token. Requires paying `TOKEN_DEPLOYMENT_FEE` (default `10000`) to `GOVERNANCE_WALLET_ADDRESS`.
 * `token_balance <token_address> [owner]` – show the balance for an address.
