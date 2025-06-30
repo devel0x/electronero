@@ -31,6 +31,8 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <string>
 #include "device.hpp"
 #ifdef WIN32
