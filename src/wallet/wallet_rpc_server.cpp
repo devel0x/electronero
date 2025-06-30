@@ -3205,7 +3205,8 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string owner = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  cryptonote::subaddress_index index = {req.account_index, 0};
+  std::string owner = m_wallet->get_subaddress_as_str(index);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
   if(!tk)
   {
