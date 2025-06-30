@@ -771,20 +771,13 @@ bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata&
   //---------------------------------------------------------------
   void set_default_decimal_point(unsigned int decimal_point)
   {
-    switch (decimal_point)
+    if (decimal_point <= 12)
     {
-      case 8:
-      case 7:
-      case 6:
-      case 5:
-      case 4:
-      case 3:
-      case 2:
-      case 0:
-        default_decimal_point = decimal_point;
-        break;
-      default:
-        ASSERT_MES_AND_THROW("Invalid decimal point specification: " << decimal_point);
+      default_decimal_point = decimal_point;
+    }
+    else
+    {
+      ASSERT_MES_AND_THROW("Invalid decimal point specification: " << decimal_point);
     }
   }
   //---------------------------------------------------------------
@@ -799,19 +792,19 @@ bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata&
       decimal_point = default_decimal_point;
     switch (std::atomic_load(&default_decimal_point))
     {
-      case 8:
+      case 12:
         return "electronero";
-      case 7:
+      case 11:
         return "virbovonero";
-      case 6:
+      case 10:
         return "portenero";
-      case 5:
+      case 9:
         return "millinero";
-      case 4:
+      case 8:
         return "fortonero";
-      case 3:
+      case 7:
         return "macronero";
-      case 2:
+      case 6:
         return "micronero";
       case 0:
         return "piconero";
