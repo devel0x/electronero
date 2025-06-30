@@ -3011,7 +3011,16 @@ bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BAL
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string address = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
+  std::string address;
+  if (req.address.empty())
+  {
+    cryptonote::subaddress_index index = {req.account_index, 0};
+    address = m_wallet->get_subaddress_as_str(index);
+  }
+  else
+  {
+    address = req.address;
+  }
   res.balance = m_tokens.balance_of_by_address(req.token_address, address);
   return true;
 }
@@ -3068,7 +3077,7 @@ bool wallet_rpc_server::on_token_transfer(const wallet_rpc::COMMAND_RPC_TOKEN_TR
   if(res.success)
   {
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
-    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, req.account_index, {}, m_trusted_daemon);
     if(ptx_vector.empty())
       res.success = false;
     else
@@ -3108,7 +3117,7 @@ bool wallet_rpc_server::on_token_approve(const wallet_rpc::COMMAND_RPC_TOKEN_APP
   if(res.success)
   {
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
-    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, req.account_index, {}, m_trusted_daemon);
     if(ptx_vector.empty())
       res.success = false;
     else
@@ -3175,7 +3184,7 @@ bool wallet_rpc_server::on_token_transfer_from(const wallet_rpc::COMMAND_RPC_TOK
   if(res.success)
   {
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
-    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, req.account_index, {}, m_trusted_daemon);
     if(ptx_vector.empty())
       res.success = false;
     else
@@ -3233,7 +3242,7 @@ bool wallet_rpc_server::on_token_burn(const wallet_rpc::COMMAND_RPC_TOKEN_BURN::
   if(res.success)
   {
     size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
-    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, 0, {}, m_trusted_daemon);
+    auto ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, m_wallet->adjust_priority(0), extra, req.account_index, {}, m_trusted_daemon);
     if(ptx_vector.empty())
       res.success = false;
     else

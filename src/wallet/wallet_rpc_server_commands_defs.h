@@ -729,10 +729,12 @@ namespace wallet_rpc
     {
       std::string token_address;
       std::string address;
+      uint32_t account_index;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(address)
+        KV_SERIALIZE_OPT(account_index, (uint32_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -753,11 +755,13 @@ namespace wallet_rpc
       std::string token_address;
       std::string to;
       uint64_t amount;
+      uint32_t account_index;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(to)
         KV_SERIALIZE(amount)
+        KV_SERIALIZE_OPT(account_index, (uint32_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -781,12 +785,14 @@ namespace wallet_rpc
       std::string address;
       std::string spender;
       uint64_t amount;
+      uint32_t account_index;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(name)
         KV_SERIALIZE(address)
         KV_SERIALIZE(spender)
         KV_SERIALIZE(amount)
+        KV_SERIALIZE_OPT(account_index, (uint32_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -810,12 +816,14 @@ namespace wallet_rpc
       std::string from;
       std::string to;
       uint64_t amount;
+      uint32_t account_index;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(from)
         KV_SERIALIZE(to)
         KV_SERIALIZE(amount)
+        KV_SERIALIZE_OPT(account_index, (uint32_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -862,10 +870,12 @@ namespace wallet_rpc
     {
       std::string token_address;
       uint64_t amount;
+      uint32_t account_index;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(token_address)
         KV_SERIALIZE(amount)
+        KV_SERIALIZE_OPT(account_index, (uint32_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
