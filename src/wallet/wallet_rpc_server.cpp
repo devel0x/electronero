@@ -3011,8 +3011,7 @@ bool wallet_rpc_server::on_token_balance(const wallet_rpc::COMMAND_RPC_TOKEN_BAL
   if (!m_wallet) return not_open(er);
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
-  std::string address = req.address.empty() ?
-    m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
+  std::string address = req.address.empty() ? m_wallet->get_account().get_public_address_str(m_wallet->nettype()) : req.address;
   res.balance = m_tokens.balance_of_by_address(req.token_address, address);
   return true;
 }
