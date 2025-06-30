@@ -5530,6 +5530,12 @@ bool simple_wallet::token_create(const std::vector<std::string> &args)
   dsts.push_back({TOKEN_DEPLOYMENT_FEE, ginfo.address, ginfo.is_subaddress});
 
   std::string creator = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
+  std::string base_addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (creator != base_addr)
+  {
+    fail_msg_writer() << tr("token_create restricted to base wallet address");
+    return true;
+  }
   ::token_info &info = m_tokens.create(args[0], args[1], supply, creator, creator_fee);
   crypto::public_key pub = m_wallet->get_account().get_keys().m_account_address.m_spend_public_key;
   crypto::secret_key sec = m_wallet->get_account().get_keys().m_spend_secret_key;
@@ -6102,6 +6108,23 @@ bool simple_wallet::token_transfer_ownership(const std::vector<std::string> &arg
     return true;
   }
   std::string creator = m_wallet->get_subaddress_as_str({m_current_subaddress_account, 0});
+  std::string base_addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if (creator != base_addr)
+  {
+    fail_msg_writer() << tr("token_transfer_ownership restricted to base wallet address");
+    return true;
+  }
+  cryptonote::address_parse_info to_info;
+  if(!cryptonote::get_account_address_from_str(to_info, m_wallet->nettype(), args[1]))
+  {
+    fail_msg_writer() << tr("Invalid address");
+    return true;
+  }
+  if (to_info.is_subaddress || to_info.has_payment_id)
+  {
+    fail_msg_writer() << tr("new owner must be a base wallet address");
+    return true;
+  }
   if(!m_tokens.transfer_ownership(args[0], creator, args[1]))
   {
     fail_msg_writer() << tr("not token creator or token not found");

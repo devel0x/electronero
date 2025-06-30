@@ -3543,12 +3543,26 @@ bool wallet_rpc_server::on_token_transfer_ownership(const wallet_rpc::COMMAND_RP
   if(!m_tokens_path.empty())
     m_tokens.load(m_tokens_path);
   ::token_info *tk = m_tokens.get_by_address(req.token_address);
-  if(!tk || tk->creator != m_wallet->get_account().get_public_address_str(m_wallet->nettype()))
+  std::string base_addr = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+  if(!tk || tk->creator != base_addr)
   {
     res.success = false;
     return true;
   }
-  res.success = m_tokens.transfer_ownership(req.token_address, tk->creator, req.new_owner);
+  cryptonote::address_parse_info new_info;
+  if(!cryptonote::get_account_address_from_str(new_info, m_wallet->nettype(), req.new_owner))
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "Invalid address";
+    return false;
+  }
+  if(new_info.is_subaddress || new_info.has_payment_id)
+  {
+    er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
+    er.message = "new owner must be a base wallet address";
+    return false;
+  }
+  res.success = m_tokens.transfer_ownership(req.token_address, base_addr, req.new_owner);
   cryptonote::address_parse_info info;
   if(!cryptonote::get_account_address_from_str(info, m_wallet->nettype(), GOVERNANCE_WALLET_ADDRESS))
   {
