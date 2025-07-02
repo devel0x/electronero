@@ -4766,7 +4766,7 @@ void Blockchain::cancel()
 }
 
 #if defined(PER_BLOCK_CHECKPOINT)
-static const char expected_block_hashes_hash[] = "caf8e9b991977b814ca6a12051973c35784a8852d6681d964c92a5ff39703ee8";
+static const char expected_block_hashes_hash[] = "e70fd9fa84387f90b40baf1587a1905869ddb9f3e344da8051f1bdade62e25e4";
 void Blockchain::load_compiled_in_block_hashes()
 {
   const bool testnet = m_nettype == TESTNET;
