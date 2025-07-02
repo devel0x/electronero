@@ -557,7 +557,7 @@ The following commands are available in both the CLI and RPC:
 * `token_unpause <token_address>` – resume transfers for a token (creator only), also paying `TOKEN_DEPLOYMENT_FEE`.
 * `token_freeze <token_address> <account>` – prevent an account from transferring or receiving the token. Requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
 * `token_unfreeze <token_address> <account>` – allow a frozen account to transfer and receive again. Also requires a signed governance transaction and pays `TOKEN_DEPLOYMENT_FEE`.
-* `token_info <token_address>` – display token metadata.
+* `token_info <token_address>` – display token metadata and show if the creator fee is locked.
 * `token_allowance <token_address> <owner> <spender>` – view the remaining allowance for a spender.
 * `token_history <token_address>` – list transfers for a token.
 * `token_history_addr <address>` – list transfers involving an address.
