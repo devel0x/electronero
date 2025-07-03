@@ -216,6 +216,8 @@ namespace cryptonote
     bool get_tx_note(const std::vector<std::string> &args);
     bool set_description(const std::vector<std::string> &args);
     bool get_description(const std::vector<std::string> &args);
+    bool store_name(const std::vector<std::string> &args);
+    bool lookup_name(const std::vector<std::string> &args);
     bool status(const std::vector<std::string> &args);
     bool wallet_info(const std::vector<std::string> &args);
     bool set_default_priority(const std::vector<std::string> &args);

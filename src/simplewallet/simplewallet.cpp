@@ -38,6 +38,7 @@
 #include <sstream>
 #include <fstream>
 #include <ctype.h>
+#include <unordered_map>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -91,6 +92,7 @@ typedef cryptonote::simple_wallet sw;
 #define MIN_RING_SIZE 1 // Used to inform user about min ring size -- does not track actual protocol
 
 #define OUTPUT_EXPORT_FILE_MAGIC "Monero output export\003"
+#define NAME_DB_FILE_EXT ".name_db"
 
 #define LOCK_IDLE_SCOPE() \
   bool auto_refresh_enabled = m_auto_refresh_enabled.load(std::memory_order_relaxed); \
@@ -2339,6 +2341,14 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("get_description",
                            boost::bind(&simple_wallet::get_description, this, _1),
                            tr("Get the description of the wallet."));
+  m_cmd_binder.set_handler("store_name",
+                           boost::bind(&simple_wallet::store_name, this, _1),
+                           tr("store_name <name> <address>"),
+                           tr("Store a public name to address mapping."));
+  m_cmd_binder.set_handler("lookup_name",
+                           boost::bind(&simple_wallet::lookup_name, this, _1),
+                           tr("lookup_name <name>"),
+                           tr("Lookup an address by public name."));
   m_cmd_binder.set_handler("status",
                            boost::bind(&simple_wallet::status, this, _1),
                            tr("Show the wallet's status."));
@@ -8028,6 +8038,91 @@ bool simple_wallet::get_description(const std::vector<std::string> &args)
   return true;
 }
 //----------------------------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+// Store a mapping from a public name to a wallet address
+bool simple_wallet::store_name(const std::vector<std::string> &args)
+{
+  if (args.size() != 2)
+  {
+    fail_msg_writer() << tr("usage: store_name <name> <address>");
+    return true;
+  }
+
+  cryptonote::address_parse_info info;
+  if(!cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), args[1]))
+  {
+    fail_msg_writer() << tr("failed to parse address");
+    return true;
+  }
+
+  std::string filename = m_wallet->get_wallet_file() + NAME_DB_FILE_EXT;
+  std::string data;
+  std::unordered_map<std::string, std::string> db;
+  if (epee::file_io_utils::load_file_to_string(filename, data))
+  {
+    std::istringstream in(data);
+    std::string line;
+    while (std::getline(in, line))
+    {
+      size_t pos = line.find(' ');
+      if (pos != std::string::npos)
+        db[line.substr(0, pos)] = line.substr(pos + 1);
+    }
+  }
+
+  db[args[0]] = args[1];
+
+  std::ostringstream out;
+  for (const auto &e : db)
+    out << e.first << ' ' << e.second << '\n';
+
+  if (!epee::file_io_utils::save_string_to_file(filename, out.str()))
+  {
+    fail_msg_writer() << tr("failed to save name database");
+    return true;
+  }
+
+  success_msg_writer() << tr("saved") << ' ' << args[0];
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// Lookup an address by public name
+bool simple_wallet::lookup_name(const std::vector<std::string> &args)
+{
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: lookup_name <name>");
+    return true;
+  }
+
+  std::string filename = m_wallet->get_wallet_file() + NAME_DB_FILE_EXT;
+  std::string data;
+  if (!epee::file_io_utils::load_file_to_string(filename, data))
+  {
+    fail_msg_writer() << tr("name database not found");
+    return true;
+  }
+
+  std::istringstream in(data);
+  std::string line;
+  while (std::getline(in, line))
+  {
+    size_t pos = line.find(' ');
+    if (pos == std::string::npos)
+      continue;
+    std::string name = line.substr(0, pos);
+    if (name == args[0])
+    {
+      success_msg_writer() << line.substr(pos + 1);
+      return true;
+    }
+  }
+
+  fail_msg_writer() << tr("name not found");
+  return true;
+}
 bool simple_wallet::status(const std::vector<std::string> &args)
 {
   uint64_t local_height = m_wallet->get_blockchain_current_height();
