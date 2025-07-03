@@ -36,6 +36,7 @@
 #include <versionbitsinfo.h>
 #include <warnings.h>
 #include <script/standard.h>
+#include <key_io.h>
 
 #include <memory>
 #include <stdint.h>
@@ -525,7 +526,7 @@ static UniValue setgenerate(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Address is required when enabling generation");
     }
 
-    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress);
+    GenerateBitcoins(fGenerate, g_connman, nGenProcLimit, payoutAddress);
     return NullUniValue;
 }
 
