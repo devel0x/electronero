@@ -1284,7 +1284,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     }
 
                     bool fNewBlock;
-                    ProcessNewBlock(Params(), pblock, true, &fNewBlock);
+                    ::ProcessNewBlock(Params(), pblock, true, &fNewBlock);
                 }
             });
         }
