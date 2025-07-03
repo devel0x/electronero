@@ -529,8 +529,16 @@ static UniValue setgenerate(const JSONRPCRequest& request)
     }
 
     int nGenProcLimit = 1;
-    if (request.params.size() > 1)
-        nGenProcLimit = request.params[1].get_int();
+    if (request.params.size() > 1) {
+        if (request.params[1].isNum()) {
+            nGenProcLimit = request.params[1].get_int();
+        } else if (request.params[1].isStr()) {
+            nGenProcLimit = std::stoi(request.params[1].get_str());
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid value for 'genproclimit'. Must be an integer.");
+        }
+    }
+
 
     std::string payoutAddress = "";
     if (request.params.size() > 2)
