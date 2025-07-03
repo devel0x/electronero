@@ -113,7 +113,7 @@ public:
             1176396455,          // Nonce
             0x1d00ffff,          // Difficulty bits
             1,                   // Version
-            0 * COIN             // Genesis reward (0 ITC for unspendable coinbase)
+            50 * COIN             // Genesis reward (50 ITC, unspendable coinbase)
         );
 
         consensus.hashGenesisBlock = genesis.GetHash();
