@@ -56,6 +56,7 @@
 #define MICRO 0.000001
 #define MILLI 0.001
 
+CTxMemPool g_mempool;
 /**
  * An extra transaction can be added to a package, as long as it only has one
  * ancestor and is no larger than this. Not really any reason to make this
