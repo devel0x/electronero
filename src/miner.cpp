@@ -47,13 +47,15 @@ extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_p
 
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
 {
+    static std::atomic<bool> fGenerating{false};
     fGenerating = fGenerate;
 
     if (!fGenerate) return;
 
-    std::thread([connman, nThreads, payoutAddress, &mempool]() {
-        const CChainParams& chainparams = Params();
+    std::thread([connman, &mempool, payoutAddress]() {
+        LogPrintf("GenerateBitcoins: Starting miner thread...\n");
 
+        const CChainParams& chainparams = Params();
         CTxDestination dest = DecodeDestination(payoutAddress);
         if (!IsValidDestination(dest)) {
             LogPrintf("GenerateBitcoins: Invalid payout address: %s\n", payoutAddress);
@@ -61,63 +63,48 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
         }
 
         CScript scriptPubKey = GetScriptForDestination(dest);
-        BlockAssembler blockAssembler(mempool, chainparams);
+        BlockAssembler assembler(mempool, chainparams);
 
-        LogPrintf("GenerateBitcoins: Starting miner thread...\n");
-
-        while (fGenerating && !ShutdownRequested()) {
+        while (!ShutdownRequested() && fGenerating) {
             std::unique_ptr<CBlockTemplate> pblocktemplate;
-
             try {
-                pblocktemplate = blockAssembler.CreateNewBlock(scriptPubKey);
+                pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
             } catch (const std::exception& e) {
-                LogPrintf("GenerateBitcoins: CreateNewBlock failed: %s\n", e.what());
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                continue;
-            }
-
-            if (!pblocktemplate) {
-                LogPrintf("GenerateBitcoins: Block template creation returned null\n");
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+                LogPrintf("GenerateBitcoins: Failed to create block: %s\n", e.what());
                 continue;
             }
 
             CBlock* pblock = &pblocktemplate->block;
-
             uint256 hashTarget;
-            arith_uint256 target;
-            target.SetCompact(pblock->nBits);
-            hashTarget = ArithToUint256(target);
+            {
+                arith_uint256 target;
+                target.SetCompact(pblock->nBits);
+                hashTarget = ArithToUint256(target);
+            }
 
-            while (fGenerating && !ShutdownRequested()) {
-                pblock->nNonce++;
+            LogPrintf("GenerateBitcoins: Mining with target: %s\n", hashTarget.ToString());
 
+            while (true) {
+                pblock->nNonce = GetRand(std::numeric_limits<uint32_t>::max());
                 uint256 hash = pblock->GetHash();
 
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
-                    std::shared_ptr<const CBlock> sharedBlock = std::make_shared<const CBlock>(*pblock);
-
-                    bool fNewBlock = false;
-                    if (!g_chainman.ProcessNewBlock(chainparams, sharedBlock, true, &fNewBlock)) {
-                        LogPrintf("GenerateBitcoins: Failed to process mined block\n");
-                    } else {
-                        LogPrintf("GenerateBitcoins: Mined new block at height %d: %s\n",
-                                  g_chainman.ActiveChain().Height() + 1,
-                                  sharedBlock->GetHash().ToString());
+                    LogPrintf("GenerateBitcoins: Found valid block! Hash: %s\n", hash.ToString());
+                    std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
+                    bool fNewBlock;
+                    if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
+                        LogPrintf("GenerateBitcoins: Failed to process block\n");
                     }
-                    break; // Done with this block, create new template
+                    break; // break to next block
                 }
 
-                if (pblock->nNonce == 0) {
-                    // Wrapped around
-                    break;
-                }
+                if (ShutdownRequested() || !fGenerating)
+                    return;
             }
         }
-
-        LogPrintf("GenerateBitcoins: Miner thread exiting...\n");
     }).detach();
 }
+
 
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
