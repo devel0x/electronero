@@ -41,7 +41,7 @@
 #include <memory>
 #include <stdint.h>
 
-extern CConnman* g_connman;
+extern std::unique_ptr<CConnman> g_connman;
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& strAddress);
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
