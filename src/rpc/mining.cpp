@@ -39,6 +39,7 @@
 #include <memory>
 #include <stdint.h>
 
+void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& strAddress);
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
  * or from the last difficulty change if 'lookup' is nonpositive.
