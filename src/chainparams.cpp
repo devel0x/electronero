@@ -108,10 +108,17 @@ public:
         m_assumed_blockchain_size = 5;
         m_assumed_chain_state_size = 1;
 
-        genesis = CreateGenesisBlock(1720061232, 2084524493, 0x1d00ffff, 1, 0 * COIN);
+        genesis = CreateGenesisBlock(
+            1751571776,          // Unix timestamp
+            1176396455,          // Nonce
+            0x1d00ffff,          // Difficulty bits
+            1,                   // Version
+            0 * COIN             // Genesis reward (0 ITC for unspendable coinbase)
+        );
+
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x00000000cb6f28a88bcda2b08a236f93901a1fddee4b7f20ac7d318d7c011c57"));
-        assert(genesis.hashMerkleRoot == uint256S("0x1ed01b626c79992818bcf716a104973905e4e3271e16c3477cf4c1cd66d92e4c"));
+        assert(consensus.hashGenesisBlock == uint256S("0x00000000ed361749ae598d60cd78395eb526bc90f5e1198f0b045f95cecc80c8"));
+        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
