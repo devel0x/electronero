@@ -10,6 +10,9 @@
 #include <init.h>
 #include <boost/thread.hpp>
 #include <wallet/receive.h> // if using wallet helpers like GetScriptForDestination
+#include <primitives/block.h>
+#include <wallet/fees.h>
+#include <wallet/wallet.h>
 #include <memory>
 #include <addrman.h>
 #include <amount.h>
@@ -1262,7 +1265,9 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                 while (true) {
                     std::shared_ptr<CBlock> pblock;
-                    std::unique_ptr<CBlockTemplate> pblocktemplate = BlockAssembler(Params()).CreateNewBlock(scriptPubKey);
+                    BlockAssembler assembler(::mempool, Params());
+                    std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
+
                     if (!pblocktemplate) continue;
 
                     pblock = std::make_shared<CBlock>(pblocktemplate->block);
