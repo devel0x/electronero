@@ -512,7 +512,22 @@ static UniValue setgenerate(const JSONRPCRequest& request)
         );
     }
 
-    bool fGenerate = request.params[0].get_bool();
+    bool fGenerate;
+    if (request.params[0].isBool()) {
+        fGenerate = request.params[0].get_bool();
+    } else if (request.params[0].isStr()) {
+        std::string str = request.params[0].get_str();
+        if (str == "true" || str == "1") {
+            fGenerate = true;
+        } else if (str == "false" || str == "0") {
+            fGenerate = false;
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid value for 'generate'. Must be true or false.");
+        }
+    } else {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid type for 'generate'. Must be boolean or string.");
+    }
+
     int nGenProcLimit = 1;
     if (request.params.size() > 1)
         nGenProcLimit = request.params[1].get_int();
