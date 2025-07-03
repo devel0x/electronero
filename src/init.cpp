@@ -8,13 +8,13 @@
 #endif
 
 #include <init.h>
+#include <validation.h>   // For g_mempool, ProcessNewBlock
+#include <validationinterface.h>
 #include <boost/thread.hpp>
 #include <primitives/block.h>
 #include <wallet/fees.h>
 #include <wallet/wallet.h>
 #include <key_io.h>       // For DecodeDestination
-#include <validation.h>   // For g_mempool, ProcessNewBlock
-#include <validationinterface.h>
 #include <pow.h>          // If you also use CheckProofOfWork
 #include <memory>
 #include <addrman.h>
