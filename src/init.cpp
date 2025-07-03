@@ -107,7 +107,6 @@ static const bool DEFAULT_STOPAFTERBLOCKIMPORT = false;
 #endif
 
 extern CTxMemPool g_mempool;
-using ProcessNewBlock;
 
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
