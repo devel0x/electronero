@@ -45,13 +45,13 @@
 static std::atomic<bool> fGenerating;
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
-void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress)
+void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
 {
     fGenerating = fGenerate;
 
     if (!fGenerate) return;
 
-    std::thread([connman, nThreads, payoutAddress]() {
+    std::thread([connman, nThreads, payoutAddress, &mempool]() {
         const CChainParams& chainparams = Params();
 
         CTxDestination dest = DecodeDestination(payoutAddress);
@@ -62,8 +62,6 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
         CScript scriptPubKey = GetScriptForDestination(dest);
 
-        // ✅ FIXED: BlockAssembler requires mempool, chainparams, options
-        extern CTxMemPool mempool;
         BlockAssembler::Options options;
         auto blockAssembler = std::make_unique<BlockAssembler>(mempool, chainparams, options);
 
