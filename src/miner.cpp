@@ -32,6 +32,7 @@
 #include <utility>
 
 static std::atomic<bool> fGenerating;
+extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress)
 {
