@@ -29,7 +29,6 @@
 #include <memory>
 #include <logging.h>
 #include <script/standard.h>
-#include <script/ismine.h>
 #include <script/descriptor.h>
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h>
