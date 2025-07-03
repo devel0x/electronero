@@ -9,6 +9,7 @@
 
 #include <init.h>
 #include <boost/thread.hpp>
+#include <wallet/receive.h> // if using wallet helpers like GetScriptForDestination
 #include <memory>
 #include <addrman.h>
 #include <amount.h>
