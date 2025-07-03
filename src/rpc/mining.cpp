@@ -35,10 +35,13 @@
 #include <validationinterface.h>
 #include <versionbitsinfo.h>
 #include <warnings.h>
+#include <script/standard.h>
+#include <wallet/receive.h> // if using wallet helpers like GetScriptForDestination
 
 #include <memory>
 #include <stdint.h>
 
+extern CConnman* g_connman;
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& strAddress);
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
