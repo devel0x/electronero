@@ -42,6 +42,7 @@
 #include <stdint.h>
 
 extern std::unique_ptr<CConnman> g_connman;
+extern CTxMemPool mempool;
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
  * or from the last difficulty change if 'lookup' is nonpositive.
@@ -548,7 +549,7 @@ static UniValue setgenerate(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Address is required when enabling generation");
     }
 
-    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress);
+    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress, mempool);
     return NullUniValue;
 }
 
