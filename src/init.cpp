@@ -108,6 +108,8 @@ static const bool DEFAULT_STOPAFTERBLOCKIMPORT = false;
 
 extern CTxMemPool g_mempool;
 
+extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
+
 static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 
 static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
