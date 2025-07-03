@@ -498,6 +498,35 @@ static UniValue BIP22ValidationResult(const BlockValidationState& state)
     return "valid?";
 }
 
+static UniValue setgenerate(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"setgenerate",
+        "\nSet 'generate' true or false to turn generation on or off.\n"
+        "Generation is limited to 'genproclimit' processors, -1 is unlimited.\n",
+        {
+            {"generate", RPCArg::Type::BOOL, RPCArg::Optional::NO, "Set to true to enable mining, false to disable."},
+            {"genproclimit", RPCArg::Type::NUM, RPCArg::Default{-1}, "Number of processors to use for mining"},
+        },
+        RPCResults{},
+        RPCExamples{
+            HelpExampleCli("setgenerate", "true 1")
+        },
+    }.Check(request);
+
+    bool fGenerate = request.params[0].get_bool();
+    int nGenProcLimit = -1;
+    if (request.params.size() > 1)
+        nGenProcLimit = request.params[1].get_int();
+
+    // Use global params for mining
+    gArgs.ForceSetArg("-gen", fGenerate ? "1" : "0");
+    gArgs.ForceSetArg("-genproclimit", ToString(nGenProcLimit));
+
+    GenerateBitcoins(fGenerate, nullptr, nGenProcLimit); // needs to be defined
+
+    return NullUniValue;
+}
+
 static std::string gbt_vb_name(const Consensus::DeploymentPos pos) {
     const struct VBDeploymentInfo& vbinfo = VersionBitsDeploymentInfo[pos];
     std::string s = vbinfo.name;
@@ -1226,6 +1255,7 @@ static const CRPCCommand commands[] =
     { "generating",         "generatetoaddress",      &generatetoaddress,      {"nblocks","address","maxtries"} },
     { "generating",         "generatetodescriptor",   &generatetodescriptor,   {"num_blocks","descriptor","maxtries"} },
     { "generating",         "generateblock",          &generateblock,          {"output","transactions"} },
+    { "generating",         "setgenerate",            &setgenerate,            {"generate", "genproclimit"} },
 
     { "util",               "estimatesmartfee",       &estimatesmartfee,       {"conf_target", "estimate_mode"} },
 
