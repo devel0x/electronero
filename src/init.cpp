@@ -107,7 +107,6 @@ static const bool DEFAULT_STOPAFTERBLOCKIMPORT = false;
 #endif
 
 extern CTxMemPool g_mempool;
-using ::ProcessNewBlock;
 
 static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 
@@ -1284,7 +1283,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         }
                     }
 
-                    ProcessNewBlock(Params(), pblock, true, nullptr);
+                    bool fNewBlock;
+                    ProcessNewBlock(Params(), pblock, true, &fNewBlock);
                 }
             });
         }
