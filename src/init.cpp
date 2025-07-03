@@ -12,8 +12,9 @@
 #include <primitives/block.h>
 #include <wallet/fees.h>
 #include <wallet/wallet.h>
-#include <validation.h>
-#include <pow.h>
+#include <key_io.h>       // For DecodeDestination
+#include <validation.h>   // For g_mempool, ProcessNewBlock
+#include <pow.h>          // If you also use CheckProofOfWork
 #include <memory>
 #include <addrman.h>
 #include <amount.h>
