@@ -99,19 +99,19 @@ public:
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
          * a large 32-bit integer with any alignment.
          */
-        pchMessageStart[0] = 0xf9;
-        pchMessageStart[1] = 0xbe;
-        pchMessageStart[2] = 0xb4;
-        pchMessageStart[3] = 0xd9;
-        nDefaultPort = 8333;
-        nPruneAfterHeight = 100000;
-        m_assumed_blockchain_size = 350;
-        m_assumed_chain_state_size = 6;
+        pchMessageStart[0] = 0x1C;
+        pchMessageStart[1] = 0x7C;
+        pchMessageStart[2] = 0xD0;
+        pchMessageStart[3] = 0x0D;
+        nDefaultPort = 17333;
+        nPruneAfterHeight = 10000;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
-        genesis = CreateGenesisBlock(1231006505, 2083236893, 0x1d00ffff, 1, 50 * COIN);
+        genesis = CreateGenesisBlock(1720061232, 2084524493, 0x1d00ffff, 1, 0 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        assert(consensus.hashGenesisBlock == uint256S("0x00000000cb6f28a88bcda2b08a236f93901a1fddee4b7f20ac7d318d7c011c57"));
+        assert(genesis.hashMerkleRoot == uint256S("0x1ed01b626c79992818bcf716a104973905e4e3271e16c3477cf4c1cd66d92e4c"));
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
