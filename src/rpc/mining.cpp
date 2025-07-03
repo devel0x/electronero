@@ -36,7 +36,6 @@
 #include <versionbitsinfo.h>
 #include <warnings.h>
 #include <script/standard.h>
-#include <wallet/receive.h> // if using wallet helpers like GetScriptForDestination
 
 #include <memory>
 #include <stdint.h>
