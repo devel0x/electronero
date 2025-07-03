@@ -25,7 +25,6 @@
 #include <validation.h>
 #include <shutdown.h>
 #include <util/time.h>
-#include <wallet/receive.h>
 #include <thread>
 #include <memory>
 #include <logging.h>
