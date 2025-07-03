@@ -51,7 +51,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             // Then: pblock = std::make_shared<CBlock>(pblocktemplate->block);
 
             bool fNewBlock = false;
-            if (!ProcessNewBlock(chainparams, pblock, true, &fNewBlock)) {
+            if (!chainman.ProcessNewBlock(chainparams, pblock, true, &fNewBlock)) {
                 LogPrintf("GenerateBitcoins: Failed to process new block\n");
             }
 
