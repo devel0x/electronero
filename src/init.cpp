@@ -12,6 +12,7 @@
 #include <primitives/block.h>
 #include <wallet/fees.h>
 #include <wallet/wallet.h>
+#include <pow.h>
 #include <memory>
 #include <addrman.h>
 #include <amount.h>
