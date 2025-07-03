@@ -106,10 +106,6 @@ static const bool DEFAULT_STOPAFTERBLOCKIMPORT = false;
 #define MIN_CORE_FILEDESCRIPTORS 150
 #endif
 
-extern CTxMemPool g_mempool;
-
-extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
-
 static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 
 static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
@@ -1246,51 +1242,6 @@ bool AppInitSanityChecks()
     // We cannot hold the data directory lock here, as the forking for daemon() hasn't yet happened,
     // and a fork will cause weird behavior to it.
     return LockDataDirectory(true);
-}
-
-void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& strAddress) {
-    static std::unique_ptr<boost::thread_group> minerThreads;
-
-    if (minerThreads) {
-        minerThreads->interrupt_all();
-        minerThreads.reset();
-    }
-
-    if (fGenerate) {
-        minerThreads.reset(new boost::thread_group());
-
-        for (int i = 0; i < nThreads; ++i) {
-            minerThreads->create_thread([connman, strAddress] {
-                CTxDestination dest = DecodeDestination(strAddress);
-                if (!IsValidDestination(dest)) {
-                    LogPrintf("Invalid mining address: %s\n", strAddress);
-                    return;
-                }
-
-                CScript scriptPubKey = GetScriptForDestination(dest);
-
-                while (true) {
-                    std::shared_ptr<CBlock> pblock;
-                    BlockAssembler assembler(::g_mempool, Params());
-                    std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
-
-                    if (!pblocktemplate) continue;
-
-                    pblock = std::make_shared<CBlock>(pblocktemplate->block);
-
-                    while (true) {
-                        pblock->nNonce++;
-                        if (CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
-                            break;
-                        }
-                    }
-
-                    bool fNewBlock;
-                    ProcessNewBlock(Params(), pblock, true, &fNewBlock);
-                }
-            });
-        }
-    }
 }
 
 bool AppInitLockDataDirectory()
