@@ -29,6 +29,15 @@
 #include <memory>
 #include <logging.h>
 #include <script/standard.h>
+#include <script/ismine.h>
+#include <script/descriptor.h>
+#include <wallet/coincontrol.h>
+#include <wallet/wallet.h>
+#include <wallet/walletutil.h>
+#include <wallet/walletdb.h>
+#include <wallet/fees.h>
+#include <util/strencodings.h>
+#include <key_io.h> // <-- this is the key one
 #include <pubkey.h>
 
 #include <algorithm>
