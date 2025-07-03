@@ -62,8 +62,10 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
         CScript scriptPubKey = GetScriptForDestination(dest);
 
-        std::unique_ptr<BlockAssembler> blockAssembler =
-            std::make_unique<BlockAssembler>(chainparams);
+        // ✅ FIXED: BlockAssembler requires mempool, chainparams, options
+        extern CTxMemPool mempool;
+        BlockAssembler::Options options;
+        auto blockAssembler = std::make_unique<BlockAssembler>(mempool, chainparams, options);
 
         while (!ShutdownRequested()) {
             std::unique_ptr<CBlockTemplate> pblocktemplate;
