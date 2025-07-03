@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Bitcoin Core developers
+// Copyright (c) 2020 The Interchained Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,7 +16,7 @@ namespace util {
  *
  * This implements a small subset of the functionality in C++17's std::any
  * class, and can be dropped when the project updates to C++17
- * (https://github.com/bitcoin/bitcoin/issues/16684)
+ * (https://github.com/interchained/interchained/issues/16684)
  */
 class Ref
 {
