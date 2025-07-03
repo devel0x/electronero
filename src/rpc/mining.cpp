@@ -526,7 +526,7 @@ static UniValue setgenerate(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Address is required when enabling generation");
     }
 
-    GenerateBitcoins(fGenerate, g_connman, nGenProcLimit, payoutAddress);
+    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress);
     return NullUniValue;
 }
 
