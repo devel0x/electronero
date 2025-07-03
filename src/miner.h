@@ -203,6 +203,6 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
 /** Update an old GenerateCoinbaseCommitment from CreateNewBlock after the block txs have changed */
 void RegenerateCommitments(CBlock& block);
-void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress);
+void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool);
 
 #endif // BITCOIN_MINER_H
