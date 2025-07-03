@@ -297,6 +297,7 @@ libinterchained_server_a_SOURCES = \
   index/base.cpp \
   index/blockfilterindex.cpp \
   index/txindex.cpp \
+  validation.cpp \
   init.cpp \
   interfaces/chain.cpp \
   interfaces/node.cpp \
@@ -329,7 +330,6 @@ libinterchained_server_a_SOURCES = \
   txdb.cpp \
   txrequest.cpp \
   txmempool.cpp \
-  validation.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
