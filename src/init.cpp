@@ -1265,7 +1265,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                 while (true) {
                     std::shared_ptr<CBlock> pblock;
-                    BlockAssembler assembler(::mempool, Params());
+                    BlockAssembler assembler(::g_mempool, Params());
                     std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
 
                     if (!pblocktemplate) continue;
