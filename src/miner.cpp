@@ -21,8 +21,43 @@
 #include <util/moneystr.h>
 #include <util/system.h>
 
+#include <miner.h>
+#include <validation.h>
+#include <shutdown.h>
+#include <thread>
+#include <memory>
+#include <logging.h>
+
 #include <algorithm>
 #include <utility>
+
+static std::atomic<bool> fGenerating;
+
+void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress)
+{
+    fGenerating = fGenerate;
+
+    if (!fGenerate) return;
+
+    std::thread([connman, nThreads, payoutAddress]() {
+        const CChainParams& chainparams = Params();
+
+        while (!ShutdownRequested()) {
+            std::shared_ptr<CBlock> pblock;
+
+            // TODO: Build block using CreateNewBlock() or equivalent (not shown here)
+            // Example: std::unique_ptr<CBlockTemplate> pblocktemplate = CreateNewBlock(...);
+            // Then: pblock = std::make_shared<CBlock>(pblocktemplate->block);
+
+            bool fNewBlock = false;
+            if (!ProcessNewBlock(chainparams, pblock, true, &fNewBlock)) {
+                LogPrintf("GenerateBitcoins: Failed to process new block\n");
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+    }).detach();
+}
 
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
