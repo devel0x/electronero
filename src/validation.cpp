@@ -85,17 +85,6 @@ const std::vector<std::string> CHECKLEVEL_DOC {
     "each level includes the checks of the previous levels",
 };
 
-bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool* fNewBlock)
-{
-    // TODO: Replace this with full validation logic if needed
-    if (fNewBlock) {
-        *fNewBlock = true;
-    }
-
-    LogPrintf("ProcessNewBlock called, but stubbed out.\n");
-    return true;
-}
-
 bool CBlockIndexWorkComparator::operator()(const CBlockIndex *pa, const CBlockIndex *pb) const {
     // First sort by most total work, ...
     if (pa->nChainWork > pb->nChainWork) return false;
