@@ -14,6 +14,7 @@
 #include <wallet/wallet.h>
 #include <key_io.h>       // For DecodeDestination
 #include <validation.h>   // For g_mempool, ProcessNewBlock
+#include <validationinterface.h>
 #include <pow.h>          // If you also use CheckProofOfWork
 #include <memory>
 #include <addrman.h>
