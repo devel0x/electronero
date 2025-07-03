@@ -44,7 +44,6 @@
 
 static std::atomic<bool> fGenerating;
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
-static std::atomic<bool> fGenerating{false};
 
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
 {
@@ -95,7 +94,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                 uint256 hash = pblock->GetHash();
 
-                if (hash <= hashTarget) {
+                if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                     std::shared_ptr<const CBlock> sharedBlock = std::make_shared<const CBlock>(*pblock);
 
                     bool fNewBlock = false;
