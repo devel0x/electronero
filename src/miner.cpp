@@ -84,6 +84,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
 
             int64_t startTime = GetTime();
+            LogPrintf("GenerateBitcoins: Mining with target: %s\n", hashTarget.ToString());
             for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
                 if (ShutdownRequested() || !fGenerating)
                     return;
