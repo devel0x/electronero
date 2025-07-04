@@ -95,24 +95,29 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     int64_t newTime = GetTime();
                     if (newTime > pblock->nTime) {
                         pblock->nTime = newTime;
+                        // Update coinbase nTime (must reflect new block time)
+                        pblock->vtx[0]->vin[0].scriptSig = CScript() << pblock->nTime;
                     }
                 }
             
                 pblock->nNonce = nonce;
-                // pblock->hashMerkleRoot = BlockMerkleRoot(*pblock); // <- Recalculate!
+            
+                // 🔁 Recalculate Merkle root because timestamp or scriptSig changed
+                pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+            
                 uint256 hash = pblock->GetHash();
-                LogPrintf("Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
-                LogPrintf("Merkle Root: %s\n", BlockMerkleRoot(*pblock).ToString());
-                LogPrintf("pblock->hashMerkleRoot: %s\n", pblock->hashMerkleRoot.ToString());
-
+            
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
-                    LogPrintf("GenerateBitcoins: Valid block found! Hash: %s\n", hash.ToString());
+                    LogPrintf("✅ Valid block found! Hash: %s\n", hash.ToString());
+                    LogPrintf("Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
+                    LogPrintf("Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
+            
                     std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
                     bool fNewBlock = false;
                     if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
-                        LogPrintf("GenerateBitcoins: Failed to process new block\n");
+                        LogPrintf("❌ Failed to process new block\n");
                     } else {
-                        LogPrintf("GenerateBitcoins: Block accepted!\n");
+                        LogPrintf("✅ Block accepted!\n");
                     }
                     break;
                 }
