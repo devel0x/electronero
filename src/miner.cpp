@@ -21,7 +21,7 @@
 #include <util/moneystr.h>
 #include <util/system.h>
 
-#include <miner.h>
+#include <atomic>
 #include <validation.h>
 #include <shutdown.h>
 #include <util/time.h>
@@ -45,6 +45,7 @@
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 static std::atomic<bool> fGenerating(false);
+static std::atomic<bool> foundBlock{false};
 
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
 {
@@ -52,80 +53,82 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
     if (!fGenerate)
         return;
 
-    std::thread([connman, payoutAddress, &mempool]() {
-        LogPrintf("GenerateBitcoins: Starting miner thread...\n");
+    foundBlock.store(false);
 
-        const CChainParams& chainparams = Params();
-        CTxDestination dest = DecodeDestination(payoutAddress);
-        if (!IsValidDestination(dest)) {
-            LogPrintf("GenerateBitcoins: Invalid payout address: %s\n", payoutAddress);
-            return;
-        }
-        CScript scriptPubKey = GetScriptForDestination(dest);
-        BlockAssembler assembler(mempool, chainparams);
+    for (int threadId = 0; threadId < nThreads; ++threadId) {
+        std::thread([=, &mempool]() {
+            LogPrintf("GenerateBitcoins: Starting miner thread %d...\n", threadId);
 
-        while (!ShutdownRequested() && fGenerating) {
-            std::unique_ptr<CBlockTemplate> pblocktemplate;
-            try {
-                pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
-            } catch (const std::exception& e) {
-                LogPrintf("GenerateBitcoins: Failed to create block: %s\n", e.what());
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
+            const CChainParams& chainparams = Params();
+            CTxDestination dest = DecodeDestination(payoutAddress);
+            if (!IsValidDestination(dest)) {
+                LogPrintf("GenerateBitcoins: Invalid payout address: %s\n", payoutAddress);
+                return;
             }
 
-            if (!pblocktemplate.get()) {
-                LogPrintf("GenerateBitcoins: Failed to create block template\n");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
+            CScript scriptPubKey = GetScriptForDestination(dest);
+            BlockAssembler assembler(mempool, chainparams);
 
-            CBlock* pblock = &pblocktemplate->block;
-            pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);  
-            uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
+            while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
+                std::unique_ptr<CBlockTemplate> pblocktemplate;
+                try {
+                    pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
+                } catch (const std::exception& e) {
+                    LogPrintf("GenerateBitcoins: Failed to create block: %s\n", e.what());
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    continue;
+                }
 
-            int64_t startTime = GetTime();
-            LogPrintf("GenerateBitcoins: Mining with target: %s\n", hashTarget.ToString());
-            CMutableTransaction coinbaseTx(*pblock->vtx[0]);
-            for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
-                if (ShutdownRequested() || !fGenerating)
-                    return;
-            
-                // Update timestamp every 1000 iterations
-                if (nonce % 1000 == 0) {
-                    int64_t newTime = GetTime();
-                    if (newTime > pblock->nTime) {
-                        pblock->nTime = newTime;
-                        coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime;
+                if (!pblocktemplate.get()) {
+                    LogPrintf("GenerateBitcoins: Failed to create block template\n");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    continue;
+                }
+
+                CBlock* pblock = &pblocktemplate->block;
+                uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
+                int64_t startTime = GetTime();
+                LogPrintf("GenerateBitcoins [thread %d]: Mining with target: %s\n", threadId, hashTarget.ToString());
+
+                CMutableTransaction coinbaseTx(*pblock->vtx[0]);
+
+                for (uint32_t nonce = threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
+                    if (ShutdownRequested() || !fGenerating || foundBlock.load())
+                        return;
+
+                    if (nonce % 1000 == 0) {
+                        int64_t newTime = GetTime();
+                        if (newTime > pblock->nTime) {
+                            pblock->nTime = newTime;
+                            coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime;
+                        }
+                    }
+
+                    pblock->nNonce = nonce;
+                    pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
+                    pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+                    uint256 hash = pblock->GetHash();
+
+                    if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
+                        LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
+                        LogPrintf("Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
+                        LogPrintf("Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
+
+                        std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
+                        bool fNewBlock = false;
+                        if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
+                            LogPrintf("❌ [thread %d] Failed to process new block\n", threadId);
+                        } else {
+                            LogPrintf("✅ [thread %d] Block accepted!\n", threadId);
+                        }
+
+                        foundBlock.store(true);
+                        return;
                     }
                 }
-            
-                pblock->nNonce = nonce;
-            
-                // Update coinbase TX and Merkle root
-                pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
-                pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
-            
-                uint256 hash = pblock->GetHash();
-            
-                if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
-                    LogPrintf("✅ Valid block found! Hash: %s\n", hash.ToString());
-                    LogPrintf("Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
-                    LogPrintf("Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
-            
-                    std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
-                    bool fNewBlock = false;
-                    if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
-                        LogPrintf("❌ Failed to process new block\n");
-                    } else {
-                        LogPrintf("✅ Block accepted!\n");
-                    }
-                    break;
-                }
             }
-
-        }
-    }).detach();
+        }).detach();
+    }
 }
 
 
