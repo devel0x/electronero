@@ -98,8 +98,12 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 }
             
                 pblock->nNonce = nonce;
-                pblock->hashMerkleRoot = BlockMerkleRoot(*pblock); // <- Recalculate!
+                // pblock->hashMerkleRoot = BlockMerkleRoot(*pblock); // <- Recalculate!
                 uint256 hash = pblock->GetHash();
+                LogPrintf("Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
+                LogPrintf("Merkle Root: %s\n", BlockMerkleRoot(*pblock).ToString());
+                LogPrintf("pblock->hashMerkleRoot: %s\n", pblock->hashMerkleRoot.ToString());
+
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                     LogPrintf("GenerateBitcoins: Valid block found! Hash: %s\n", hash.ToString());
                     std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
