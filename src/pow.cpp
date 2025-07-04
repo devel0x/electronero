@@ -10,6 +10,7 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
+// BITCOIN LEGACY DAA
 // unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 // {
 //     assert(pindexLast != nullptr);
@@ -46,42 +47,95 @@
 //     return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
 // }
 
+// LWMA
+// unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params)
+// {
+//     const int64_t T = params.nPowTargetSpacing; // Target block time (30 sec)
+//     const int N = 60; // Averaging window (60 blocks ~ 30 minutes)
+//     const int k = N * (N + 1) * T / 2;
+
+//     assert(pindexLast != nullptr);
+//     if (pindexLast->nHeight < N) {
+//         return UintToArith256(params.powLimit).GetCompact();
+//     }
+
+//     arith_uint256 sumTarget;
+//     int64_t t = 0;
+//     int64_t j = 0;
+
+//     const CBlockIndex* pindex = pindexLast;
+//     for (int i = 0; i < N; ++i) {
+//         if (!pindex->pprev) break;
+
+//         int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
+//         solvetime = std::max<int64_t>(-6 * T, std::min(solvetime, 6 * T));
+//         j += 1;
+//         t += solvetime * j;
+//         sumTarget += arith_uint256().SetCompact(pindex->nBits) * j;
+
+//         pindex = pindex->pprev;
+//     }
+
+//     if (t == 0 || j == 0) return UintToArith256(params.powLimit).GetCompact();
+
+//     arith_uint256 nextTarget = (sumTarget / k) * T;
+//     if (nextTarget > UintToArith256(params.powLimit))
+//         nextTarget = UintToArith256(params.powLimit);
+
+//     return nextTarget.GetCompact();
+// }
+
+// DGW3
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params)
 {
-    const int64_t T = params.nPowTargetSpacing; // Target block time (30 sec)
-    const int N = 60; // Averaging window (60 blocks ~ 30 minutes)
-    const int k = N * (N + 1) * T / 2;
-
     assert(pindexLast != nullptr);
-    if (pindexLast->nHeight < N) {
-        return UintToArith256(params.powLimit).GetCompact();
-    }
+    const int nPastBlocks = 24; // Tuneable
 
-    arith_uint256 sumTarget;
-    int64_t t = 0;
-    int64_t j = 0;
+    if (pindexLast->nHeight < nPastBlocks)
+        return UintToArith256(params.powLimit).GetCompact();
 
     const CBlockIndex* pindex = pindexLast;
-    for (int i = 0; i < N; ++i) {
-        if (!pindex->pprev) break;
+    arith_uint256 pastDifficultyAverage;
+    arith_uint256 pastDifficultyAveragePrev;
 
-        int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
-        solvetime = std::max<int64_t>(-6 * T, std::min(solvetime, 6 * T));
-        j += 1;
-        t += solvetime * j;
-        sumTarget += arith_uint256().SetCompact(pindex->nBits) * j;
+    int64_t actualTimespan = 0;
+    int64_t lastBlockTime = 0;
 
+    for (int i = 0; i < nPastBlocks; ++i) {
+        if (pindex == nullptr)
+            break;
+
+        arith_uint256 currentDifficulty = arith_uint256().SetCompact(pindex->nBits);
+
+        if (i == 0)
+            pastDifficultyAverage = currentDifficulty;
+        else
+            pastDifficultyAverage = ((pastDifficultyAveragePrev * i) + currentDifficulty) / (i + 1);
+
+        pastDifficultyAveragePrev = pastDifficultyAverage;
+
+        if (lastBlockTime > 0)
+            actualTimespan += lastBlockTime - pindex->GetBlockTime();
+
+        lastBlockTime = pindex->GetBlockTime();
         pindex = pindex->pprev;
     }
 
-    if (t == 0 || j == 0) return UintToArith256(params.powLimit).GetCompact();
+    const int64_t targetTimespan = nPastBlocks * params.nPowTargetSpacing;
 
-    arith_uint256 nextTarget = (sumTarget / k) * T;
-    if (nextTarget > UintToArith256(params.powLimit))
-        nextTarget = UintToArith256(params.powLimit);
+    if (actualTimespan < targetTimespan / 3)
+        actualTimespan = targetTimespan / 3;
+    if (actualTimespan > targetTimespan * 3)
+        actualTimespan = targetTimespan * 3;
 
-    return nextTarget.GetCompact();
+    arith_uint256 newDifficulty = pastDifficultyAverage * actualTimespan / targetTimespan;
+
+    if (newDifficulty > UintToArith256(params.powLimit))
+        newDifficulty = UintToArith256(params.powLimit);
+
+    return newDifficulty.GetCompact();
 }
+
 
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params& params)
 {
