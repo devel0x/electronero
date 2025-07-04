@@ -193,5 +193,5 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     // Fallback for legacy code: assume current height
     LOCK(cs_main);
     int height = ::ChainActive().Height();
-    return CheckProofOfWorkWithHeight(hash, nBits, height, params);
+    return CheckProofOfWorkWithHeight(hash, nBits, params, height);
 }
