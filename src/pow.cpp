@@ -10,40 +10,77 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
-{
-    assert(pindexLast != nullptr);
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+// unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
+// {
+//     assert(pindexLast != nullptr);
+//     unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
 
-    // Only change once per difficulty adjustment interval
-    if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
-    {
-        if (params.fPowAllowMinDifficultyBlocks)
-        {
-            // Special difficulty rule for testnet:
-            // If the new block's timestamp is more than 2* 10 minutes
-            // then allow mining of a min-difficulty block.
-            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing*2)
-                return nProofOfWorkLimit;
-            else
-            {
-                // Return the last non-special-min-difficulty-rules-block
-                const CBlockIndex* pindex = pindexLast;
-                while (pindex->pprev && pindex->nHeight % params.DifficultyAdjustmentInterval() != 0 && pindex->nBits == nProofOfWorkLimit)
-                    pindex = pindex->pprev;
-                return pindex->nBits;
-            }
-        }
-        return pindexLast->nBits;
+//     // Only change once per difficulty adjustment interval
+//     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
+//     {
+//         if (params.fPowAllowMinDifficultyBlocks)
+//         {
+//             // Special difficulty rule for testnet:
+//             // If the new block's timestamp is more than 2* 10 minutes
+//             // then allow mining of a min-difficulty block.
+//             if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing*2)
+//                 return nProofOfWorkLimit;
+//             else
+//             {
+//                 // Return the last non-special-min-difficulty-rules-block
+//                 const CBlockIndex* pindex = pindexLast;
+//                 while (pindex->pprev && pindex->nHeight % params.DifficultyAdjustmentInterval() != 0 && pindex->nBits == nProofOfWorkLimit)
+//                     pindex = pindex->pprev;
+//                 return pindex->nBits;
+//             }
+//         }
+//         return pindexLast->nBits;
+//     }
+
+//     // Go back by what we want to be 14 days worth of blocks
+//     int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
+//     assert(nHeightFirst >= 0);
+//     const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
+//     assert(pindexFirst);
+
+//     return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
+// }
+
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params)
+{
+    const int64_t T = params.nPowTargetSpacing; // Target block time (30 sec)
+    const int N = 60; // Averaging window (60 blocks ~ 30 minutes)
+    const int k = N * (N + 1) * T / 2;
+
+    assert(pindexLast != nullptr);
+    if (pindexLast->nHeight < N) {
+        return UintToArith256(params.powLimit).GetCompact();
     }
 
-    // Go back by what we want to be 14 days worth of blocks
-    int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
-    assert(nHeightFirst >= 0);
-    const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
-    assert(pindexFirst);
+    arith_uint256 sumTarget;
+    int64_t t = 0;
+    int64_t j = 0;
 
-    return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
+    const CBlockIndex* pindex = pindexLast;
+    for (int i = 0; i < N; ++i) {
+        if (!pindex->pprev) break;
+
+        int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
+        solvetime = std::max<int64_t>(-6 * T, std::min(solvetime, 6 * T));
+        j += 1;
+        t += solvetime * j;
+        sumTarget += arith_uint256().SetCompact(pindex->nBits) * j;
+
+        pindex = pindex->pprev;
+    }
+
+    if (t == 0 || j == 0) return UintToArith256(params.powLimit).GetCompact();
+
+    arith_uint256 nextTarget = (sumTarget / k) * T;
+    if (nextTarget > UintToArith256(params.powLimit))
+        nextTarget = UintToArith256(params.powLimit);
+
+    return nextTarget.GetCompact();
 }
 
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params& params)
