@@ -193,5 +193,6 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     // Fallback for legacy code: assume current height
     LOCK(cs_main);
     int nHeight = ::ChainActive().Height() + 1;
+    LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
     return CheckProofOfWorkWithHeight(hash, nBits, params, height);
 }
