@@ -85,7 +85,24 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             LogPrintf("GenerateBitcoins: Mining with target: %s\n", hashTarget.ToString());
 
             while (true) {
-                pblock->nNonce = GetRand(std::numeric_limits<uint32_t>::max());
+                for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
+                    pblock->nNonce = nonce;
+                    uint256 hash = pblock->GetHash();
+                
+                    if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
+                        LogPrintf("GenerateBitcoins: Found valid block! Hash: %s\n", hash.ToString());
+                        std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
+                        bool fNewBlock;
+                        if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
+                            LogPrintf("GenerateBitcoins: Failed to process block\n");
+                        }
+                        break;
+                    }
+                
+                    if (ShutdownRequested() || !fGenerating)
+                        return;
+                }
+
                 uint256 hash = pblock->GetHash();
 
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
