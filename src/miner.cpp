@@ -98,6 +98,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 }
             
                 pblock->nNonce = nonce;
+                pblock->hashMerkleRoot = BlockMerkleRoot(*pblock); // <- Recalculate!
                 uint256 hash = pblock->GetHash();
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                     LogPrintf("GenerateBitcoins: Valid block found! Hash: %s\n", hash.ToString());
