@@ -86,6 +86,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
             int64_t startTime = GetTime();
             LogPrintf("GenerateBitcoins: Mining with target: %s\n", hashTarget.ToString());
+            CMutableTransaction coinbaseTx = *pblock->vtx[0]; // make modifiable copy
             for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
                 if (ShutdownRequested() || !fGenerating)
                     return;
@@ -95,14 +96,14 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     int64_t newTime = GetTime();
                     if (newTime > pblock->nTime) {
                         pblock->nTime = newTime;
-                        // Update coinbase nTime (must reflect new block time)
-                        pblock->vtx[0]->vin[0].scriptSig = CScript() << pblock->nTime;
+                        coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime;
                     }
                 }
             
                 pblock->nNonce = nonce;
             
-                // 🔁 Recalculate Merkle root because timestamp or scriptSig changed
+                // Update coinbase TX and Merkle root
+                pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
                 pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
             
                 uint256 hash = pblock->GetHash();
@@ -122,6 +123,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     break;
                 }
             }
+
         }
     }).detach();
 }
