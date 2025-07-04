@@ -81,6 +81,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             }
 
             CBlock* pblock = &pblocktemplate->block;
+            pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);  
             uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
 
             int64_t startTime = GetTime();
