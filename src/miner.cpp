@@ -93,10 +93,13 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                 LogPrintf("GenerateBitcoins [thread %d]: Mining with target: %s\n", threadId, hashTarget.ToString());
 
+                uint64_t hashCount = 0;
+                auto lastReport = std::chrono::steady_clock::now();
+                
                 for (uint32_t nonce = threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
                     if (ShutdownRequested() || !fGenerating || foundBlock.load())
                         return;
-
+                
                     if (nonce % 1000 == 0) {
                         int64_t newTime = GetTime();
                         if (newTime > block.nTime) {
@@ -104,17 +107,29 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             coinbaseTx.vin[0].scriptSig = CScript() << block.nTime;
                         }
                     }
-
+                
                     block.nNonce = nonce;
                     block.vtx[0] = MakeTransactionRef(coinbaseTx);
                     block.hashMerkleRoot = BlockMerkleRoot(block);
                     uint256 hash = block.GetHash();
-
+                
+                    ++hashCount;
+                
+                    // ⏱️ Report hashrate every 5 seconds
+                    auto now = std::chrono::steady_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - lastReport);
+                    if (duration.count() >= 5) {
+                        double hashrate = static_cast<double>(hashCount) / duration.count();
+                        LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, hashrate);
+                        hashCount = 0;
+                        lastReport = now;
+                    }
+                
                     if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                         LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
                         LogPrintf("Merkle Root: %s\n", block.hashMerkleRoot.ToString());
                         LogPrintf("Coinbase TXID: %s\n", block.vtx[0]->GetHash().ToString());
-
+                
                         std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(block);
                         bool fNewBlock = false;
                         if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
@@ -122,7 +137,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         } else {
                             LogPrintf("✅ [thread %d] Block accepted!\n", threadId);
                         }
-
+                
                         foundBlock.store(true);
                         return;
                     }
