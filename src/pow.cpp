@@ -167,6 +167,27 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
+bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
+{
+    bool fNegative;
+    bool fOverflow;
+    arith_uint256 bnTarget;
+
+    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
+
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
+        return false;
+
+    if (nHeight >= params.nKawpowForkHeight) {
+        // TODO: Add KAWPOW check
+        // return CheckKawpowProofOfWork(hash, bnTarget);
+    } else if (nHeight >= params.nYespowerForkHeight) {
+        return CheckYespowerProofOfWork(hash, bnTarget);
+    } else {
+        return UintToArith256(hash) <= bnTarget;
+    }
+}
+
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
     bool fNegative;
