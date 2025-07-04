@@ -167,6 +167,18 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
+bool CheckYespower(uint256 hash, const arith_uint256& target)
+{
+    // TODO: Implement Yespower verification here
+    return UintToArith256(hash) <= target;
+}
+
+bool CheckKAWPOW(uint256 hash, const arith_uint256& target)
+{
+    // TODO: Implement KAWPOW verification here
+    return UintToArith256(hash) <= target;
+}
+
 bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
