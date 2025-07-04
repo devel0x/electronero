@@ -57,87 +57,96 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
     for (int threadId = 0; threadId < nThreads; ++threadId) {
         std::thread([=, &mempool]() {
-            LogPrintf("GenerateBitcoins: Starting miner thread %d...\n", threadId);
+            LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
 
             const CChainParams& chainparams = Params();
             CTxDestination dest = DecodeDestination(payoutAddress);
             if (!IsValidDestination(dest)) {
-                LogPrintf("GenerateBitcoins: Invalid payout address: %s\n", payoutAddress);
+                LogPrintf("❌ Invalid payout address: %s\n", payoutAddress);
                 return;
             }
 
             CScript scriptPubKey = GetScriptForDestination(dest);
             BlockAssembler assembler(mempool, chainparams);
 
+            int64_t lastTemplateTime = 0;
+            uint64_t hashesDone = 0;
+            const int templateRefreshInterval = 30; // seconds
+
             while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
+                int64_t now = GetTime();
+                if (now - lastTemplateTime < templateRefreshInterval && hashesDone > 0)
+                    goto continueMining;
+
                 std::unique_ptr<CBlockTemplate> pblocktemplate;
                 try {
                     pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
+                    lastTemplateTime = now;
                 } catch (const std::exception& e) {
-                    LogPrintf("GenerateBitcoins: Failed to create block: %s\n", e.what());
+                    LogPrintf("⚠️ Failed to create block: %s\n", e.what());
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 }
 
-                if (!pblocktemplate.get()) {
-                    LogPrintf("GenerateBitcoins: Failed to create block template\n");
+                if (!pblocktemplate) {
+                    LogPrintf("⚠️ Block template is null\n");
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 }
 
-                // Each thread gets its own copy
-                CBlock block = pblocktemplate->block;
-                CMutableTransaction coinbaseTx(*block.vtx[0]);
-                block.hashMerkleRoot = BlockMerkleRoot(block);
-                uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
+                CBlock* pblock = &pblocktemplate->block;
+                CMutableTransaction coinbaseTx(*pblock->vtx[0]);
 
-                LogPrintf("GenerateBitcoins [thread %d]: Mining with target: %s\n", threadId, hashTarget.ToString());
+                // Insert extra nonce unique per thread
+                coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime << threadId;
+                pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
+                pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
-                uint64_t hashCount = 0;
-                auto lastReport = std::chrono::steady_clock::now();
-                
+                uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
+                int64_t hashStart = GetTimeMillis();
+
+            continueMining:
                 for (uint32_t nonce = threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
                     if (ShutdownRequested() || !fGenerating || foundBlock.load())
                         return;
-                
+
+                    // Refresh time every 1000 nonces
                     if (nonce % 1000 == 0) {
                         int64_t newTime = GetTime();
-                        if (newTime > block.nTime) {
-                            block.nTime = newTime;
-                            coinbaseTx.vin[0].scriptSig = CScript() << block.nTime;
+                        if (newTime > pblock->nTime) {
+                            pblock->nTime = newTime;
+                            coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime << threadId;
+                            pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
+                            pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+                        }
+
+                        // Show hashrate every 5 seconds
+                        int64_t elapsed = GetTimeMillis() - hashStart;
+                        if (elapsed >= 5000 && hashesDone > 0) {
+                            double rate = (double)hashesDone / (elapsed / 1000.0);
+                            LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
+                            hashesDone = 0;
+                            hashStart = GetTimeMillis();
                         }
                     }
-                
-                    block.nNonce = nonce;
-                    block.vtx[0] = MakeTransactionRef(coinbaseTx);
-                    block.hashMerkleRoot = BlockMerkleRoot(block);
-                    uint256 hash = block.GetHash();
-                
-                    ++hashCount;
-                
-                    // ⏱️ Report hashrate every 5 seconds
-                    auto now = std::chrono::steady_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - lastReport);
-                    if (duration.count() >= 5) {
-                        double hashrate = static_cast<double>(hashCount) / duration.count();
-                        LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, hashrate);
-                        hashCount = 0;
-                        lastReport = now;
-                    }
-                
+
+                    ++hashesDone;
+                    pblock->nNonce = nonce;
+                    uint256 hash = pblock->GetHash();
+
                     if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                         LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
-                        LogPrintf("Merkle Root: %s\n", block.hashMerkleRoot.ToString());
-                        LogPrintf("Coinbase TXID: %s\n", block.vtx[0]->GetHash().ToString());
-                
-                        std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(block);
+                        LogPrintf("🧩 Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
+                        LogPrintf("🎯 Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
+
+                        std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
                         bool fNewBlock = false;
                         if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
                             LogPrintf("❌ [thread %d] Failed to process new block\n", threadId);
                         } else {
                             LogPrintf("✅ [thread %d] Block accepted!\n", threadId);
                         }
-                
+
                         foundBlock.store(true);
                         return;
                     }
