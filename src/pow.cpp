@@ -167,7 +167,19 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
-bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
+bool CheckYespower(uint256 hash, const arith_uint256& target)
+{
+    // TODO: Implement Yespower verification here
+    return UintToArith256(hash) <= target;
+}
+
+bool CheckKAWPOW(uint256 hash, const arith_uint256& target)
+{
+    // TODO: Implement KAWPOW verification here
+    return UintToArith256(hash) <= target;
+}
+
+bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -179,9 +191,23 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
-    // Check proof of work matches claimed amount
-    if (UintToArith256(hash) > bnTarget)
-        return false;
+    if (nHeight >= params.nKawpowForkHeight) {
+        // 🔥 Stage 3: KAWPOW
+        return CheckKAWPOW(hash, bnTarget);
+    } else if (nHeight >= params.nYespowerForkHeight) {
+        // ⚡ Stage 2: Yespower
+        return CheckYespower(hash, bnTarget);
+    } else {
+        // ⛏️ Stage 1: SHA256 (original PoW)
+        return UintToArith256(hash) <= bnTarget;
+    }
+}
 
-    return true;
+bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
+{
+    // Fallback for legacy code: assume current height
+    LOCK(cs_main);
+    int nHeight = ::ChainActive().Height() + 1;
+    LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
+    return CheckProofOfWorkWithHeight(hash, nBits, params, height);
 }
