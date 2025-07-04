@@ -126,7 +126,10 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         ++hashesDone;
                         pblock->nNonce = nonce;
                         uint256 hash = pblock->GetHash();
-
+                        static int printCount = 0;
+                        if (printCount++ < 10) {
+                            LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
+                        }
                         if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
                             LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
                             LogPrintf("🧩 Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
