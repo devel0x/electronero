@@ -6,7 +6,7 @@ DIST_SUBDIRS = secp256k1 univalue
 
 AM_LDFLAGS = $(LIBTOOL_LDFLAGS) $(HARDENED_LDFLAGS) $(GPROF_LDFLAGS) $(SANITIZER_LDFLAGS)
 AM_CXXFLAGS = $(DEBUG_CXXFLAGS) $(HARDENED_CXXFLAGS) $(WARN_CXXFLAGS) $(NOWARN_CXXFLAGS) $(ERROR_CXXFLAGS) $(GPROF_CXXFLAGS) $(SANITIZER_CXXFLAGS)
-AM_CPPFLAGS = $(DEBUG_CPPFLAGS) $(HARDENED_CPPFLAGS)
+AM_CPPFLAGS = $(DEBUG_CPPFLAGS) $(HARDENED_CPPFLAGS) -I$(srcdir)/crypto/yespower -I$(builddir)/crypto/yespower
 AM_LIBTOOLFLAGS = --preserve-dup-deps
 PTHREAD_FLAGS = $(PTHREAD_CFLAGS) $(PTHREAD_LIBS)
 EXTRA_LIBRARIES =
@@ -417,7 +417,10 @@ crypto_libinterchained_crypto_base_a_SOURCES = \
   crypto/sha512.cpp \
   crypto/sha512.h \
   crypto/siphash.cpp \
-  crypto/siphash.h
+  crypto/siphash.h \
+  crypto/yespower/yespower-opt.c \
+  crypto/yespower/sha256.c \
+  crypto/yespower/sysendian.c
 
 if USE_ASM
 crypto_libinterchained_crypto_base_a_SOURCES += crypto/sha256_sse4.cpp
@@ -707,6 +710,13 @@ CLEANFILES += obj/build.h
 
 EXTRA_DIST = $(CTAES_DIST)
 
+EXTRA_DIST += \
+  crypto/yespower/yespower.h \
+  crypto/yespower/yespower-opt.c \
+  crypto/yespower/sha256.h \
+  crypto/yespower/sha256.c \
+  crypto/yespower/sysendian.h \
+  crypto/yespower/sysendian.c
 
 config/interchained-config.h: config/stamp-h1
 	@$(MAKE) -C $(top_builddir) $(subdir)/$(@)
