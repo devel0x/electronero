@@ -42,7 +42,6 @@
 #include <algorithm>
 #include <utility>
 
-static std::atomic<bool> fGenerating;
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 static std::atomic<bool> fGenerating(false);
