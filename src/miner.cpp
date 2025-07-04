@@ -83,10 +83,19 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             CBlock* pblock = &pblocktemplate->block;
             uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
 
+            int64_t startTime = GetTime();
             for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
                 if (ShutdownRequested() || !fGenerating)
                     return;
-
+            
+                // Update timestamp every 1000 iterations
+                if (nonce % 1000 == 0) {
+                    int64_t newTime = GetTime();
+                    if (newTime > pblock->nTime) {
+                        pblock->nTime = newTime;
+                    }
+                }
+            
                 pblock->nNonce = nonce;
                 uint256 hash = pblock->GetHash();
                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
