@@ -10,6 +10,7 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
+unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 // BITCOIN LEGACY DAA
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
