@@ -100,6 +100,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
                     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
                     uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
+                    static int printCount = 0;
 
                     for (uint32_t nonce = threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
                         if (ShutdownRequested() || !fGenerating || foundBlock.load())
@@ -126,8 +127,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         ++hashesDone;
                         pblock->nNonce = nonce;
                         uint256 hash = pblock->GetHash();
-                        static int printCount = 0;
-                        if (printCount++ < 10) {
+                        if (printCount < 10) {
+                            printCount++;
                             LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
                         }
                         if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
