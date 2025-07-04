@@ -175,15 +175,18 @@ bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensu
 
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
 
+    // Check range
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
     if (nHeight >= params.nKawpowForkHeight) {
-        // TODO: Add KAWPOW check
-        // return CheckKawpowProofOfWork(hash, bnTarget);
+        // 🔥 Stage 3: KAWPOW
+        return CheckKAWPOW(hash, bnTarget);
     } else if (nHeight >= params.nYespowerForkHeight) {
-        return CheckYespowerProofOfWork(hash, bnTarget);
+        // ⚡ Stage 2: Yespower
+        return CheckYespower(hash, bnTarget);
     } else {
+        // ⛏️ Stage 1: SHA256 (original PoW)
         return UintToArith256(hash) <= bnTarget;
     }
 }
