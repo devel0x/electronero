@@ -169,7 +169,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
-bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
+bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -208,5 +208,5 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
         return false;
 
     LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
-    return CheckProofOfWorkWithHeight(block, nBits, params, nHeight);
+    return CheckProofOfWorkWithHeight(hash, nBits, params, nHeight);
 }
