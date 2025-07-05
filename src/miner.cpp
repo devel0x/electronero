@@ -9,7 +9,8 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <coins.h>
-#include <consensus/consensus.h>
+#include "pow/yespower.h"
+#include "consensus/consensus.h"
 #include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
@@ -130,7 +131,13 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                                 ++hashesDone;
                                 pblock->nNonce = nonce;
-                                uint256 hash = pblock->GetHash();
+                                // uint256 hash = pblock->GetHash(); // legacy SHA256
+                                uint256 hash;
+                                if (pindexPrev->nHeight + 1 >= params.yespowerForkHeight) {
+                                    hash = YespowerHash(*pblock);
+                                } else {
+                                    hash = pblock->GetHash(); // legacy SHA256
+                                }
                                 if (printCount < 10) {
                                     printCount++;
                                     LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
