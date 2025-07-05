@@ -189,7 +189,9 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         LogPrintf("  target = %s\n", bnTarget.ToString());
         return false;
     }
-    
+    LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
+    (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
+    (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
         return CheckYespower(block, bnTarget);
