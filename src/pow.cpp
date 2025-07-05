@@ -235,7 +235,7 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     if(nHeight > 0) {
         CBlock block;
         if (!ReadBlockFromDisk(block, pindex, params)) {
-            LogPrintf("🚨 Failed reading block from disk at height=%d: %s\n", nHeight, e.what());
+            LogPrintf("🚨 Failed reading block from disk at height=%d (likely file missing or corrupt)\n", nHeight);
             return false;
         }
         
