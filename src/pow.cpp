@@ -7,6 +7,7 @@
 
 #include <arith_uint256.h>
 #include <chain.h>
+#include "pow/yespower.h"
 #include "validation.h"      // for cs_main
 #include "logging.h"         // for BCLog and LogPrint
 #include <primitives/block.h>
