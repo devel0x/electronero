@@ -184,8 +184,11 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         LogPrintf("  target = %s\n", bnTarget.ToString());
         return false;
     }
+    uint256 powLimit = (nHeight >= params.yespowerForkHeight)
+                   ? params.powLimitYespower
+                   : params.powLimit;
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
         return false;
 
     if (nHeight >= params.yespowerForkHeight) {
@@ -222,7 +225,6 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
         bool fNegative;
         bool fOverflow;
         arith_uint256 bnTarget;
-    
         bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
         // Check range
         if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
