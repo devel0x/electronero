@@ -196,12 +196,17 @@ bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, c
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
     LOCK(cs_main);
-    CBlockIndex* pindex = ::ChainActive().Tip();
-    CBlockHeader block;
-    if (!ReadBlockFromDisk(block, pindex, params))
+    CBlockIndex* pindex = ::ChainActive().Tip(); // ✅ declare pindex
+    if (!pindex)
         return false;
 
+    CBlock block;
+    if (!ReadBlockFromDisk(block, pindex, params))
+        return false;
+    
     int nHeight = pindex->nHeight + 1;
 
-    return CheckProofOfWorkWithHeight(block, nBits, params, nHeight);
+    // Pass the block header (cast from CBlock) to the height-aware PoW checker
+    CBlockHeader blockHeader = block;
+    return CheckProofOfWorkWithHeight(blockHeader, nBits, params, nHeight);
 }
