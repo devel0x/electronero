@@ -97,10 +97,14 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
-    const int nPastBlocks = 24; // Tuneable
+    const int nPastBlocks = 24;
 
     if (pindexLast->nHeight < nPastBlocks)
-        return UintToArith256(params.powLimit).GetCompact();
+        return UintToArith256(
+            (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+            ? params.powLimitYespower
+            : params.powLimit
+        ).GetCompact();
 
     const CBlockIndex* pindex = pindexLast;
     arith_uint256 pastDifficultyAverage;
@@ -110,7 +114,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
     int64_t lastBlockTime = 0;
 
     for (int i = 0; i < nPastBlocks; ++i) {
-        if (pindex == nullptr)
+        if (!pindex)
             break;
 
         arith_uint256 currentDifficulty = arith_uint256().SetCompact(pindex->nBits);
@@ -138,27 +142,35 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
 
     arith_uint256 newDifficulty = pastDifficultyAverage * actualTimespan / targetTimespan;
 
-    if (newDifficulty > UintToArith256(params.powLimit))
-        newDifficulty = UintToArith256(params.powLimit);
+    arith_uint256 bnPowLimit = UintToArith256(
+        (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+        ? params.powLimitYespower
+        : params.powLimit
+    );
+
+    if (newDifficulty > bnPowLimit)
+        newDifficulty = bnPowLimit;
 
     return newDifficulty.GetCompact();
 }
-
 
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params& params)
 {
     if (params.fPowNoRetargeting)
         return pindexLast->nBits;
 
-    // Limit adjustment step
     int64_t nActualTimespan = pindexLast->GetBlockTime() - nFirstBlockTime;
-    if (nActualTimespan < params.nPowTargetTimespan/4)
-        nActualTimespan = params.nPowTargetTimespan/4;
-    if (nActualTimespan > params.nPowTargetTimespan*4)
-        nActualTimespan = params.nPowTargetTimespan*4;
+    if (nActualTimespan < params.nPowTargetTimespan / 4)
+        nActualTimespan = params.nPowTargetTimespan / 4;
+    if (nActualTimespan > params.nPowTargetTimespan * 4)
+        nActualTimespan = params.nPowTargetTimespan * 4;
 
-    // Retarget
-    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    arith_uint256 bnPowLimit = UintToArith256(
+        (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+        ? params.powLimitYespower
+        : params.powLimit
+    );
+
     arith_uint256 bnNew;
     bnNew.SetCompact(pindexLast->nBits);
     bnNew *= nActualTimespan;
