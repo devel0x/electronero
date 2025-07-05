@@ -229,14 +229,13 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
 
     // Handle genesis block or early chain state
     int nHeight = (pindex ? pindex->nHeight + 1 : 0);
-
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
     (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
     (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     if(nHeight > 0) {
         CBlock block;
         if (!ReadBlockFromDisk(block, pindex, params)) {
-            LogPrintf("🚧 FAILED READ FROM DISK");
+            LogPrintf("🚨 Failed reading block from disk at height=%d: %s\n", nHeight, e.what());
             return false;
         }
         
