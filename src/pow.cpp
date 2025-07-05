@@ -228,6 +228,10 @@ bool CheckProofOfWork(uint256 hash, const CBlockHeader& blockHeader, unsigned in
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
         (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
         (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
+    if (nHeight == 0) {
+        LogPrintf("🧱 Skipping PoW check for genesis block\n");
+        return true;
+    }
     if(nHeight >= params.yespowerForkHeight) {
         return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
     } else {
