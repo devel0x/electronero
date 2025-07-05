@@ -177,7 +177,13 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     arith_uint256 bnTarget;
 
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
-
+    arith_uint256 work = UintToArith256(hash);
+    if (work > bnTarget) {
+        LogPrintf("💥 Block failed SHA256 PoW at height=%d\n", nHeight);
+        LogPrintf("  hash = %s\n", hash.ToString());
+        LogPrintf("  target = %s\n", bnTarget.ToString());
+        return false;
+    }
     // Check range
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
@@ -192,13 +198,6 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
-    arith_uint256 work = UintToArith256(hash);
-    if (work > bnTarget) {
-        LogPrintf("💥 Block failed SHA256 PoW at height=%d\n", nHeight);
-        LogPrintf("  hash = %s\n", hash.ToString());
-        LogPrintf("  target = %s\n", bnTarget.ToString());
-        return false;
-    }
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
     (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
     (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
