@@ -52,9 +52,6 @@ public:
 
     uint256 GetHash() const;
 
-    uint256 GetSHA256PoWHash() const;
-
-
     int64_t GetBlockTime() const
     {
         return (int64_t)nTime;
