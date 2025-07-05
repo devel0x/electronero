@@ -286,6 +286,7 @@ libinterchained_server_a_SOURCES = \
   addrdb.cpp \
   addrman.cpp \
   banman.cpp \
+  pow/yespower.cpp \
   blockencodings.cpp \
   blockfilter.cpp \
   chain.cpp \
@@ -315,7 +316,6 @@ libinterchained_server_a_SOURCES = \
   policy/rbf.cpp \
   policy/settings.cpp \
   pow.cpp \
-  pow/yespower.cpp \
   rest.cpp \
   rpc/blockchain.cpp \
   rpc/mining.cpp \
