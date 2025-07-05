@@ -18,7 +18,9 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
-    // Activate DGW3 from block 100 (for example)
+    LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
+          (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
+    // Activate DGW3 from block 1 (for example)
     if (pindexLast->nHeight + 1 >= params.nDGW3Height) {
         return DarkGravityWave3(pindexLast, params);
     }
@@ -98,7 +100,12 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
 {
     assert(pindexLast != nullptr);
     const int nPastBlocks = 24;
-
+    
+    LogPrintf("💡 DGW3: nHeight=%d returning powLimit %s\n", pindexLast->nHeight + 1,
+        (pindexLast->nHeight + 1 >= params.yespowerForkHeight) ?
+        "Yespower" : "SHA256");
+    arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
     if (pindexLast->nHeight < nPastBlocks)
         return UintToArith256(
             (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
@@ -178,7 +185,10 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
 
     if (bnNew > bnPowLimit)
         bnNew = bnPowLimit;
-
+    
+    LogPrintf("CalculateNextWorkRequired: nBits=%08x, target=%s\n",
+              bnNew.GetCompact(), bnNew.ToString());
+    
     return bnNew.GetCompact();
 }
 
