@@ -201,21 +201,23 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
 {
     LOCK(cs_main);
     CBlockIndex* pindex = ::ChainActive().Tip(); // ✅ declare pindex
-    if (!pindex)
-        LogPrintf("🚧 FAILED TO FETCH PINDEX");
-        return false;
 
-    CBlock block;
-    if (!ReadBlockFromDisk(block, pindex, params))
-        LogPrintf("🚧 FAILED READ FROM DISK");
-        return false;
-    
-    int nHeight = pindex->nHeight + 1;
+    // Handle genesis block or early chain state
+    int nHeight = (pindex ? pindex->nHeight + 1 : 0);
 
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
     (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
     (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
-    // Pass the block header (cast from CBlock) to the height-aware PoW checker
-    CBlockHeader blockHeader = block;
-    return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
+    if(nHeight > 0) {
+        CBlock block;
+        if (!ReadBlockFromDisk(block, pindex, params))
+            LogPrintf("🚧 FAILED READ FROM DISK");
+            return false;
+        
+        // Pass the block header (cast from CBlock) to the height-aware PoW checker
+        CBlockHeader blockHeader = block;
+        return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
+    } else {
+        return UintToArith256(hash) <= bnTarget;
+    }
 }
