@@ -131,11 +131,11 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                                 ++hashesDone;
                                 pblock->nNonce = nonce;
-                                const CBlockIndex* pindexPrev = ::ChainActive().Tip();
+                                int nHeight = ::ChainActive().Height() + 1;
                                 const Consensus::Params& params = Params().GetConsensus();
                                 // uint256 hash = pblock->GetHash(); // legacy SHA256
                                 uint256 hash;
-                                if (pindexPrev->nHeight + 1 >= params.yespowerForkHeight) {
+                                if (nHeight + 1 >= params.yespowerForkHeight) {
                                     hash = YespowerHash(*pblock);
                                 } else {
                                     hash = pblock->GetHash(); // legacy SHA256
