@@ -1149,7 +1149,7 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos, const Consensus::Params& consensusParams, int nHeight)
 {
     block.SetNull();
-
+    
     // Open history file to read
     CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
     if (filein.IsNull())
@@ -1162,9 +1162,14 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     catch (const std::exception& e) {
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
-
+    uint256 hash;
+    if (nHeight >= consensusParams.yespowerForkHeight) {
+        hash = YespowerHash(block);
+    } else {
+        hash = block.GetHash(); // Legacy SHA256
+    }
     // Check the header
-    if (!CheckProofOfWork(block.GetHash(), block, block.nBits, consensusParams, nHeight))
+    if (!CheckProofOfWork(hash, block, block.nBits, consensusParams, nHeight))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
 
     // Signet only: check block solution
