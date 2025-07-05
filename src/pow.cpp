@@ -182,17 +182,11 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
-    if (nHeight >= params.kawpowForkHeight) {
-        // 🔥 Stage 3: KAWPOW (future step)
-        // return CheckKAWPOW(block, bnTarget);
-        return false;
-    } else if (nHeight >= params.yespowerForkHeight) {
-        // ⚡ Stage 2: Yespower
+    if (nHeight >= params.yespowerForkHeight) {
         return CheckYespower(block, bnTarget);
-    } else {
-        // ⛏️ Stage 1: SHA256
-        return UintToArith256(hash) <= bnTarget;
     }
+    
+    return UintToArith256(hash) <= bnTarget;
 }
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
