@@ -227,7 +227,7 @@ bool CheckProofOfWork(uint256 hash, const CBlockHeader& blockHeader, unsigned in
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
         (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
         (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
-    if(nHeight > 0) {
+    if(nHeight >= params.yespowerForkHeight) {
         return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
     } else {
         bool fNegative;
