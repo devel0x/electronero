@@ -169,7 +169,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
-bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
+bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -181,19 +181,16 @@ bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensu
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
-    uint256 hash;
     if (nHeight >= params.kawpowForkHeight) {
-        // 🔥 Stage 3: KAWPOW (placeholder until you add it)
-        hash = GetKAWPOWHash(block); // You'll define this later
+        // 🔥 Stage 3: KAWPOW (future step)
+        // return CheckKAWPOW(block, bnTarget);
     } else if (nHeight >= params.yespowerForkHeight) {
         // ⚡ Stage 2: Yespower
-        hash = YespowerHash(block); // Call your yespower hasher
+        return CheckYespower(block, bnTarget);
     } else {
         // ⛏️ Stage 1: SHA256
-        hash = block.GetHash();
+        return UintToArith256(block.GetHash()) <= bnTarget;
     }
-    LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, block.nBits, hash.ToString());
-    return UintToArith256(hash) <= bnTarget;
 }
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
@@ -208,5 +205,5 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
         return false;
 
     LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
-    return CheckProofOfWorkWithHeight(hash, nBits, params, nHeight);
+    return CheckProofOfWorkWithHeight(block, nBits, params, nHeight);
 }
