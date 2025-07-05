@@ -3399,6 +3399,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
             }
 
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
+            const CBlockIndex* pindex = LookupBlockIndex(pblock->GetHash());
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn, pindex);
             if (status == READ_STATUS_INVALID) {
                 MarkBlockAsReceived(resp.blockhash); // Reset in-flight state in case Misbehaving does not result in a disconnect
