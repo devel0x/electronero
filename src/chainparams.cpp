@@ -68,7 +68,7 @@ public:
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 4;
-        consensus.yespowerForkHeight = 25;
+        consensus.yespowerForkHeight = 30;
         consensus.kawpowForkHeight = 50;
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
