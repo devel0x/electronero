@@ -181,7 +181,15 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     // Check range
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
-
+    
+    arith_uint256 work = UintToArith256(hash);
+    if (work > bnTarget) {
+        LogPrintf("💥 Block failed SHA256 PoW at height=%d\n", nHeight);
+        LogPrintf("  hash = %s\n", hash.ToString());
+        LogPrintf("  target = %s\n", bnTarget.ToString());
+        return false;
+    }
+    
     if (nHeight >= params.yespowerForkHeight) {
         return CheckYespower(block, bnTarget);
     }
