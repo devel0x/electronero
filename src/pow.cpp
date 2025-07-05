@@ -170,7 +170,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
-bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
+bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -185,12 +185,13 @@ bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, c
     if (nHeight >= params.kawpowForkHeight) {
         // 🔥 Stage 3: KAWPOW (future step)
         // return CheckKAWPOW(block, bnTarget);
+        return false;
     } else if (nHeight >= params.yespowerForkHeight) {
         // ⚡ Stage 2: Yespower
         return CheckYespower(block, bnTarget);
     } else {
         // ⛏️ Stage 1: SHA256
-        return UintToArith256(block.GetHash()) <= bnTarget;
+        return UintToArith256(hash) <= bnTarget;
     }
 }
 
@@ -209,5 +210,5 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
 
     // Pass the block header (cast from CBlock) to the height-aware PoW checker
     CBlockHeader blockHeader = block;
-    return CheckProofOfWorkWithHeight(blockHeader, nBits, params, nHeight);
+    return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
 }
