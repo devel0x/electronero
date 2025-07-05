@@ -420,7 +420,7 @@ crypto_libinterchained_crypto_base_a_SOURCES = \
   crypto/siphash.h \
   crypto/yespower/yespower-opt.c \
   crypto/yespower/sha256.c \
-  crypto/yespower/sysendian.c
+  crypto/yespower/sysendian.c 
 
 if USE_ASM
 crypto_libinterchained_crypto_base_a_SOURCES += crypto/sha256_sse4.cpp
