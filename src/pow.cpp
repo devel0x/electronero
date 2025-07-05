@@ -169,19 +169,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     return bnNew.GetCompact();
 }
 
-bool CheckYespower(uint256 hash, const arith_uint256& target)
-{
-    // TODO: Implement Yespower verification here
-    return UintToArith256(hash) <= target;
-}
-
-bool CheckKAWPOW(uint256 hash, const arith_uint256& target)
-{
-    // TODO: Implement KAWPOW verification here
-    return UintToArith256(hash) <= target;
-}
-
-bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensus::Params& params, int nHeight)
+bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -193,16 +181,19 @@ bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensu
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
+    uint256 hash;
     if (nHeight >= params.kawpowForkHeight) {
-        // 🔥 Stage 3: KAWPOW
-        return CheckKAWPOW(hash, bnTarget);
+        // 🔥 Stage 3: KAWPOW (placeholder until you add it)
+        hash = GetKAWPOWHash(block); // You'll define this later
     } else if (nHeight >= params.yespowerForkHeight) {
         // ⚡ Stage 2: Yespower
-        return CheckYespower(hash, bnTarget);
+        hash = YespowerHash(block); // Call your yespower hasher
     } else {
-        // ⛏️ Stage 1: SHA256 (original PoW)
-        return UintToArith256(hash) <= bnTarget;
+        // ⛏️ Stage 1: SHA256
+        hash = block.GetHash();
     }
+    LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, block.nBits, hash.ToString());
+    return UintToArith256(hash) <= bnTarget;
 }
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
@@ -210,6 +201,12 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     // Fallback for legacy code: assume current height
     LOCK(cs_main);
     int nHeight = ::ChainActive().Height() + 1;
+    // You need the full block header to hash
+    CBlockIndex* pindex = ::ChainActive().Tip();
+    CBlockHeader block;
+    if (!ReadBlockFromDisk(block, pindex, params))
+        return false;
+
     LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
-    return CheckProofOfWorkWithHeight(hash, nBits, params, nHeight);
+    return CheckProofOfWorkWithHeight(block, nBits, params, nHeight);
 }
