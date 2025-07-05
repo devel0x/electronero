@@ -3347,8 +3347,14 @@ static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, int nHeight, bool fCheckPOW = true)
 {
+    uint256 hash;
+    if (nHeight >= consensusParams.yespowerForkHeight) {
+        hash = YespowerHash(block);
+    } else {
+        hash = block.GetHash(); // SHA256
+    }
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block, block.nBits, consensusParams, nHeight))
+    if (fCheckPOW && !CheckProofOfWork(hash, block, block.nBits, consensusParams, nHeight))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
 
     return true;
