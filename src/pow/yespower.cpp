@@ -4,6 +4,7 @@
 #include "uint256.h"
 #include "arith_uint256.h"
 #include "pow.h"
+#include "pow/yespower.h"
 #include "crypto/yespower/yespower.h"
 
 uint256 YespowerHash(const CBlockHeader& block)
