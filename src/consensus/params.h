@@ -47,6 +47,7 @@ struct Params {
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
     int nDGW3Height;
+    uint256 powLimitYespower;
     int yespowerForkHeight;
     int kawpowForkHeight;
     /* Block hash that is excepted from BIP16 enforcement */
