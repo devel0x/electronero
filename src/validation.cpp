@@ -3644,10 +3644,12 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
 bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
+
     // Check for duplicate
     uint256 hash = block.GetHash();
     BlockMap::iterator miSelf = m_block_index.find(hash);
-    CBlockIndex *pindex = nullptr;
+    CBlockIndex* pindex = nullptr;
+
     if (hash != chainparams.GetConsensus().hashGenesisBlock) {
         if (miSelf != m_block_index.end()) {
             // Block header is already known.
@@ -3659,12 +3661,6 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
                 return state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate");
             }
             return true;
-        }
-        int nHeight = (hash == chainparams.GetConsensus().hashGenesisBlock) ? 0 : pindexPrev->nHeight + 1;
-
-        if (!CheckBlockHeader(block, state, chainparams.GetConsensus(), nHeight)) {
-            LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
-            return false;
         }
 
         // Get prev block index
@@ -3679,33 +3675,21 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             LogPrintf("ERROR: %s: prev block invalid\n", __func__);
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
-        if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime()))
-            return error("%s: Consensus::ContextualCheckBlockHeader: %s, %s", __func__, hash.ToString(), state.ToString());
 
-        /* Determine if this block descends from any block which has been found
-         * invalid (m_failed_blocks), then mark pindexPrev and any blocks between
-         * them as failed. For example:
-         *
-         *                D3
-         *              /
-         *      B2 - C2
-         *    /         \
-         *  A             D2 - E2 - F2
-         *    \
-         *      B1 - C1 - D1 - E1
-         *
-         * In the case that we attempted to reorg from E1 to F2, only to find
-         * C2 to be invalid, we would mark D2, E2, and F2 as BLOCK_FAILED_CHILD
-         * but NOT D3 (it was not in any of our candidate sets at the time).
-         *
-         * In any case D3 will also be marked as BLOCK_FAILED_CHILD at restart
-         * in LoadBlockIndex.
-         */
+        // ✅ Now calculate height using pindexPrev
+        int nHeight = pindexPrev->nHeight + 1;
+
+        if (!CheckBlockHeader(block, state, chainparams.GetConsensus(), nHeight)) {
+            LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
+            return false;
+        }
+
+        if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime())) {
+            return error("%s: Consensus::ContextualCheckBlockHeader: %s, %s", __func__, hash.ToString(), state.ToString());
+        }
+
+        // Check if this block descends from a known invalid block
         if (!pindexPrev->IsValid(BLOCK_VALID_SCRIPTS)) {
-            // The above does not mean "invalid": it checks if the previous block
-            // hasn't been validated up to BLOCK_VALID_SCRIPTS. This is a performance
-            // optimization, in the common case of adding a new block to the tip,
-            // we don't need to iterate over the failed blocks list.
             for (const CBlockIndex* failedit : m_failed_blocks) {
                 if (pindexPrev->GetAncestor(failedit->nHeight) == failedit) {
                     assert(failedit->nStatus & BLOCK_FAILED_VALID);
@@ -3721,6 +3705,7 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             }
         }
     }
+
     if (pindex == nullptr)
         pindex = AddToBlockIndex(block);
 
