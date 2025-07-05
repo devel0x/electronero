@@ -278,8 +278,13 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 dummyHeader.hashMerkleRoot = pindexNew->hashMerkleRoot;
                 dummyHeader.nVersion = pindexNew->nVersion;
                 dummyHeader.nNonce = pindexNew->nNonce;
-                
-                if (!CheckProofOfWork(pindexNew->GetBlockHash(), dummyHeader, pindexNew->nBits, consensusParams, pindexNew->nHeight)) {
+                uint256 powHash;
+                if (pindexNew->nHeight >= consensusParams.yespowerForkHeight) {
+                    powHash = dummyHeader.YespowerHash();
+                } else {
+                    powHash = pindexNew->GetBlockHash();
+                }
+                if (!CheckProofOfWork(powHash, dummyHeader, pindexNew->nBits, consensusParams, pindexNew->nHeight)) {
                     return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
                 }
                 pcursor->Next();
