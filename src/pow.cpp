@@ -193,10 +193,10 @@ bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensu
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
-    if (nHeight >= params.KawpowForkHeight) {
+    if (nHeight >= params.kawpowForkHeight) {
         // 🔥 Stage 3: KAWPOW
         return CheckKAWPOW(hash, bnTarget);
-    } else if (nHeight >= params.YespowerForkHeight) {
+    } else if (nHeight >= params.yespowerForkHeight) {
         // ⚡ Stage 2: Yespower
         return CheckYespower(hash, bnTarget);
     } else {
@@ -211,5 +211,5 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     LOCK(cs_main);
     int nHeight = ::ChainActive().Height() + 1;
     LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
-    return CheckProofOfWorkWithHeight(hash, nBits, params, height);
+    return CheckProofOfWorkWithHeight(hash, nBits, params, nHeight);
 }
