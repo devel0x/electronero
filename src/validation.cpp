@@ -10,7 +10,7 @@
 #include <chainparams.h>
 #include <checkqueue.h>
 #include <memory>
-#include "crypto/yespower/yespower.h"
+#include "pow/yespower.h"
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/tx_check.h>
