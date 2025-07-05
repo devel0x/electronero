@@ -121,7 +121,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     CChainParams chainparams(Params());
     int height = ::ChainActive().Height() + 1; // next block height
     
-    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWorkWithHeight(block, block.nBits, chainparams.GetConsensus(), height) && !ShutdownRequested()) {
+    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWorkWithHeight(block.GetHash(), block, block.nBits, chainparams.GetConsensus(), height) && !ShutdownRequested()) {
         ++block.nNonce;
         --max_tries;
     }
