@@ -210,14 +210,23 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     if(nHeight > 0) {
         CBlock block;
-        if (!ReadBlockFromDisk(block, pindex, params))
+        if (!ReadBlockFromDisk(block, pindex, params)) {
             LogPrintf("🚧 FAILED READ FROM DISK");
             return false;
+        }
         
         // Pass the block header (cast from CBlock) to the height-aware PoW checker
         CBlockHeader blockHeader = block;
         return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
     } else {
+        bool fNegative;
+        bool fOverflow;
+        arith_uint256 bnTarget;
+    
+        bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
+        // Check range
+        if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
+            return false;
         return UintToArith256(hash) <= bnTarget;
     }
 }
