@@ -7,6 +7,12 @@
 
 #include <hash.h>
 #include <tinyformat.h>
+#include "pow/yespower.h"
+
+uint256 CBlockHeader::YespowerHash() const 
+{
+    return YespowerHash(*this);
+}
 
 uint256 CBlockHeader::GetHash() const
 {
