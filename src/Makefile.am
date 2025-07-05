@@ -459,6 +459,7 @@ libinterchained_consensus_a_SOURCES = \
   consensus/validation.h \
   hash.cpp \
   hash.h \
+  pow/yespower.cpp \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
