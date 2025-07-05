@@ -191,10 +191,10 @@ bool CheckProofOfWorkWithHeight(uint256 hash, unsigned int nBits, const Consensu
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
         return false;
 
-    if (nHeight >= params.nKawpowForkHeight) {
+    if (nHeight >= params.KawpowForkHeight) {
         // 🔥 Stage 3: KAWPOW
         return CheckKAWPOW(hash, bnTarget);
-    } else if (nHeight >= params.nYespowerForkHeight) {
+    } else if (nHeight >= params.YespowerForkHeight) {
         // ⚡ Stage 2: Yespower
         return CheckYespower(hash, bnTarget);
     } else {
