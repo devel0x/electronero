@@ -11,7 +11,7 @@
 
 uint256 CBlockHeader::YespowerHash() const 
 {
-    return YespowerHash(*this);
+    return ::YespowerHash(*this);
 }
 
 uint256 CBlockHeader::GetHash() const
