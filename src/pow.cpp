@@ -106,7 +106,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         "Yespower" : "SHA256");
     arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
     LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
-    if (pindexLast->nHeight < nPastBlocks)
+    if (pindexLast->nHeight > 0 && pindexLast->mHeight < nPastBlocks)
         return UintToArith256(
             (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
             ? params.powLimitYespower
