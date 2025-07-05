@@ -3660,8 +3660,9 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             }
             return true;
         }
+        int nHeight = (hash == chainparams.GetConsensus().hashGenesisBlock) ? 0 : pindexPrev->nHeight + 1;
 
-        if (!CheckBlockHeader(block, state, chainparams.GetConsensus(), pindex->nHeight)) {
+        if (!CheckBlockHeader(block, state, chainparams.GetConsensus(), nHeight)) {
             LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
