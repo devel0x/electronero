@@ -195,15 +195,13 @@ bool CheckProofOfWorkWithHeight(const CBlockHeader& block, unsigned int nBits, c
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
-    // Fallback for legacy code: assume current height
     LOCK(cs_main);
-    int nHeight = ::ChainActive().Height() + 1;
-    // You need the full block header to hash
     CBlockIndex* pindex = ::ChainActive().Tip();
     CBlockHeader block;
     if (!ReadBlockFromDisk(block, pindex, params))
         return false;
 
-    LogPrint(BCLog::POW, "CheckPoW height=%d nBits=%08x hash=%s\n", nHeight, nBits, hash.ToString());
+    int nHeight = pindex->nHeight + 1;
+
     return CheckProofOfWorkWithHeight(block, nBits, params, nHeight);
 }
