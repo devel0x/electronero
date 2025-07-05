@@ -193,7 +193,8 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         return CheckYespower(block, bnTarget);
     }
     
-    return UintToArith256(hash) <= bnTarget;
+    uint256 b_hash = block.GetHash(); // SHA256
+    return UintToArith256(b_hash) <= bnTarget;
 }
 
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
