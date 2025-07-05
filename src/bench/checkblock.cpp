@@ -44,7 +44,7 @@ static void DeserializeAndCheckBlockTest(benchmark::Bench& bench)
         assert(rewound);
 
         BlockValidationState validationState;
-        bool checked = CheckBlock(block, validationState, chainParams->GetConsensus());
+        bool checked = CheckBlock(block, validationState, chainParams->GetConsensus(), 0);
         assert(checked);
     });
 }
