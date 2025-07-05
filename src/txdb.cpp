@@ -270,10 +270,18 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nNonce         = diskindex.nNonce;
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
-
-                if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams))
+                
+                CBlockHeader dummyHeader;
+                dummyHeader.nBits = pindexNew->nBits;
+                dummyHeader.nTime = pindexNew->nTime;
+                dummyHeader.hashPrevBlock = pindexNew->pprev ? pindexNew->pprev->GetBlockHash() : uint256();
+                dummyHeader.hashMerkleRoot = pindexNew->hashMerkleRoot;
+                dummyHeader.nVersion = pindexNew->nVersion;
+                dummyHeader.nNonce = pindexNew->nNonce;
+                
+                if (!CheckProofOfWork(pindexNew->GetBlockHash(), dummyHeader, pindexNew->nBits, consensusParams, pindexNew->nHeight)) {
                     return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
-
+                }
                 pcursor->Next();
             } else {
                 return error("%s: failed to read value", __func__);
