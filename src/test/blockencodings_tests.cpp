@@ -194,7 +194,7 @@ BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 
         CBlock block3;
         PartiallyDownloadedBlock partialBlockCopy = partialBlock;
-        const CBlockIndex* pindex = nullptr
+        const CBlockIndex* pindex = nullptr;
         BOOST_CHECK(partialBlock.FillBlock(block3, {block.vtx[0]}, pindex) == READ_STATUS_OK);
         BOOST_CHECK_EQUAL(block.GetHash().ToString(), block3.GetHash().ToString());
         BOOST_CHECK_EQUAL(block.hashMerkleRoot.ToString(), BlockMerkleRoot(block3, &mutated).ToString());
