@@ -191,6 +191,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     }
     
     if (nHeight >= params.yespowerForkHeight) {
+        LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
         return CheckYespower(block, bnTarget);
     }
     
