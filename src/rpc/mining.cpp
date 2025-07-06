@@ -1015,8 +1015,7 @@ static RPCHelpMan submitblock()
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not start with a coinbase");
     }
     int nHeight = ::ChainActive().Height() + 1;
-    uint256 block_submitted_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
-    uint256 hash = block_submitted_hash;
+    uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
     {
         LOCK(cs_main);
         const CBlockIndex* pindex = LookupBlockIndex(hash);
@@ -1038,10 +1037,8 @@ static RPCHelpMan submitblock()
         }
     }
 
-    int nHeight = ::ChainActive().Height() + 1;
-    uint256 block_expected_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
     bool new_block;
-    auto sc = std::make_shared<submitblock_StateCatcher>(block_expected_hash);
+    auto sc = std::make_shared<submitblock_StateCatcher>(hash);
     RegisterSharedValidationInterface(sc);
     bool accepted = EnsureChainman(request.context).ProcessNewBlock(Params(), blockptr, /* fForceProcessing */ true, /* fNewBlock */ &new_block);
     UnregisterSharedValidationInterface(sc);
