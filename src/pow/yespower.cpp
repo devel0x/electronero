@@ -20,8 +20,8 @@ static const yespower_params_t yespower_default = {
 // Interchained optimized (post-fork)
 static const yespower_params_t yespower_interchained = {
     .version = YESPOWER_1_0,
-    .N = 1024,
-    .r = 4,
+    .N = 2048,
+    .r = 8,
     .pers = NULL,
     .perslen = 0
 };
