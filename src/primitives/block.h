@@ -52,7 +52,7 @@ public:
 
     uint256 GetHash() const;
 
-    uint256 YespowerHash() const;
+    uint256 YespowerHash(int height) const;
 
     int64_t GetBlockTime() const
     {
