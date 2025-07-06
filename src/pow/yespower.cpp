@@ -18,12 +18,16 @@ static const yespower_params_t yespower_default = {
 };
 
 // Interchained optimized (post-fork)
+static const uint8_t interchained_pers[] = {
+    'I','n','t','e','r','c','h','a','i','n','e','d'
+};
+
 static const yespower_params_t yespower_interchained = {
     .version = YESPOWER_1_0,
-    .N = 1024, // Faster... YESPOWER!!!
-    .r = 4,    // We will also test with r = 4... 
-    .pers = "Interchained",
-    .perslen = 12
+    .N = 1024,
+    .r = 4,
+    .pers = interchained_pers,
+    .perslen = sizeof(interchained_pers) // = 12
 };
 
 // Legacy yespower 
