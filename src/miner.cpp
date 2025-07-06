@@ -94,6 +94,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     }
 
                     CBlock block = originalBlock;
+                    block.nTime = originalBlock.nTime; // ✅ Patch: use correct timestamp
+
                     CMutableTransaction coinbaseTx(*block.vtx[0]);
                     coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
                     block.vtx[0] = MakeTransactionRef(coinbaseTx);
