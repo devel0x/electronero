@@ -80,8 +80,11 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 continue;
             }
 
+            // 🔒 Make a safe copy of just the block to avoid capturing unique_ptr
+            CBlock originalBlock = pblocktemplate->block;
+
             for (int threadId = 0; threadId < nThreads; ++threadId) {
-                std::thread([=, &mempool]() {
+                std::thread([=, &mempool, originalBlock]() mutable {
                     LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
                     static thread_local yespower_local_t shared;
                     static thread_local bool initialized = false;
@@ -90,7 +93,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         initialized = true;
                     }
 
-                    CBlock block = pblocktemplate->block;
+                    CBlock block = originalBlock;
                     CMutableTransaction coinbaseTx(*block.vtx[0]);
                     coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
                     block.vtx[0] = MakeTransactionRef(coinbaseTx);
@@ -111,7 +114,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
-                            ? YespowerHash(block, &shared,nHeight)
+                            ? YespowerHash(block, &shared, nHeight)
                             : block.GetHash();
 
                         if (printCount < 10) {
