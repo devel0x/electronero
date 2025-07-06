@@ -125,7 +125,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     const Consensus::Params& consensusParams = chainparams.GetConsensus();
     
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
-        uint256 powHash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block) : block.GetHash();
+        uint256 powHash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
         if (CheckProofOfWorkWithHeight(powHash, block, block.nBits, consensusParams, height)) {
             break;
         }
@@ -143,7 +143,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     if (!chainman.ProcessNewBlock(chainparams, shared_pblock, true, nullptr)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
-    block_hash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block) : block.GetHash();
+    block_hash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
     return true;
 }
 
@@ -684,7 +684,10 @@ static RPCHelpMan getblocktemplate()
             if (!DecodeHexBlk(block, dataval.get_str()))
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
 
-            uint256 hash = block.GetHash();
+            int nHeight = ::ChainActive().Height() + 1;
+            uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
+                ? YespowerHash(block, nHeight)
+                : block.GetHash();
             const CBlockIndex* pindex = LookupBlockIndex(hash);
             if (pindex) {
                 if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
@@ -976,7 +979,9 @@ public:
 
 protected:
     void BlockChecked(const CBlock& block, const BlockValidationState& stateIn) override {
-        if (block.GetHash() != hash)
+        int nHeight = ::ChainActive().Height() + 1;
+        uint256 block_expected_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+        if (block_expected_hash != hash)
             return;
         found = true;
         state = stateIn;
@@ -1009,8 +1014,9 @@ static RPCHelpMan submitblock()
     if (block.vtx.empty() || !block.vtx[0]->IsCoinBase()) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not start with a coinbase");
     }
-
-    uint256 hash = block.GetHash();
+    int nHeight = ::ChainActive().Height() + 1;
+    uint256 block_submitted_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+    uint256 hash = block_submitted_hash;
     {
         LOCK(cs_main);
         const CBlockIndex* pindex = LookupBlockIndex(hash);
@@ -1032,8 +1038,10 @@ static RPCHelpMan submitblock()
         }
     }
 
+    int nHeight = ::ChainActive().Height() + 1;
+    uint256 block_expected_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
     bool new_block;
-    auto sc = std::make_shared<submitblock_StateCatcher>(block.GetHash());
+    auto sc = std::make_shared<submitblock_StateCatcher>(block_expected_hash);
     RegisterSharedValidationInterface(sc);
     bool accepted = EnsureChainman(request.context).ProcessNewBlock(Params(), blockptr, /* fForceProcessing */ true, /* fNewBlock */ &new_block);
     UnregisterSharedValidationInterface(sc);
