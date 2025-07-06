@@ -133,7 +133,6 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                                 pblock->nNonce = nonce;
                                 int nHeight = ::ChainActive().Height() + 1;
                                 const Consensus::Params& params = Params().GetConsensus();
-                                // uint256 hash = pblock->GetHash(); // legacy SHA256
                                 uint256 hash;
                                 if (nHeight + 1 >= params.yespowerForkHeight) {
                                     hash = YespowerHash(*pblock);
@@ -284,10 +283,18 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand())
         pblock->nVersion = gArgs.GetArg("-blockversion", pblock->nVersion);
-
-    pblock->nTime = GetAdjustedTime();
+    
+    const Consensus::Params& params = Params().GetConsensus();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
-
+    const int64_t now = GetAdjustedTime();
+    const int64_t safeTime = std::max(nMedianTimePast + 1, now);
+    int nHeight = ::ChainActive().Height() + 1;
+    if (nHeight >= params.difficultyForkHeight) {
+        pblock->nTime = std::min(safeTime, nMedianTimePast + 20 * 60);
+    } else {
+        pblock->nTime = now; // legacy behavior
+    }
+    LogPrintf("⏱️ Block time set at height=%d: nTime=%d, MTP=%d, Now=%d\n", nHeight, pblock->nTime, nMedianTimePast, now);
     nLockTimeCutoff = (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST)
                        ? nMedianTimePast
                        : pblock->GetBlockTime();
