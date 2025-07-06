@@ -3539,18 +3539,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.GetBlockTime() <= nMedianTimePast)
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
     
-    // Clamp: For blocks after fork height, restrict future time to MTP + 30 minutes
-    if (nHeight >= consensusParams.difficultyForkHeight) {
-        const int64_t clampLimit = nMedianTimePast + 66 * 60; // 66 minutes
-        if (block.GetBlockTime() > clampLimit) {
-            return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", 
-                strprintf("⛔️ Block timestamp too far in future: nTime=%d > MTP+66min=%d", block.GetBlockTime(), clampLimit));
-        }
-    } else {
-        // Legacy max-future limit for pre-fork blocks
-        if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
-            return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
-    }
+    // Legacy max-future limit for pre-fork blocks
+    if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
+        return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
 
     // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
     // check for version 2, 3 and 4 upgrades
