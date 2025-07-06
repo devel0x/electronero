@@ -36,11 +36,12 @@ uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int he
         ? &yespower_interchained
         : &yespower_default;
 
-    if (yespower_hash(shared, (const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash) != 0)
+    if (yespower(shared, (const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash) != 0)
         abort();
 
     return hash;
 }
+
 
 // Used in CheckProofOfWork() (slow path)
 bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int height)
