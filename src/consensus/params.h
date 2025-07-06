@@ -50,6 +50,7 @@ struct Params {
     uint256 powLimitYespower;
     int yespowerForkHeight;
     int kawpowForkHeight;
+    int difficultyForkHeight;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
     /** Block height and hash at which BIP34 becomes active */
