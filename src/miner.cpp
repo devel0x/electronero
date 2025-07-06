@@ -84,7 +84,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
             CBlock originalBlock = pblocktemplate->block;
 
             for (int threadId = 0; threadId < nThreads; ++threadId) {
-                std::thread([=, &mempool, originalBlock]() mutable {
+                std::thread([=, &mempool]() mutable {
                     LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
                     static thread_local yespower_local_t shared;
                     static thread_local bool initialized = false;
