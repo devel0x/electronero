@@ -407,7 +407,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     const Consensus::Params& params = Params().GetConsensus();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
     const int64_t now = GetAdjustedTime();
-    pblock->nTime = now; // legacy behavior
+    const int64_t safeTime = std::max(nMedianTimePast + 1, now);
+    if (nHeight >= params.difficultyForkHeight) {
+        pblock->nTime = std::min(safeTime, nMedianTimePast + 20 * 60);
+    } else {
+        pblock->nTime = now; // legacy behavior
+    }
     LogPrintf("⏱️ Block time set at height=%d: nTime=%d, MTP=%d, Now=%d\n", nHeight, pblock->nTime, nMedianTimePast, now);
     nLockTimeCutoff = (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST)
                        ? nMedianTimePast
