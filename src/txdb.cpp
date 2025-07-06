@@ -280,7 +280,7 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 dummyHeader.nNonce = pindexNew->nNonce;
                 uint256 powHash;
                 if (pindexNew->nHeight >= consensusParams.yespowerForkHeight) {
-                    powHash = dummyHeader.YespowerHash();
+                    powHash = dummyHeader.YespowerHash(pindexNew->nHeight);
                 } else {
                     powHash = pindexNew->GetBlockHash();
                 }
