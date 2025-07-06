@@ -5,7 +5,6 @@
 #include "arith_uint256.h"
 #include "pow.h"
 #include "pow/yespower.h"
-#include "crypto/yespower/yespower.h"
 #include "hash.h"
 #include "chainparams.h" // Needed for Params()
 
