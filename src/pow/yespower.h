@@ -7,6 +7,7 @@
 #include "primitives/block.h"
 #include "crypto/yespower/yespower.h"
 
+uint256 YespowerHash(const CBlockHeader& block);
 uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int height);
 bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int height);
 
