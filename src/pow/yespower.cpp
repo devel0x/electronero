@@ -49,7 +49,7 @@ uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int he
 {
     uint256 hash;
     const Consensus::Params& params = Params().GetConsensus();
-    const yespower_params_t* algo = (height >= 195)
+    const yespower_params_t* algo = (height >= 1)
         ? &yespower_interchained
         : &yespower_default;
 
@@ -65,7 +65,7 @@ bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int
 {
     uint256 hash;
     const Consensus::Params& params = Params().GetConsensus();
-    const yespower_params_t* algo = (height >= 195)
+    const yespower_params_t* algo = (height >= 1)
         ? &yespower_interchained
         : &yespower_default;
 
