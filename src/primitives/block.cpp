@@ -9,9 +9,9 @@
 #include <tinyformat.h>
 #include "pow/yespower.h"
 
-uint256 CBlockHeader::YespowerHash() const 
-{
-    return ::YespowerHash(*this);
+
+uint256 CBlockHeader::YespowerHash(int height) const {
+    return ::YespowerHash(*this, height);
 }
 
 uint256 CBlockHeader::GetHash() const
