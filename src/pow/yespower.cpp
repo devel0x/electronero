@@ -23,7 +23,7 @@ static const yespower_params_t yespower_interchained = {
     .N = 1024, // Faster... YESPOWER!!!
     .r = 4,    // We will also test with r = 4... 
     .pers = (const uint8_t *)"Interchained",
-    .perslen = 12
+    .perslen = 13
 };
 
 // Legacy yespower 
@@ -45,7 +45,7 @@ uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int he
 {
     uint256 hash;
     const Consensus::Params& params = Params().GetConsensus();
-    const yespower_params_t* algo = (height >= params.difficultyForkHeight)
+    const yespower_params_t* algo = (height >= 195)
         ? &yespower_interchained
         : &yespower_default;
 
@@ -61,7 +61,7 @@ bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int
 {
     uint256 hash;
     const Consensus::Params& params = Params().GetConsensus();
-    const yespower_params_t* algo = (height >= params.difficultyForkHeight)
+    const yespower_params_t* algo = (height >= 195)
         ? &yespower_interchained
         : &yespower_default;
 
