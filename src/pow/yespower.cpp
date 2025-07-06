@@ -21,7 +21,7 @@ static const yespower_params_t yespower_default = {
 static const yespower_params_t yespower_interchained = {
     .version = YESPOWER_1_0,
     .N = 1024,
-    .r = 32,
+    .r = 8,
     .pers = NULL,
     .perslen = 0
 };
