@@ -3539,9 +3539,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.GetBlockTime() <= nMedianTimePast)
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
     
-    // Clamp: For blocks after fork height, restrict future time to MTP + 20 minutes
+    // Clamp: For blocks after fork height, restrict future time to MTP + 30 minutes
     if (nHeight >= consensusParams.difficultyForkHeight) {
-        const int64_t clampLimit = nMedianTimePast + 20 * 60; // 20 minutes
+        const int64_t clampLimit = nMedianTimePast + 30 * 60; // 30 minutes
         if (block.GetBlockTime() > clampLimit) {
             return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", 
                 strprintf("⛔️ Block timestamp too far in future: nTime=%d > MTP+20min=%d", block.GetBlockTime(), clampLimit));
