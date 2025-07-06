@@ -3544,7 +3544,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         const int64_t clampLimit = nMedianTimePast + 66 * 60; // 66 minutes
         if (block.GetBlockTime() > clampLimit) {
             return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", 
-                strprintf("⛔️ Block timestamp too far in future: nTime=%d > MTP+20min=%d", block.GetBlockTime(), clampLimit));
+                strprintf("⛔️ Block timestamp too far in future: nTime=%d > MTP+66min=%d", block.GetBlockTime(), clampLimit));
         }
     } else {
         // Legacy max-future limit for pre-fork blocks
