@@ -7,6 +7,7 @@
 #include "pow/yespower.h"
 #include "hash.h"
 #include "chainparams.h" // Needed for Params()
+#include "validation.h"  // for ChainActive()
 
 // Legacy default (SHA256 height)
 static const yespower_params_t yespower_default = {
