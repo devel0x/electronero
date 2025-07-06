@@ -1164,7 +1164,7 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     }
     uint256 hash;
     if (nHeight >= consensusParams.yespowerForkHeight) {
-        hash = YespowerHash(block);
+        hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // Legacy SHA256
     }
@@ -3355,7 +3355,7 @@ static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& st
 {
     uint256 hash;
     if (nHeight >= consensusParams.yespowerForkHeight) {
-        hash = YespowerHash(block);
+        hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // SHA256
     }
