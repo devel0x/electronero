@@ -110,8 +110,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         block.nNonce = nonce;
 
                         int nHeight = ::ChainActive().Height() + 1;
-                        uint256 hash = (nHeight + 1 >= Params().GetConsensus().yespowerForkHeight)
-                            ? YespowerHash(block, &shared)
+                        uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
+                            ? YespowerHash(block, &shared,nHeight)
                             : block.GetHash();
 
                         if (printCount < 10) {
