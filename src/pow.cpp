@@ -216,7 +216,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
 
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
-        return CheckYespower(block, bnTarget);
+        return CheckYespower(block, bnTarget, nHeight);
     } else {
         uint256 b_hash = block.GetHash(); // SHA256
         return UintToArith256(b_hash) <= bnTarget;
