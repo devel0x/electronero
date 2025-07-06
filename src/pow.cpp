@@ -156,8 +156,9 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty > bnPowLimit)
+    if (newDifficulty > bnPowLimit) { 
         newDifficulty = bnPowLimit;
+    }
 
     return newDifficulty.GetCompact();
 }
