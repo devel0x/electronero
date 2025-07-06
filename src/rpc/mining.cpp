@@ -6,6 +6,7 @@
 #include <amount.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <pow/yespower.h>
 #include <consensus/consensus.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
@@ -119,9 +120,15 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     }
 
     CChainParams chainparams(Params());
-    int height = ::ChainActive().Height() + 1; // next block height
     
-    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWorkWithHeight(block.GetHash(), block, block.nBits, chainparams.GetConsensus(), height) && !ShutdownRequested()) {
+    int height = ::ChainActive().Height() + 1; // next block height
+    const Consensus::Params& consensusParams = chainparams.GetConsensus();
+    
+    while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
+        uint256 powHash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block) : block.GetHash();
+        if (CheckProofOfWorkWithHeight(powHash, block, block.nBits, consensusParams, height)) {
+            break;
+        }
         ++block.nNonce;
         --max_tries;
     }
@@ -136,8 +143,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     if (!chainman.ProcessNewBlock(chainparams, shared_pblock, true, nullptr)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
-
-    block_hash = block.GetHash();
+    block_hash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block) : block.GetHash();
     return true;
 }
 
