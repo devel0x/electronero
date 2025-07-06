@@ -22,8 +22,8 @@ static const yespower_params_t yespower_interchained = {
     .version = YESPOWER_1_0,
     .N = 1024, // Faster... YESPOWER!!!
     .r = 4,    // We will also test with r = 4... 
-    .pers = (const uint8_t *)"Interchained",
-    .perslen = 13
+    .pers = "Interchained",
+    .perslen = 12
 };
 
 // Legacy yespower 
