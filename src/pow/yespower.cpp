@@ -26,6 +26,21 @@ static const yespower_params_t yespower_interchained = {
     .perslen = 12
 };
 
+// Legacy yespower 
+uint256 YespowerHash(const CBlockHeader& block)
+{
+    static thread_local yespower_local_t shared;
+    static thread_local bool initialized = false;
+
+    if (!initialized) {
+        yespower_init_local(&shared);
+        initialized = true;
+    }
+
+    int height = ::ChainActive().Height() + 1;
+    return YespowerHash(block, &shared, height);
+}
+
 // Optimized mining version with height and thread-local context
 uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int height)
 {
