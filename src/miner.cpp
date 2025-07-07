@@ -82,7 +82,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
             // 🔒 Make a safe copy of just the block to avoid capturing unique_ptr
             CBlock originalBlock = pblocktemplate->block;
-
+            LogPrintf("🧾 Block includes %d transactions\n", originalBlock.vtx.size() - 1);
+            
             for (int threadId = 0; threadId < nThreads; ++threadId) {
                 std::thread([=, &mempool]() mutable {
                     LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
@@ -94,7 +95,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     }
 
                     CBlock block = originalBlock;
-                    block.nTime = originalBlock.nTime; // ✅ Patch: use correct timestamp
+                    block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
                     CMutableTransaction coinbaseTx(*block.vtx[0]);
                     coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
@@ -113,7 +114,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                         ++hashesDone;
                         block.nNonce = nonce;
-                        block.nTime = originalBlock.nTime; 
+                        block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
