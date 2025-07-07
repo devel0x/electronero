@@ -158,6 +158,8 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
     if (newDifficulty > bnPowLimit) { 
         newDifficulty = bnPowLimit;
     }
+    
+    LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
     return newDifficulty.GetCompact();
 }
@@ -199,8 +201,8 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     bool fOverflow;
     arith_uint256 bnTarget;
     
-    LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d returning powLimit %s\n", nextHeight,
-        (nextHeight >= params.yespowerForkHeight) ?
+    LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d returning powLimit %s\n", nHeight,
+        (nHeight >= params.yespowerForkHeight) ?
         "Yespower" : "SHA256");
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
     arith_uint256 work = UintToArith256(hash);
