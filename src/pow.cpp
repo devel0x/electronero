@@ -198,11 +198,14 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     bool fNegative;
     bool fOverflow;
     arith_uint256 bnTarget;
-
+    
+    LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d returning powLimit %s\n", nextHeight,
+        (nextHeight >= params.yespowerForkHeight) ?
+        "Yespower" : "SHA256");
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
     arith_uint256 work = UintToArith256(hash);
     if (work > bnTarget) {
-        LogPrintf("💥 Block failed SHA256 PoW at height=%d\n", nHeight);
+        LogPrintf("💥 Block failed PoW at height=%d\n", nHeight);
         LogPrintf("  hash = %s\n", hash.ToString());
         LogPrintf("  target = %s\n", bnTarget.ToString());
         return false;
