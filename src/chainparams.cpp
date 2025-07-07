@@ -69,7 +69,7 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.kawpowForkHeight = 550;
+        consensus.kawpowForkHeight = 600;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
