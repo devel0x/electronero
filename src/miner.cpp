@@ -435,11 +435,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     int nDescendantsUpdated = 0;
     addPackageTxs(nPackagesSelected, nDescendantsUpdated);
     LogPrintf("After addPackageTxs: nBlockWeight = %d, nBlockTx = %d, nFees = %ld\n", nBlockWeight, nBlockTx, nFees);
-    if (!m_mempool) {
-        LogPrintf("🚨 m_mempool is nullptr! No transactions will be included in this block.\n");
-    } else {
-        LogPrintf("✅ m_mempool loaded with %zu transactions\n", m_mempool->mapTx.size());
-    }
+    LogPrintf("✅ m_mempool loaded with %zu transactions\n", m_mempool.mapTx.size());
     int64_t nTime1 = GetTimeMicros();
 
     m_last_block_num_txs = nBlockTx;
