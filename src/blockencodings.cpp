@@ -183,7 +183,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         
     // Use fork-aware logic to select the correct PoW function
     if (realHeight >= params.yespowerForkHeight) {
-        hash = YespowerHash(header,pindex->nHeight); // Yespower after fork
+        hash = YespowerHash(header,realHeight); // Yespower after fork
     } else {
         hash = header.GetHash();     // SHA256 before fork
     }
