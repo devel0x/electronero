@@ -1302,6 +1302,14 @@ AX_BOOST_SYSTEM
 AX_BOOST_FILESYSTEM
 AX_BOOST_THREAD
 
+dnl Link bcrypt on Windows for Boost::filesystem unique_path
+case "$host_os" in
+  *mingw* | *cygwin*)
+    AC_MSG_NOTICE([Windows detected, linking with -lbcrypt])
+    LIBS="$LIBS -lbcrypt"
+    ;;
+esac
+
 dnl Opt-in to boost-process
 AS_IF([ test x$with_boost_process != x ], [ AX_BOOST_PROCESS ], [ ax_cv_boost_process=no ] )
 
