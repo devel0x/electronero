@@ -175,8 +175,18 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
 
 ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, const CBlockIndex* pindex) {
     assert(!header.IsNull());
-    uint256 hash = header.GetHash();
-    block = header;
+
+    const Consensus::Params& params = Params().GetConsensus();
+    uint256 hash;
+
+    // Use fork-aware logic to select the correct PoW function
+    if (pindex && pindex->nHeight + 1 >= params.yespowerForkHeight) {
+        hash = YespowerHash(header); // Yespower after fork
+    } else {
+        hash = header.GetHash();     // SHA256 before fork
+    }
+
+    block = header; // Copy header into block
     block.vtx.resize(txn_available.size());
 
     size_t tx_missing_offset = 0;
