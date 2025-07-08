@@ -176,19 +176,23 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
 
 ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, const CBlockIndex* pindex) {
     assert(!header.IsNull());
-    
-    int realHeight = pindex ? pindex->nHeight : 0;
+
+    int realHeight = pindex ? pindex->nHeight : 0; // ✅ No +1
     const Consensus::Params& params = Params().GetConsensus();
     uint256 hash;
-        
-    // Use fork-aware logic to select the correct PoW function
+
     if (realHeight >= params.yespowerForkHeight) {
-        hash = YespowerHash(header,realHeight); // Yespower after fork
+        hash = YespowerHash(header, realHeight); // ✅ Right height
     } else {
-        hash = header.GetHash();     // SHA256 before fork
+        hash = header.GetHash();
     }
 
-    block = header; // Copy header into block
+   if (txn_available.size() != header.nTx) {
+        LogPrintf("❌ txn_available.size() = %d, but header.nTx = %d\n", txn_available.size(), header.nTx);
+        return READ_STATUS_INVALID;
+    }
+
+    block = header;
     block.vtx.resize(txn_available.size());
 
     size_t tx_missing_offset = 0;
@@ -197,11 +201,11 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
             if (vtx_missing.size() <= tx_missing_offset)
                 return READ_STATUS_INVALID;
             block.vtx[i] = vtx_missing[tx_missing_offset++];
-        } else
+        } else {
             block.vtx[i] = std::move(txn_available[i]);
+        }
     }
 
-    // Make sure we can't call FillBlock again.
     header.SetNull();
     txn_available.clear();
 
@@ -209,22 +213,9 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
 
     BlockValidationState state;
-    if (!CheckBlock(block, state, Params().GetConsensus(), pindex->nHeight)) {
-        // TODO: We really want to just check merkle tree manually here,
-        // but that is expensive, and CheckBlock caches a block's
-        // "checked-status" (in the CBlock?). CBlock should be able to
-        // check its own merkle root and cache that check.
+    if (!CheckBlock(block, state, Params().GetConsensus(), realHeight)) {
         if (state.GetResult() == BlockValidationResult::BLOCK_MUTATED)
-            return READ_STATUS_FAILED; // Possible Short ID collision
+            return READ_STATUS_FAILED;
         return READ_STATUS_CHECKBLOCK_FAILED;
     }
-
-    LogPrint(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %lu txn prefilled, %lu txn from mempool (incl at least %lu from extra pool) and %lu txn requested\n", hash.ToString(), prefilled_count, mempool_count, extra_count, vtx_missing.size());
-    if (vtx_missing.size() < 5) {
-        for (const auto& tx : vtx_missing) {
-            LogPrint(BCLog::CMPCTBLOCK, "Reconstructed block %s required tx %s\n", hash.ToString(), tx->GetHash().ToString());
-        }
-    }
-
-    return READ_STATUS_OK;
 }
