@@ -186,9 +186,11 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     } else {
         hash = header.GetHash();
     }
+    
+    LogPrint(BCLog::CMPCTBLOCK, "txn_available.size() = %d, vtx_missing.size() = %d\n", txn_available.size(), vtx_missing.size());
 
-   if (txn_available.size() != header.nTx) {
-        LogPrintf("❌ txn_available.size() = %d, but header.nTx = %d\n", txn_available.size(), header.nTx);
+    if (txn_available.empty()) {
+        LogPrintf("❌ txn_available is empty, cannot construct block\n");
         return READ_STATUS_INVALID;
     }
 
