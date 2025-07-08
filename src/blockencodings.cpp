@@ -13,6 +13,7 @@
 #include <txmempool.h>
 #include <validation.h>
 #include <util/system.h>
+#include <pow/yespower.h>
 
 #include <unordered_map>
 
