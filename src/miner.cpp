@@ -430,9 +430,11 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // transaction (which in most cases can be a no-op).
     fIncludeWitness = IsWitnessEnabled(pindexPrev, chainparams.GetConsensus());
 
+    LogPrintf("Before addPackageTxs: nBlockWeight = %d, nBlockTx = %d, nFees = %ld\n", nBlockWeight, nBlockTx, nFees);
     int nPackagesSelected = 0;
     int nDescendantsUpdated = 0;
     addPackageTxs(nPackagesSelected, nDescendantsUpdated);
+    LogPrintf("After addPackageTxs: nBlockWeight = %d, nBlockTx = %d, nFees = %ld\n", nBlockWeight, nBlockTx, nFees);
 
     int64_t nTime1 = GetTimeMicros();
 
