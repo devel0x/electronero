@@ -72,10 +72,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 return;
             }
             CScript scriptPubKey = GetScriptForDestination(dest);
-            
-            BlockAssembler::Options opts;
-            opts.use_mempool = true;            
-            BlockAssembler assembler(::g_chainman.ActiveChainstate(), &mempool, opts);
+            BlockAssembler assembler(mempool, chainparams);
 
             std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
             if (!pblocktemplate) {
