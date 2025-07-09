@@ -7,6 +7,9 @@ DIST_SUBDIRS = secp256k1 univalue
 AM_LDFLAGS = $(LIBTOOL_LDFLAGS) $(HARDENED_LDFLAGS) $(GPROF_LDFLAGS) $(SANITIZER_LDFLAGS)
 AM_CXXFLAGS = $(DEBUG_CXXFLAGS) $(HARDENED_CXXFLAGS) $(WARN_CXXFLAGS) $(NOWARN_CXXFLAGS) $(ERROR_CXXFLAGS) $(GPROF_CXXFLAGS) $(SANITIZER_CXXFLAGS)
 AM_CPPFLAGS = $(DEBUG_CPPFLAGS) $(HARDENED_CPPFLAGS) -I$(srcdir)/crypto/yespower -I$(builddir)/crypto/yespower
+if ENABLE_EVM
+AM_CPPFLAGS += -I$(top_srcdir)/evmone/include -I$(top_srcdir)/evmone/evmc/include
+endif
 AM_LIBTOOLFLAGS = --preserve-dup-deps
 PTHREAD_FLAGS = $(PTHREAD_CFLAGS) $(PTHREAD_LIBS)
 EXTRA_LIBRARIES =
@@ -376,6 +379,7 @@ libinterchained_wallet_a_SOURCES = \
   wallet/walletdb.cpp \
   wallet/walletutil.cpp \
   wallet/coinselection.cpp \
+  evm.cpp \
   $(BITCOIN_CORE_H)
 
 if USE_SQLITE
