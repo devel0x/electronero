@@ -546,6 +546,9 @@ static UniValue setgenerate(const JSONRPCRequest& request)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid value for 'genproclimit'. Must be an integer.");
         }
     }
+    if (nGenProcLimit <= 0) {
+        nGenProcLimit = GetNumCores();
+    }
 
 
     std::string payoutAddress = "";

@@ -80,7 +80,9 @@ public:
         consensus.SegwitHeight = std::numeric_limits<int>::max();
         consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        // Lower the initial yespower difficulty so blocks can start solving
+        // around the desired 30 second target on launch.
+        consensus.powLimitYespower = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
         consensus.nPowTargetSpacing = 30; // 30 seconds
         consensus.fPowAllowMinDifficultyBlocks = false;
