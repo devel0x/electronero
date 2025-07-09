@@ -37,6 +37,7 @@
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
+#include <wallet/token.h>
 
 #include <stdint.h>
 
@@ -4521,6 +4522,185 @@ static RPCHelpMan upgradewallet()
     };
 }
 
+static RPCHelpMan createtoken()
+{
+    return RPCHelpMan{"createtoken",
+                "\nCreate a token and credit the caller with the initial supply.\n",
+                {
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier (54 hex chars followed by 'tok')"},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount of tokens to create"},
+                },
+                RPCResult{RPCResult::Type::BOOL, "", "true if token created"},
+                RPCExamples{HelpExampleCli("createtoken", "\"001122...tok\" 100")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    const CWallet* const pwallet = wallet.get();
+    LOCK(pwallet->cs_wallet);
+
+    std::string token_id = request.params[0].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+
+    CAmount amount = AmountFromValue(request.params[1]);
+    g_token_ledger.CreateToken(pwallet->GetName(), token_id, amount);
+    return true;
+},
+    };
+}
+
+static RPCHelpMan gettokenbalance()
+{
+    return RPCHelpMan{"gettokenbalance",
+                "\nGet the token balance of this wallet.\n",
+                {
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+                },
+                RPCResult{RPCResult::Type::AMOUNT, "", "Token balance"},
+                RPCExamples{HelpExampleCli("gettokenbalance", "\"tokenidtok\"")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    const CWallet* const pwallet = wallet.get();
+    LOCK(pwallet->cs_wallet);
+
+    std::string token_id = request.params[0].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+
+    CAmount bal = g_token_ledger.Balance(pwallet->GetName(), token_id);
+    return ValueFromAmount(bal);
+},
+    };
+}
+
+static RPCHelpMan tokenapprove()
+{
+    return RPCHelpMan{"tokenapprove",
+                "\nApprove a spender for a given token amount.\n",
+                {
+                    {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Wallet name of spender"},
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount"},
+                },
+                RPCResult{RPCResult::Type::BOOL, "", "true"},
+                RPCExamples{HelpExampleCli("tokenapprove", "spender \"tokenidtok\" 10")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    const CWallet* const pwallet = wallet.get();
+    LOCK(pwallet->cs_wallet);
+
+    std::string spender = request.params[0].get_str();
+    std::string token_id = request.params[1].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+    CAmount amount = AmountFromValue(request.params[2]);
+    g_token_ledger.Approve(pwallet->GetName(), spender, token_id, amount);
+    return true;
+},
+    };
+}
+
+static RPCHelpMan tokenallowance()
+{
+    return RPCHelpMan{"tokenallowance",
+                "\nGet the remaining allowance from owner to spender.\n",
+                {
+                    {"owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Owner wallet name"},
+                    {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet name"},
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+                },
+                RPCResult{RPCResult::Type::AMOUNT, "", "Remaining allowance"},
+                RPCExamples{HelpExampleCli("tokenallowance", "owner spender tokenidtok")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VSTR, UniValue::VSTR});
+    std::string owner = request.params[0].get_str();
+    std::string spender = request.params[1].get_str();
+    std::string token_id = request.params[2].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+
+    CAmount val = g_token_ledger.Allowance(owner, spender, token_id);
+    return ValueFromAmount(val);
+},
+    };
+}
+
+static RPCHelpMan tokentransfer()
+{
+    return RPCHelpMan{"tokentransfer",
+                "\nTransfer tokens to another wallet.\n",
+                {
+                    {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount"},
+                },
+                RPCResult{RPCResult::Type::BOOL, "", "true"},
+                RPCExamples{HelpExampleCli("tokentransfer", "other tokenidtok 5")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    const CWallet* const pwallet = wallet.get();
+    LOCK(pwallet->cs_wallet);
+
+    std::string to = request.params[0].get_str();
+    std::string token_id = request.params[1].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+    CAmount amount = AmountFromValue(request.params[2]);
+    if (!g_token_ledger.Transfer(pwallet->GetName(), to, token_id, amount)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "insufficient token balance");
+    }
+    return true;
+},
+    };
+}
+
+static RPCHelpMan tokentransferfrom()
+{
+    return RPCHelpMan{"tokentransferfrom",
+                "\nTransfer tokens using an allowance.\n",
+                {
+                    {"from", RPCArg::Type::STR, RPCArg::Optional::NO, "Source wallet"},
+                    {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+                    {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount"},
+                },
+                RPCResult{RPCResult::Type::BOOL, "", "true"},
+                RPCExamples{HelpExampleCli("tokentransferfrom", "alice bob tokenidtok 1")},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    const CWallet* const pwallet = wallet.get();
+    LOCK(pwallet->cs_wallet);
+
+    std::string from = request.params[0].get_str();
+    std::string to = request.params[1].get_str();
+    std::string token_id = request.params[2].get_str();
+    if (!IsValidTokenId(token_id)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+    }
+    CAmount amount = AmountFromValue(request.params[3]);
+    if (!g_token_ledger.TransferFrom(pwallet->GetName(), from, to, token_id, amount)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "allowance or balance too low");
+    }
+    return true;
+},
+    };
+}
+
 RPCHelpMan abortrescan();
 RPCHelpMan dumpprivkey();
 RPCHelpMan importprivkey();
@@ -4532,6 +4712,12 @@ RPCHelpMan importprunedfunds();
 RPCHelpMan removeprunedfunds();
 RPCHelpMan importmulti();
 RPCHelpMan importdescriptors();
+RPCHelpMan createtoken();
+RPCHelpMan gettokenbalance();
+RPCHelpMan tokenapprove();
+RPCHelpMan tokenallowance();
+RPCHelpMan tokentransfer();
+RPCHelpMan tokentransferfrom();
 
 Span<const CRPCCommand> GetWalletRPCCommands()
 {
@@ -4599,6 +4785,12 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletpassphrase",                 &walletpassphrase,              {"passphrase","timeout"} },
     { "wallet",             "walletpassphrasechange",           &walletpassphrasechange,        {"oldpassphrase","newpassphrase"} },
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
+    { "wallet",             "createtoken",                     &createtoken,                  {"token","amount"} },
+    { "wallet",             "gettokenbalance",                 &gettokenbalance,              {"token"} },
+    { "wallet",             "tokenapprove",                    &tokenapprove,                 {"spender","token","amount"} },
+    { "wallet",             "tokenallowance",                  &tokenallowance,               {"owner","spender","token"} },
+    { "wallet",             "tokentransfer",                   &tokentransfer,                {"to","token","amount"} },
+    { "wallet",             "tokentransferfrom",               &tokentransferfrom,            {"from","to","token","amount"} },
 };
 // clang-format on
     return MakeSpan(commands);
