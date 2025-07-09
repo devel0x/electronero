@@ -94,8 +94,10 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         initialized = true;
                     }
 
+                    const int TIME_UPDATE_INTERVAL = 5; // seconds
                     CBlock block = originalBlock;
                     block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
+                    int64_t lastTimeUpdate = GetTime();
 
                     CMutableTransaction coinbaseTx(*block.vtx[0]);
                     coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
@@ -114,7 +116,17 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                         ++hashesDone;
                         block.nNonce = nonce;
-                        block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
+
+                        if ((nonce & 1023) == 0) {
+                            int64_t now = GetTime();
+                            if (now - lastTimeUpdate >= TIME_UPDATE_INTERVAL) {
+                                block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
+                                coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
+                                block.vtx[0] = MakeTransactionRef(coinbaseTx);
+                                block.hashMerkleRoot = BlockMerkleRoot(block);
+                                lastTimeUpdate = now;
+                            }
+                        }
 
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
@@ -157,8 +169,18 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 }).detach();
             }
 
+            int64_t totalHashStart = GetTimeMillis();
             while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                int64_t elapsed = GetTimeMillis() - totalHashStart;
+                if (elapsed >= 5000) {
+                    uint64_t hashes = totalHashes.exchange(0);
+                    if (hashes > 0) {
+                        double rate = (double)hashes / (elapsed / 1000.0);
+                        LogPrintf("⚡ Total Hashrate: %.2f H/s\n", rate);
+                    }
+                    totalHashStart = GetTimeMillis();
+                }
             }
 
             if (foundBlock.load()) {
