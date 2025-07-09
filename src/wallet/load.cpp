@@ -13,6 +13,7 @@
 #include <util/translation.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
+#include <wallet/token.h>
 
 #include <univalue.h>
 
@@ -126,6 +127,8 @@ void StartWallets(CScheduler& scheduler, const ArgsManager& args)
         pwallet->postInitProcess();
     }
 
+    g_token_ledger.Load();
+
     // Schedule periodic wallet flushes and tx rebroadcasts
     if (args.GetBoolArg("-flushwallet", DEFAULT_FLUSHWALLET)) {
         scheduler.scheduleEvery(MaybeCompactWalletDB, std::chrono::milliseconds{500});
@@ -138,6 +141,7 @@ void FlushWallets()
     for (const std::shared_ptr<CWallet>& pwallet : GetWallets()) {
         pwallet->Flush();
     }
+    g_token_ledger.Flush();
 }
 
 void StopWallets()
@@ -145,6 +149,7 @@ void StopWallets()
     for (const std::shared_ptr<CWallet>& pwallet : GetWallets()) {
         pwallet->Close();
     }
+    g_token_ledger.Flush();
 }
 
 void UnloadWallets()
@@ -157,4 +162,5 @@ void UnloadWallets()
         RemoveWallet(wallet, nullopt, warnings);
         UnloadWallet(std::move(wallet));
     }
+    g_token_ledger.Flush();
 }

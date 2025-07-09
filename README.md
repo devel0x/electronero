@@ -78,3 +78,126 @@ Translations are periodically pulled from Transifex and merged into the git repo
 pull from Transifex would automatically overwrite them again.
 
 Translators should also subscribe to the [mailing list](https://groups.google.com/forum/#!forum/interchained-translators).
+
+Token subsystem
+---------------
+
+The optional token module allows wallets to create and transfer custom tokens identified by strings that begin with `0x`, contain 54 hex characters, and end with `tok`. When no identifier is supplied to `createtoken`, a unique one is generated from the creator name and token name plus a random nonce.
+
+Recent additions improve robustness:
+
+* **Persistent ledger** – token balances and history are stored on disk using LevelDB so that restarts keep token state.
+* **On‑chain records** – each token operation is embedded in an `OP_RETURN` transaction, enabling miners to include the data in blocks.
+* **Event logging** – operations are written to the debug log for wallet UIs or other processes to monitor.
+* **Dynamic fees** – governance fees are charged per‑byte at a configurable rate and paid to a chosen wallet. Creating a token incurs a special rate of `10000000` sat/vB sent to the governance wallet.
+* **ERC‑20 style upgrades** – tokens now carry metadata including name, symbol and decimals, and a mint operation is available.
+* **Signed operations** – token actions are signed by the controlling wallet so peers reject unauthorized spends.
+* **Operator minting** – only the wallet that created a token may mint additional supply.
+* **Metadata lookup** – the `token_meta` RPC returns name, symbol, decimals, creator, creation height and total supply for any token.
+
+Token RPC usage examples
+-----------------------
+
+Create a token with an auto-generated id:
+
+```
+$ bitcoin-cli createtoken 100 "MyToken" "MTK" 0
+```
+
+Create a token with a specific id:
+
+```
+$ bitcoin-cli createtoken "001122...tok" 100 "MyToken" "MTK" 0
+```
+
+Query the token balance for the current wallet:
+
+```
+$ bitcoin-cli gettokenbalance "tokenidtok"
+```
+
+Approve a spender:
+
+```
+$ bitcoin-cli tokenapprove "spender" "tokenidtok" 10
+```
+
+Check remaining allowance:
+
+```
+$ bitcoin-cli tokenallowance "owner" "spender" "tokenidtok"
+```
+
+Transfer tokens to another wallet:
+
+```
+$ bitcoin-cli tokentransfer "other" "tokenidtok" 5
+```
+
+Transfer tokens using an allowance:
+
+```
+$ bitcoin-cli tokentransferfrom "alice" "bob" "tokenidtok" 1
+```
+
+
+Increase a spender's allowance:
+
+```
+$ bitcoin-cli tokenincreaseallowance "spender" "tokenidtok" 1
+```
+
+Decrease a spender's allowance:
+
+```
+$ bitcoin-cli tokendecreaseallowance "spender" "tokenidtok" 1
+```
+
+Burn some of your tokens:
+
+```
+$ bitcoin-cli tokenburn "tokenidtok" 1
+```
+
+Check the total supply of a token:
+
+```
+$ bitcoin-cli tokentotalsupply "tokenidtok"
+```
+
+Look up token metadata:
+
+```
+$ bitcoin-cli token_meta "tokenidtok"
+```
+
+List your tokens with positive balances:
+
+```
+$ bitcoin-cli my_tokens
+```
+
+List all known tokens:
+
+```
+$ bitcoin-cli all_tokens
+```
+
+Show token history:
+
+```
+$ bitcoin-cli token_history "tokenidtok"
+$ bitcoin-cli token_history "tokenidtok" "recipient"
+```
+
+Configure the governance wallet for fee collection:
+
+```
+$ bitcoin-cli setgovernancewallet "governance"
+```
+
+Check accumulated governance fees:
+
+```
+$ bitcoin-cli getgovernancebalance
+```
