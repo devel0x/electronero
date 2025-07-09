@@ -78,3 +78,19 @@ Translations are periodically pulled from Transifex and merged into the git repo
 pull from Transifex would automatically overwrite them again.
 
 Translators should also subscribe to the [mailing list](https://groups.google.com/forum/#!forum/interchained-translators).
+
+Token subsystem
+---------------
+
+The optional token module allows wallets to create and transfer custom tokens identified by strings that begin with `0x`, contain 54 hex characters, and end with `tok`. When no identifier is supplied to `createtoken`, a unique one is generated from the creator name and token name plus a random nonce.
+
+Recent additions improve robustness:
+
+* **Persistent ledger** – token balances and history are stored on disk using LevelDB so that restarts keep token state.
+* **On‑chain records** – each token operation is embedded in an `OP_RETURN` transaction, enabling miners to include the data in blocks.
+* **Event logging** – operations are written to the debug log for wallet UIs or other processes to monitor.
+* **Dynamic fees** – governance fees are charged per‑byte at a configurable rate and paid to a chosen wallet. Creating a token incurs a special rate of `10000000` sat/vB sent to the governance wallet.
+* **ERC‑20 style upgrades** – tokens now carry metadata including name, symbol and decimals, and a mint operation is available.
+* **Signed operations** – token actions are signed by the controlling wallet so peers reject unauthorized spends.
+* **Operator minting** – only the wallet that created a token may mint additional supply.
+* **Metadata lookup** – the `token_meta` RPC returns name, symbol, decimals, creator, creation height and total supply for any token.
