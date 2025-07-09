@@ -137,6 +137,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                                 LogPrintf("❌ [thread %d] Failed to process new block\n", threadId);
                             } else {
                                 LogPrintf("✅ [thread %d] Block accepted!\n", threadId);
+                                GetMainSignals().NewPoWValidBlock(::ChainActive().Tip(), pblockShared);
                             }
 
                             foundBlock.store(true);
@@ -662,8 +663,17 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
         }
 
         if (packageFees < blockMinFeeRate.GetFee(packageSize)) {
-            // Everything else we might consider has a lower fee rate
-            return;
+            if (fUsingModified) {
+                mapModifiedTx.get<ancestor_score>().erase(modit);
+                failedTx.insert(iter);
+            }
+            ++nConsecutiveFailed;
+
+            if (nConsecutiveFailed > MAX_CONSECUTIVE_FAILURES &&
+                nBlockWeight > nBlockMaxWeight - 4000) {
+                break;
+            }
+            continue;
         }
 
         if (!TestPackage(packageSize, packageSigOpsCost)) {

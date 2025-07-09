@@ -5,6 +5,7 @@
 #include <support/lockedpool.h>
 #include <support/cleanse.h>
 
+#include <stdexcept>
 #if defined(HAVE_CONFIG_H)
 #include <config/interchained-config.h>
 #endif
