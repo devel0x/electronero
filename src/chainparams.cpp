@@ -71,7 +71,7 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.kawpowForkHeight = 600;
+        consensus.kawpowForkHeight = std::numeric_limits<int>::max();
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
@@ -79,8 +79,8 @@ public:
         consensus.BIP65Height = std::numeric_limits<int>::max();
         consensus.BIP66Height = std::numeric_limits<int>::max();
         consensus.CSVHeight = std::numeric_limits<int>::max();
-        consensus.SegwitHeight = std::numeric_limits<int>::max();
-        consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // disable softfork warnings
+        consensus.SegwitHeight = 1476;
+        consensus.MinBIP9WarningHeight = 1476; // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
@@ -97,6 +97,11 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1199145601; // January 1, 2008
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1230767999; // December 31, 2008
+
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].bit = 1;
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 1753036925;
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].min_activation_height = 1476;
 
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000101a00000");
         consensus.defaultAssumeValid = uint256S("0x0000000000000000000b9d2ec5a352ecba0592946514a92f14319dc2b367fc72"); // 654683
