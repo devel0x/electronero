@@ -78,3 +78,16 @@ Translations are periodically pulled from Transifex and merged into the git repo
 pull from Transifex would automatically overwrite them again.
 
 Translators should also subscribe to the [mailing list](https://groups.google.com/forum/#!forum/interchained-translators).
+
+Token subsystem
+---------------
+
+The optional token module allows wallets to create and transfer custom tokens identified by a 54‑character hex string ending in `tok`.
+
+Recent additions improve robustness:
+
+* **Persistent ledger** – token balances and history are stored on disk using LevelDB so that restarts keep token state.
+* **On‑chain records** – each token operation is embedded in an `OP_RETURN` transaction, enabling miners to include the data in blocks.
+* **Event logging** – operations are written to the debug log for wallet UIs or other processes to monitor.
+* **Dynamic fees** – governance fees are charged per‑byte at a configurable rate and paid to a chosen wallet.
+* **ERC‑20 style upgrades** – tokens now carry metadata including name, symbol and decimals, and a mint operation is available.
