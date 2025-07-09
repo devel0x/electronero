@@ -526,6 +526,182 @@ static RPCHelpMan sendtoaddress()
     };
 }
 
+static RPCHelpMan sendwithmemo()
+{
+    return RPCHelpMan{"sendwithmemo",
+                "\nSend an amount to a given address with a memo stored in an OP_RETURN output." +
+        HELP_REQUIRING_PASSPHRASE,
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The interchained address to send to."},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to send."},
+                    {"memo", RPCArg::Type::STR, RPCArg::Optional::NO, "Memo text up to 80 characters."},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                            {RPCResult::Type::STR, "fee_reason", "The transaction fee reason."}
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("sendwithmemo", "\"" + EXAMPLE_ADDRESS[0] + "\" 0.1 \"test\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+    }
+
+    CAmount amount = AmountFromValue(request.params[1]);
+    std::string memo = request.params[2].get_str();
+    if (memo.size() > 80) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Memo must be 80 bytes or less");
+    }
+
+    bool verbose = request.params[3].isNull() ? false : request.params[3].get_bool();
+
+    CCoinControl coin_control;
+    std::vector<CRecipient> recipients;
+    recipients.push_back({GetScriptForDestination(dest), amount, false});
+    CScript memo_script = CScript() << OP_RETURN << std::vector<unsigned char>(memo.begin(), memo.end());
+    recipients.push_back({memo_script, 0, false});
+
+    return SendMoney(pwallet, coin_control, recipients, {}, verbose);
+},
+    };
+}
+
+static RPCHelpMan burn()
+{
+    return RPCHelpMan{"burn",
+                "\nDestroy coins by sending them to an unspendable address.",
+                {
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to burn."},
+                    {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "Optional comment"},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                            {RPCResult::Type::STR, "fee_reason", "The transaction fee reason."}
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("burn", "0.1") +
+                    HelpExampleCli("burn", "0.1 \"cleanup\" true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    CAmount amount = AmountFromValue(request.params[0]);
+
+    mapValue_t mapValue;
+    if (!request.params[1].isNull() && !request.params[1].get_str().empty()) {
+        mapValue["comment"] = request.params[1].get_str();
+    }
+
+    CCoinControl coin_control;
+    bool verbose = request.params[2].isNull() ? false : request.params[2].get_bool();
+
+    CTxDestination dest = DecodeDestination(BURN_ADDRESS);
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid burn address");
+    }
+
+    CScript script_pub_key = GetScriptForDestination(dest);
+    std::vector<CRecipient> recipients{{script_pub_key, amount, false}};
+
+    return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
+},
+    };
+}
+
+static RPCHelpMan bridgefunds()
+{
+    return RPCHelpMan{"bridgefunds",
+                "\nLock coins and specify an Ethereum address to receive them on the sidechain.",
+                {
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to bridge."},
+                    {"eth_address", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination Ethereum address."},
+                    {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "Optional comment"},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                            {RPCResult::Type::STR, "fee_reason", "The transaction fee reason."}
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("bridgefunds", "1 \"0xabc123...\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    CAmount amount = AmountFromValue(request.params[0]);
+    std::string eth_address = request.params[1].get_str();
+
+    mapValue_t mapValue;
+    if (!request.params[2].isNull() && !request.params[2].get_str().empty()) {
+        mapValue["comment"] = request.params[2].get_str();
+    }
+
+    CCoinControl coin_control;
+
+    bool verbose = request.params[3].isNull() ? false : request.params[3].get_bool();
+
+    CTxDestination dest = DecodeDestination(ETH_BRIDGE_ADDRESS);
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid bridge address");
+    }
+
+    CScript script_pub_key = GetScriptForDestination(dest);
+    std::vector<CRecipient> recipients{{script_pub_key, amount, false}};
+    CScript memo_script = CScript() << OP_RETURN << std::vector<unsigned char>(eth_address.begin(), eth_address.end());
+    recipients.push_back({memo_script, 0, false});
+
+    return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
+},
+    };
+}
+
 static RPCHelpMan listaddressgroupings()
 {
     return RPCHelpMan{"listaddressgroupings",
@@ -4586,6 +4762,9 @@ static const CRPCCommand commands[] =
     { "wallet",             "send",                             &send,                          {"outputs","conf_target","estimate_mode","fee_rate","options"} },
     { "wallet",             "sendmany",                         &sendmany,                      {"dummy","amounts","minconf","comment","subtractfeefrom","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "sendtoaddress",                    &sendtoaddress,                 {"address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode","avoid_reuse","fee_rate","verbose"} },
+    { "wallet",             "sendwithmemo",                     &sendwithmemo,                 {"address","amount","memo","verbose"} },
+    { "wallet",             "burn",                              &burn,                         {"amount","comment","verbose"} },
+    { "wallet",             "bridgefunds",                      &bridgefunds,                {"amount","eth_address","comment","verbose"} },
     { "wallet",             "sethdseed",                        &sethdseed,                     {"newkeypool","seed"} },
     { "wallet",             "setlabel",                         &setlabel,                      {"address","label"} },
     { "wallet",             "settxfee",                         &settxfee,                      {"amount"} },
