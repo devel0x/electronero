@@ -49,6 +49,8 @@ struct Params {
     int nDGW3Height;
     uint256 powLimitYespower;
     int yespowerForkHeight;
+    /** Height at which the yespower N parameter is reduced for faster hashing */
+    int yespowerNHeight;
     int kawpowForkHeight;
     int difficultyForkHeight;
     /* Block hash that is excepted from BIP16 enforcement */
