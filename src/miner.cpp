@@ -49,8 +49,45 @@
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 static std::atomic<bool> foundBlock(false);
+static std::atomic<bool> refreshTemplate(false);
 static std::atomic<uint64_t> totalHashes(0);
 static std::atomic<bool> fGenerating(false);
+
+/** Manually insert mempool transactions into the block if block template
+ *  returned no transactions. This helps mine low-fee transactions that
+ *  CreateNewBlock may skip. */
+static void ForceAddMempoolTxs(CBlock& block, CTxMemPool& mempool)
+{
+    LOCK2(cs_main, mempool.cs);
+
+    if (mempool.mapTx.empty()) return;
+
+    int64_t blockWeight = GetBlockWeight(block);
+    const int64_t maxWeight = MAX_BLOCK_WEIGHT - 4000;
+    CBlockIndex* pindexPrev = ::ChainActive().Tip();
+    int nHeight = pindexPrev->nHeight + 1;
+    int64_t nLockTimeCutoff = (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST) ?
+        pindexPrev->GetMedianTimePast() : block.GetBlockTime();
+
+    int added = 0;
+    for (auto it = mempool.mapTx.get<ancestor_score>().begin(); it != mempool.mapTx.get<ancestor_score>().end(); ++it) {
+        const CTransactionRef& tx = it->GetSharedTx();
+        if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) continue;
+
+        int64_t txWeight = GetTransactionWeight(*tx);
+        if (blockWeight + txWeight > maxWeight) continue;
+
+        block.vtx.push_back(tx);
+        blockWeight += txWeight;
+        ++added;
+    }
+
+    if (added > 0) {
+        block.hashMerkleRoot = BlockMerkleRoot(block);
+        RegenerateCommitments(block);
+        LogPrintf("📝 Manually added %d mempool transactions\n", added);
+    }
+}
 
 void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
 {
@@ -58,10 +95,14 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
     if (!fGenerate)
         return;
 
+    const int templateRefreshInterval = 30; // seconds
+
     std::thread([=, &mempool]() {
         while (fGenerating && !ShutdownRequested()) {
             foundBlock.store(false);
+            refreshTemplate.store(false);
             totalHashes.store(0);
+            int64_t templateStart = GetTime();
 
             LogPrintf("♻️ Launching %d miner threads...\n", nThreads);
 
@@ -72,12 +113,18 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 return;
             }
             CScript scriptPubKey = GetScriptForDestination(dest);
-            BlockAssembler assembler(mempool, chainparams);
+            BlockAssembler::Options opts;
+            opts.nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
+            opts.blockMinFeeRate = CFeeRate(0);
+            BlockAssembler assembler(mempool, chainparams, opts);
 
             std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
             if (!pblocktemplate) {
                 LogPrintf("⚠️ Block template is null\n");
                 continue;
+            }
+            if (pblocktemplate->block.vtx.size() <= 1) {
+                ForceAddMempoolTxs(pblocktemplate->block, mempool);
             }
 
             // 🔒 Make a safe copy of just the block to avoid capturing unique_ptr
@@ -97,10 +144,9 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     CBlock block = originalBlock;
                     block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
-                    CMutableTransaction coinbaseTx(*block.vtx[0]);
-                    coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
-                    block.vtx[0] = MakeTransactionRef(coinbaseTx);
-                    block.hashMerkleRoot = BlockMerkleRoot(block);
+                    static thread_local unsigned int extraNonce = 0;
+                    IncrementExtraNonce(&block, ::ChainActive().Tip(), extraNonce);
+                    RegenerateCommitments(block);
                     uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
 
                     uint64_t hashesDone = 0;
@@ -109,7 +155,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                     uint32_t startNonce = GetRand(std::numeric_limits<uint32_t>::max());
                     for (uint32_t nonce = startNonce + threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
-                        if (ShutdownRequested() || !fGenerating || foundBlock.load())
+                        if (ShutdownRequested() || !fGenerating || foundBlock.load() || refreshTemplate.load())
                             return;
 
                         ++hashesDone;
@@ -159,11 +205,17 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
             while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                if (GetTime() - templateStart >= templateRefreshInterval) {
+                    refreshTemplate.store(true);
+                    break;
+                }
             }
 
             if (foundBlock.load()) {
                 LogPrintf("🔁 Restarting mining after block found...\n");
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            } else if (refreshTemplate.load()) {
+                LogPrintf("🔄 Refreshing block template...\n");
             }
         }
     }).detach();
