@@ -60,7 +60,6 @@ public:
     }
 };
 
-
 class CBlock : public CBlockHeader
 {
 public:
@@ -69,6 +68,9 @@ public:
 
     // memory only
     mutable bool fChecked;
+
+    // SegWit witness data
+    std::vector<std::vector<unsigned char>> vchWitness;
 
     CBlock()
     {
@@ -83,8 +85,17 @@ public:
 
     SERIALIZE_METHODS(CBlock, obj)
     {
+        // Serialize the header portion of the block
         READWRITEAS(CBlockHeader, obj);
+
+        // Serialize the transactions vector
         READWRITE(obj.vtx);
+
+        // Only serialize witness data if this is not the genesis block
+        if (!IsGenesisBlock())
+        {
+            READWRITE(obj.vchWitness);
+        }
     }
 
     void SetNull()
@@ -92,6 +103,7 @@ public:
         CBlockHeader::SetNull();
         vtx.clear();
         fChecked = false;
+        vchWitness.clear(); // Clear the witness data
     }
 
     CBlockHeader GetBlockHeader() const
@@ -105,8 +117,19 @@ public:
         block.nNonce         = nNonce;
         return block;
     }
+    
+    bool CBlock::IsGenesisBlock() const
+    {
+        // Convert the hex string to uint256
+        uint256 genesisBlockHash;
+        genesisBlockHash.SetHex("0x00000000ed361749ae598d60cd78395eb526bc90f5e1198f0b045f95cecc80c8");
+    
+        return GetHash() == genesisBlockHash;
+    }
+
 
     std::string ToString() const;
+
 };
 
 /** Describes a place in the block chain to another node such that if the
