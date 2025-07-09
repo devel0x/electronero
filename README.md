@@ -34,8 +34,17 @@ development of the GUI. Its master branch is identical in all monotree
 repositories. Release branches and tags do not exist, so please do not fork
 that repository unless it is for development reasons.
 
+
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+
+New Feature
+-----------
+
+Interchained Core now exposes a `getbestheaderhash` RPC call to retrieve the
+hash of the tip of the best known header chain. This will match the
+`getbestblockhash` result during normal operation, but can differ while the
+node is still validating blocks.
 
 Testing
 -------
