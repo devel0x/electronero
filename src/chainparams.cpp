@@ -77,8 +77,8 @@ public:
         consensus.BIP65Height = std::numeric_limits<int>::max();
         consensus.BIP66Height = std::numeric_limits<int>::max();
         consensus.CSVHeight = std::numeric_limits<int>::max();
-        consensus.SegwitHeight = std::numeric_limits<int>::max();
-        consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // disable softfork warnings
+        consensus.SegwitHeight = 1476;
+        consensus.MinBIP9WarningHeight = 1476; // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
