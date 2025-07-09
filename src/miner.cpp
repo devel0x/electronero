@@ -49,6 +49,7 @@
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 static std::atomic<bool> foundBlock(false);
+static std::atomic<bool> refreshTemplate(false);
 static std::atomic<uint64_t> totalHashes(0);
 static std::atomic<bool> fGenerating(false);
 
@@ -58,10 +59,14 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
     if (!fGenerate)
         return;
 
+    const int templateRefreshInterval = 30; // seconds
+
     std::thread([=, &mempool]() {
         while (fGenerating && !ShutdownRequested()) {
             foundBlock.store(false);
+            refreshTemplate.store(false);
             totalHashes.store(0);
+            int64_t templateStart = GetTime();
 
             LogPrintf("♻️ Launching %d miner threads...\n", nThreads);
 
@@ -109,7 +114,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                     uint32_t startNonce = GetRand(std::numeric_limits<uint32_t>::max());
                     for (uint32_t nonce = startNonce + threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
-                        if (ShutdownRequested() || !fGenerating || foundBlock.load())
+                        if (ShutdownRequested() || !fGenerating || foundBlock.load() || refreshTemplate.load())
                             return;
 
                         ++hashesDone;
@@ -159,11 +164,17 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
             while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                if (GetTime() - templateStart >= templateRefreshInterval) {
+                    refreshTemplate.store(true);
+                    break;
+                }
             }
 
             if (foundBlock.load()) {
                 LogPrintf("🔁 Restarting mining after block found...\n");
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            } else if (refreshTemplate.load()) {
+                LogPrintf("🔄 Refreshing block template...\n");
             }
         }
     }).detach();
