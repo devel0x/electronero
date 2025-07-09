@@ -260,6 +260,8 @@ extern const char* CFCHECKPT;
  * @since protocol version 70016 as described by BIP 339.
  */
 extern const char* WTXIDRELAY;
+/** Token transaction message */
+extern const char* TOKENTX;
 }; // namespace NetMsgType
 
 /* Get a vector of all valid message types (see above) */
