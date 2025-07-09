@@ -69,6 +69,8 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
+        // Switch to faster yespower parameters after this height
+        consensus.yespowerNHeight = 2500;
         consensus.kawpowForkHeight = 600;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256(); // no exception
@@ -80,7 +82,9 @@ public:
         consensus.SegwitHeight = std::numeric_limits<int>::max();
         consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        // Lower the initial yespower difficulty so blocks can start solving
+        // around the desired 30 second target on launch.
+        consensus.powLimitYespower = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
         consensus.nPowTargetSpacing = 30; // 30 seconds
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -181,6 +185,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 210000;
+        consensus.yespowerNHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256S("0x00000000dd30457c001f4095d208cc1296b0eed002427aa599874af7a432b105");
         consensus.BIP34Height = 21111;
         consensus.BIP34Hash = uint256S("0x0000000023b3a96d3484e5abb3755c413e7d41500f8e2a5c3f0dd01299cd8ef8");
@@ -377,6 +382,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 150;
+        consensus.yespowerNHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256();
         consensus.BIP34Height = 500; // BIP34 activated on regtest (Used in functional tests)
         consensus.BIP34Hash = uint256();
