@@ -669,7 +669,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
         }
 
         if (packageFees < blockMinFeeRate.GetFee(packageSize)) {
-            LogPrintf("❌ Skipping tx %s — fee %ld too low for size %llu, required: %ld\n",iter->GetTx().GetHash().ToString(), packageFees, packageSize,lockMinFeeRate.GetFee(packageSize));
+            LogPrintf("❌ Skipping tx %s — fee %ld too low for size %llu, required: %ld\n",iter->GetTx().GetHash().ToString(), packageFees, packageSize,blockMinFeeRate.GetFee(packageSize));
             if (fUsingModified) {
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);

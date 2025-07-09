@@ -69,7 +69,7 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.kawpowForkHeight = 600;
+        consensus.kawpowForkHeight = std::numeric_limits<int>::max();
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
@@ -97,7 +97,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1230767999; // December 31, 2008
 
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].bit = 1;
-        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 1753036925;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].min_activation_height = 1476;
 

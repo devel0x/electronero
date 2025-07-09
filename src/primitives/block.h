@@ -91,9 +91,8 @@ public:
         // Serialize the transactions vector
         READWRITE(obj.vtx);
 
-        // Only serialize witness data if this is not the genesis block
-        if (!IsGenesisBlock())
-        {
+        // Serialize vchWitness if block has previous block (not genesis) and includes witness
+        if (obj.hashPrevBlock != uint256() && obj.vtx.size() > 0 && obj.vtx[0]->HasWitness()) {
             READWRITE(obj.vchWitness);
         }
     }
@@ -118,13 +117,13 @@ public:
         return block;
     }
     
-    bool CBlock::IsGenesisBlock() const
+    static bool IsGenesisBlock(const CBlock& block)
     {
         // Convert the hex string to uint256
         uint256 genesisBlockHash;
         genesisBlockHash.SetHex("0x00000000ed361749ae598d60cd78395eb526bc90f5e1198f0b045f95cecc80c8");
     
-        return GetHash() == genesisBlockHash;
+        return block.GetHash() == genesisBlockHash;
     }
 
 
