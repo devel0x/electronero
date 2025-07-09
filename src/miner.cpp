@@ -46,19 +46,20 @@
 #include <algorithm>
 #include <utility>
 
+extern CTxMemPool mempool;
+
 extern bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool fForceProcessing, bool* fNewBlock);
 
 static std::atomic<bool> foundBlock(false);
 static std::atomic<uint64_t> totalHashes(0);
 static std::atomic<bool> fGenerating(false);
 
-void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
-{
+void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& /*mempool*/) {
     fGenerating = fGenerate;
     if (!fGenerate)
         return;
 
-    std::thread([=, &mempool]() {
+    std::thread([=]() {
         while (fGenerating && !ShutdownRequested()) {
             foundBlock.store(false);
             totalHashes.store(0);
@@ -72,20 +73,24 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                 return;
             }
             CScript scriptPubKey = GetScriptForDestination(dest);
-            BlockAssembler assembler(mempool, chainparams);
+            BlockAssembler::Options opts;
+            opts.blockMinFeeRate = CFeeRate(1); // 1 sat/vbyte
 
+            CTxMemPool& liveMempool = const_cast<CTxMemPool&>(::mempool); // ensure global mempool is used
+            LogPrintf("📥 mempool pre-CreateNewBlock size: %zu\n", liveMempool.mapTx.size());
+
+            BlockAssembler assembler(liveMempool, chainparams, opts);
             std::unique_ptr<CBlockTemplate> pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
             if (!pblocktemplate) {
                 LogPrintf("⚠️ Block template is null\n");
                 continue;
             }
 
-            // 🔒 Make a safe copy of just the block to avoid capturing unique_ptr
             CBlock originalBlock = pblocktemplate->block;
             LogPrintf("🧾 Block includes %d transactions\n", originalBlock.vtx.size() - 1);
-            
+
             for (int threadId = 0; threadId < nThreads; ++threadId) {
-                std::thread([=, &mempool]() mutable {
+                std::thread([=]() mutable {
                     LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
                     static thread_local yespower_local_t shared;
                     static thread_local bool initialized = false;
@@ -614,6 +619,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
     // mempool has a lot of entries.
     const int64_t MAX_CONSECUTIVE_FAILURES = 1000;
     int64_t nConsecutiveFailed = 0;
+    LogPrintf("📦 addPackageTxs: mempool has %zu transactions\n", m_mempool.mapTx.size());
 
     while (mi != m_mempool.mapTx.get<ancestor_score>().end() || !mapModifiedTx.empty()) {
         // First try to find a new transaction in mapTx to evaluate.
@@ -663,10 +669,15 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
         }
 
         if (packageFees < blockMinFeeRate.GetFee(packageSize)) {
+            LogPrintf("❌ Skipping tx %s — fee %ld too low for size %llu, required: %ld\n",
+                iter->GetTx().GetHash().ToString(), packageFees, packageSize,
+                blockMinFeeRate.GetFee(packageSize));
+
             if (fUsingModified) {
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
             }
+
             ++nConsecutiveFailed;
 
             if (nConsecutiveFailed > MAX_CONSECUTIVE_FAILURES &&
