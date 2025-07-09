@@ -98,7 +98,9 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
-    const int nPastBlocks = 24;
+    // Use a smaller averaging window so difficulty adapts quicker to network
+    // conditions and blocks can reliably be found every ~30 seconds.
+    const int nPastBlocks = 12;
     int nextHeight = (pindexLast ? pindexLast->nHeight + 1 : 0);
     
     LogPrintf("💡 DGW3: nHeight=%d returning powLimit %s\n", nextHeight,
