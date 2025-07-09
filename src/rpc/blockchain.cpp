@@ -228,6 +228,28 @@ static RPCHelpMan getbestblockhash()
     };
 }
 
+static RPCHelpMan getbestheaderhash()
+{
+    return RPCHelpMan{"getbestheaderhash",
+                "\nReturns the hash of the best block header in the most-work chain.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::STR_HEX, "", "the block header hash, hex-encoded"},
+                RPCExamples{
+                    HelpExampleCli("getbestheaderhash", "")
+            + HelpExampleRpc("getbestheaderhash", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    LOCK(cs_main);
+    if (pindexBestHeader) {
+        return pindexBestHeader->GetBlockHash().GetHex();
+    }
+    return NullUniValue;
+},
+    };
+}
+
 void RPCNotifyBlockChange(const CBlockIndex* pindex)
 {
     if(pindex) {
@@ -2470,6 +2492,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         "getchaintxstats",        &getchaintxstats,        {"nblocks", "blockhash"} },
     { "blockchain",         "getblockstats",          &getblockstats,          {"hash_or_height", "stats"} },
     { "blockchain",         "getbestblockhash",       &getbestblockhash,       {} },
+    { "blockchain",         "getbestheaderhash",      &getbestheaderhash,      {} },
     { "blockchain",         "getblockcount",          &getblockcount,          {} },
     { "blockchain",         "getblock",               &getblock,               {"blockhash","verbosity|verbose"} },
     { "blockchain",         "getblockhash",           &getblockhash,           {"height"} },
