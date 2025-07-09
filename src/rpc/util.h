@@ -35,6 +35,11 @@ extern const std::string UNIX_EPOCH_TIME;
  */
 extern const std::string EXAMPLE_ADDRESS[2];
 
+/**
+ * Address used by the burn RPC to destroy coins. It is provably unspendable.
+ */
+extern const std::string BURN_ADDRESS;
+
 class FillableSigningProvider;
 class CPubKey;
 class CScript;

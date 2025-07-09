@@ -526,6 +526,63 @@ static RPCHelpMan sendtoaddress()
     };
 }
 
+static RPCHelpMan burn()
+{
+    return RPCHelpMan{"burn",
+                "\nDestroy coins by sending them to an unspendable address.",
+                {
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to burn."},
+                    {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "Optional comment"},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                            {RPCResult::Type::STR, "fee_reason", "The transaction fee reason."}
+                        }
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("burn", "0.1") +
+                    HelpExampleCli("burn", "0.1 \"cleanup\" true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    CAmount amount = AmountFromValue(request.params[0]);
+
+    mapValue_t mapValue;
+    if (!request.params[1].isNull() && !request.params[1].get_str().empty()) {
+        mapValue["comment"] = request.params[1].get_str();
+    }
+
+    CCoinControl coin_control;
+    bool verbose = request.params[2].isNull() ? false : request.params[2].get_bool();
+
+    CTxDestination dest = DecodeDestination(BURN_ADDRESS);
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid burn address");
+    }
+
+    CScript script_pub_key = GetScriptForDestination(dest);
+    std::vector<CRecipient> recipients{{script_pub_key, amount, false}};
+
+    return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
+},
+    };
+}
+
 static RPCHelpMan listaddressgroupings()
 {
     return RPCHelpMan{"listaddressgroupings",
@@ -4586,6 +4643,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "send",                             &send,                          {"outputs","conf_target","estimate_mode","fee_rate","options"} },
     { "wallet",             "sendmany",                         &sendmany,                      {"dummy","amounts","minconf","comment","subtractfeefrom","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "sendtoaddress",                    &sendtoaddress,                 {"address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode","avoid_reuse","fee_rate","verbose"} },
+    { "wallet",             "burn",                              &burn,                         {"amount","comment","verbose"} },
     { "wallet",             "sethdseed",                        &sethdseed,                     {"newkeypool","seed"} },
     { "wallet",             "setlabel",                         &setlabel,                      {"address","label"} },
     { "wallet",             "settxfee",                         &settxfee,                      {"amount"} },
