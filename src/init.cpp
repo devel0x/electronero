@@ -242,6 +242,9 @@ void Shutdown(NodeContext& node)
     if (node.mempool && node.mempool->IsLoaded() && node.args->GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
         DumpMempool(*node.mempool);
     }
+#ifdef ENABLE_EVM
+    DumpEVMState();
+#endif
 
     if (fFeeEstimatesInitialized)
     {
@@ -767,6 +770,9 @@ static void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImp
     }
     } // End scope of CImportingNow
     chainman.ActiveChainstate().LoadMempool(args);
+#ifdef ENABLE_EVM
+    LoadEVMState();
+#endif
 }
 
 /** Sanity checks
