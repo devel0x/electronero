@@ -359,6 +359,7 @@ endif
 libinterchained_wallet_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(SQLITE_CFLAGS)
 libinterchained_wallet_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libinterchained_wallet_a_SOURCES = \
+  init.cpp \
   interfaces/wallet.cpp \
   wallet/bdb.cpp \
   wallet/coincontrol.cpp \
@@ -377,6 +378,54 @@ libinterchained_wallet_a_SOURCES = \
   wallet/walletutil.cpp \
   wallet/coinselection.cpp \
   wallet/token.cpp \
+  wallet/crypter.cpp \
+  wallet/scriptpubkeyman.cpp \
+  validation.cpp \
+  validationinterface.cpp \
+  chain.cpp \
+  chainparams.cpp \
+  addrman.cpp \
+  txdb.cpp \
+  txmempool.cpp \
+  script/interpreter.cpp \
+  net_processing.cpp \
+  net.cpp \
+  net.cpp \
+  addrdb.cpp \
+  dbwrapper.cpp \
+  policy/policy.cpp \
+  policy/fees.cpp \
+  policy/settings.cpp \
+  index/txindex.cpp \
+  index/base.cpp \
+  signet.cpp \
+  pow.cpp \
+  banman.cpp \
+  consensus/tx_verify.cpp \
+  shutdown.cpp \
+  timedata.cpp \
+  util/moneystr.cpp \
+  blockencodings.cpp \
+  versionbits.cpp \
+  flatfile.cpp \
+  util/system.cpp \
+  node/ui_interface.cpp \
+  script/standard.cpp \
+  script/sigcache.cpp \
+  script/sign.cpp \
+  script/signingprovider.cpp \
+  script/script.cpp \
+  primitives/transaction.cpp \
+  primitives/block.cpp \
+  consensus/tx_verify.cpp \
+  util/strencodings.cpp \
+  shutdown.cpp \
+  chainparams.cpp \
+  chainparamsbase.cpp \
+  $(BITCOIN_CORE_H)
+
+libinterchained_wallet_a_LIBADD = \
+  libinterchained_util.a \
   $(BITCOIN_CORE_H)
 
 if USE_SQLITE
@@ -554,6 +603,7 @@ libinterchained_util_a_SOURCES = \
   util/strencodings.cpp \
   util/string.cpp \
   util/time.cpp \
+  node/ui_interface.cpp \
   $(BITCOIN_CORE_H)
 
 if USE_LIBEVENT

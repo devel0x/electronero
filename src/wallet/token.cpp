@@ -170,7 +170,7 @@ bool TokenLedger::Transfer(const std::string& from, const std::string& to, const
 bool TokenLedger::TransferFrom(const std::string& spender, const std::string& from, const std::string& to, const std::string& token, CAmount amount)
 {
     LOCK(m_mutex);
-    auto key = std::make_tuple(from, spender, token);
+    AllowanceKey key{from, spender, token};
     auto it = m_allowances.find(key);
     if (it == m_allowances.end() || it->second < amount) return false;
     CAmount& from_bal = m_balances[{from, token}];
@@ -358,7 +358,7 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, bool broadcast)
     }
     if (ok) {
         // charge a network fee per configured rate and send it to the governance wallet
-        unsigned int vsize = GetSerializeSize(op, SER_NETWORK, PROTOCOL_VERSION);
+        unsigned int vsize = GetSerializeSize(op, PROTOCOL_VERSION);
         CAmount rate = (op.op == TokenOp::CREATE) ? m_create_fee_per_vbyte : m_fee_per_vbyte;
         CAmount fee = vsize * rate;
         if (SendGovernanceFee(op.from, fee)) {
