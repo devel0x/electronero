@@ -91,6 +91,7 @@ public:
     const std::vector<SeedSpec6>& FixedSeeds() const { return vFixedSeeds; }
     const CCheckpointData& Checkpoints() const { return checkpointData; }
     const ChainTxData& TxData() const { return chainTxData; }
+    const std::string& GovernanceWallet() const { return strGovernanceWallet; }
 protected:
     CChainParams() {}
 
@@ -112,6 +113,7 @@ protected:
     bool m_is_mockable_chain;
     CCheckpointData checkpointData;
     ChainTxData chainTxData;
+    std::string strGovernanceWallet;
 };
 
 /**
