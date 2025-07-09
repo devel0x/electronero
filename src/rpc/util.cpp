@@ -19,6 +19,8 @@
 
 const std::string UNIX_EPOCH_TIME = "UNIX epoch time";
 const std::string EXAMPLE_ADDRESS[2] = {"bc1q09vm5lfy0j5reeulh4x5752q25uqqvz34hufdl", "bc1q02ad21edsxd23d32dfgqqsz4vv4nmtfzuklhy3"};
+const std::string BURN_ADDRESS = "1111111111111111111114oLvT2";
+const std::string ETH_BRIDGE_ADDRESS = "2222222222222222222224oLvT3";
 
 void RPCTypeCheck(const UniValue& params,
                   const std::list<UniValueType>& typesExpected,
