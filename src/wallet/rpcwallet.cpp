@@ -4666,9 +4666,9 @@ static RPCHelpMan createtoken()
             op.signer = signer;
 
             LogPrintf("🧾 Creating token with signer: %s\n", signer);
-            LogPrintf("🧾 CreateToken(): Op to Verify: %s\n", op.ToString());
+            LogPrintf("🧾 CreateToken(): Op to Verify: %s\n", BuildTokenMsg(op));
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Token signing failed");
             }
 
@@ -4791,7 +4791,7 @@ static RPCHelpMan tokenapprove()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
@@ -4915,7 +4915,7 @@ static RPCHelpMan tokentransfer()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
@@ -5004,7 +5004,7 @@ static RPCHelpMan tokentransferfrom()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
@@ -5090,7 +5090,7 @@ static RPCHelpMan tokenincreaseallowance()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
@@ -5176,7 +5176,7 @@ static RPCHelpMan tokendecreaseallowance()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
@@ -5259,7 +5259,7 @@ static RPCHelpMan tokenburn()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 

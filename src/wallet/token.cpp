@@ -301,7 +301,7 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
     }
 
     op.signer = signer;
-    LogPrintf("✍️ SignTokenOperation: OP to sign: %s\n", op.ToString());
+    LogPrintf("✍️ SignTokenOperation: OP to sign: %s\n", BuildTokenMsg(op));
 
     CTxDestination dest = DecodeDestination(signer);
     if (!IsValidDestination(dest)) {
@@ -321,7 +321,8 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
         return false;
     }
 
-    std::string message = op.ToString(); // must be deterministic & match verifier
+    // Sign over all token operation fields to prevent tampering
+    std::string message = BuildTokenMsg(op);
 
     CKey key;
     if (!spk_man->GetKey(keyID, key)) return false;
@@ -390,8 +391,9 @@ bool TokenLedger::VerifySignature(const TokenOperation& op) const
         LogPrintf("❌ VerifyTokenOperation: Invalid signer address\n");
         return false;
     }
-    LogPrintf("✍️ VerifySignature: OP to verify: %s\n", op.ToString());
-    MessageVerificationResult result = MessageVerify(op.signer, op.signature, op.ToString());
+    std::string message = BuildTokenMsg(op);
+    LogPrintf("✍️ VerifySignature: OP to verify: %s\n", message);
+    MessageVerificationResult result = MessageVerify(op.signer, op.signature, message);
 
     if (result != MessageVerificationResult::OK) {
         LogPrintf("❌ VerifySignature: Failed for %s\n", op.signer);
@@ -430,14 +432,7 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, bool broadcast)
     LOCK(m_mutex);
     LogPrintf("📥 ApplyOperation called: op=%u token=%s from=%s to=%s signer=%s signature=%s\n", uint8_t(op.op), op.token, op.from, op.to, op.signer, op.signature);
     
-    TokenOperation op_h;
-    op_h.op = op.op;
-    op_h.from = op.from;
-    op_h.token = op.token;
-    op_h.signer = op.signer;
-    op_h.signature = op.signature;
-    
-    if (!VerifySignature(op_h)) {
+    if (!VerifySignature(op)) {
         LogPrintf("❌ Signature invalid for op: %s\n", op.token);
         return false;
     }
