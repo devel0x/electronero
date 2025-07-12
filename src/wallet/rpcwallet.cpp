@@ -4577,6 +4577,8 @@ static RPCHelpMan createtoken()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string amountStr = request.params[0].get_str();
@@ -4627,7 +4629,8 @@ static RPCHelpMan createtoken()
             TokenOperation tmp = op;
             tmp.signature.clear();
             tmp.signer.clear();
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -4715,6 +4718,8 @@ static RPCHelpMan tokenapprove()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string spender = request.params[0].get_str();
@@ -4756,7 +4761,8 @@ static RPCHelpMan tokenapprove()
             TokenOperation tmp = op;
             tmp.signature.clear();
             tmp.signer.clear();
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -4843,6 +4849,8 @@ static RPCHelpMan tokentransfer()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string to = request.params[0].get_str();
@@ -4880,7 +4888,8 @@ static RPCHelpMan tokentransfer()
             tmp.signature.clear();
             tmp.signer.clear();
 
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -4932,6 +4941,8 @@ static RPCHelpMan tokentransferfrom()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string from = request.params[0].get_str();
@@ -4971,7 +4982,8 @@ static RPCHelpMan tokentransferfrom()
             tmp.signature.clear();
             tmp.signer.clear();
 
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -5022,6 +5034,8 @@ static RPCHelpMan tokenincreaseallowance()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string spender = request.params[0].get_str();
@@ -5060,7 +5074,8 @@ static RPCHelpMan tokenincreaseallowance()
             tmp.signature.clear();
             tmp.signer.clear();
 
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -5111,6 +5126,8 @@ static RPCHelpMan tokendecreaseallowance()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string spender = request.params[0].get_str();
@@ -5149,7 +5166,8 @@ static RPCHelpMan tokendecreaseallowance()
             tmp.signature.clear();
             tmp.signer.clear();
 
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
@@ -5199,6 +5217,8 @@ static RPCHelpMan tokenburn()
             std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return NullUniValue;
             const CWallet* const pwallet = wallet.get();
+            // ensure signer mapping exists for this wallet
+            g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
             LOCK(pwallet->cs_wallet);
 
             std::string token_id = request.params[0].get_str();
@@ -5234,7 +5254,8 @@ static RPCHelpMan tokenburn()
             TokenOperation tmp = op;
             tmp.signature.clear();
             tmp.signer.clear();
-            std::string msg = tmp.ToString(); // or custom serialization string
+            uint256 h = TokenOperationHash(tmp);
+            std::string msg = h.GetHex();
 
             std::string sig;
             SigningResult err = SigningResult::SIGNING_FAILED;
