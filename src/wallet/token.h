@@ -18,7 +18,7 @@
 #include <primitives/block.h>
 #include <cstdint>
 
-static const uint32_t TOKEN_DB_VERSION = 1;
+static const uint32_t TOKEN_DB_VERSION = 2;
 
 enum class TokenOp : uint8_t {
     CREATE = 0,
@@ -98,6 +98,8 @@ struct AllowanceKey {
 
 uint256 TokenOperationHash(const TokenOperation& op);
 void BroadcastTokenOp(const TokenOperation& op);
+//! Build deterministic message string for signing token operations
+std::string BuildTokenMsg(const TokenOperation& op);
 bool IsValidTokenId(const std::string& token);
 std::string GenerateTokenId(const std::string& creator, const std::string& name);
 
@@ -123,7 +125,7 @@ struct TokenLedgerState {
 
 class TokenLedger {
 public:
-    bool ApplyOperation(const TokenOperation& op, bool broadcast = true);
+    bool ApplyOperation(const TokenOperation& op, const std::string& wallet_name = "", bool broadcast = true);
     bool Load();
     bool Flush() const;
 
@@ -137,7 +139,7 @@ public:
     CAmount TotalSupply(const std::string& token) const;
     Optional<TokenMeta> GetTokenMeta(const std::string& token) const;
 
-    std::vector<std::tuple<std::string, std::string, std::string>> ListWalletTokens(const std::string& wallet) const;
+    std::vector<std::tuple<std::string, std::string, std::string>> ListWalletTokens(const std::string& address) const;
     std::vector<std::tuple<std::string, std::string, std::string>> ListAllTokens() const;
     std::vector<TokenOperation> TokenHistory(const std::string& token, const std::string& address_filter = "") const;
 
