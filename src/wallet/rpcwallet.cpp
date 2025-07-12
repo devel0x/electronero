@@ -4657,7 +4657,7 @@ static RPCHelpMan createtoken()
 
             TokenOperation op;
             op.op = TokenOp::CREATE;
-            op.from = walletName;
+            op.from = signer;
             op.token = token_id;
             op.amount = rawAmount;
             op.name = name;
@@ -4666,13 +4666,13 @@ static RPCHelpMan createtoken()
             op.signer = signer;
 
             LogPrintf("🧾 Creating token with signer: %s\n", signer);
-            LogPrintf("🧾 CreateToken(): Op to Verify: %s\n", op.ToString());
+            LogPrintf("🧾 CreateToken(): Op to Verify: %s\n", BuildTokenMsg(op));
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Token signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Token creation failed");
             }
             LogPrintf("🧾 CreateToken(): Signature: %s\n", op.signature);
@@ -4713,7 +4713,8 @@ static RPCHelpMan gettokenbalance()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
             }
 
-            CAmount bal = g_token_ledger.Balance(pwallet->GetName(), token_id);
+            std::string signer = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            CAmount bal = g_token_ledger.Balance(signer, token_id);
             return ValueFromAmount(bal);
         }
     };
@@ -4725,7 +4726,7 @@ static RPCHelpMan tokenapprove()
         "tokenapprove",
         "\nApprove a spender for a given token amount.\n",
         {
-            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Wallet name of spender"},
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to approve (string to preserve decimal precision)"},
         },
@@ -4785,19 +4786,19 @@ static RPCHelpMan tokenapprove()
 
             TokenOperation op;
             op.op = TokenOp::APPROVE;
-            op.from = walletName;
+            op.from = signer;
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
             LogPrintf("✅ TokenApprove: Signed by %s\n", signer);
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Failed to apply token approve operation");
             }
 
@@ -4812,8 +4813,8 @@ static RPCHelpMan tokenallowance()
         "tokenallowance",
         "\nGet the remaining allowance from owner to spender.\n",
         {
-            {"owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Owner wallet name"},
-            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet name"},
+            {"owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Owner address"},
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
         },
         RPCResult{
@@ -4846,9 +4847,9 @@ static RPCHelpMan tokentransfer()
 {
     return RPCHelpMan{
         "tokentransfer",
-        "\nTransfer tokens to another wallet.\n",
+        "\nTransfer tokens to another address.\n",
         {
-            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
         },
@@ -4909,17 +4910,17 @@ static RPCHelpMan tokentransfer()
 
             TokenOperation op;
             op.op = TokenOp::TRANSFER;
-            op.from = walletName;
+            op.from = signer;
             op.to = to;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "insufficient token balance or failed to apply transfer");
             }
 
@@ -4934,8 +4935,8 @@ static RPCHelpMan tokentransferfrom()
         "tokentransferfrom",
         "\nTransfer tokens using an allowance.\n",
         {
-            {"from", RPCArg::Type::STR, RPCArg::Optional::NO, "Source wallet"},
-            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+            {"from", RPCArg::Type::STR, RPCArg::Optional::NO, "Source address"},
+            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
         },
@@ -4999,16 +5000,16 @@ static RPCHelpMan tokentransferfrom()
             op.op = TokenOp::TRANSFERFROM;
             op.from = from;
             op.to = to;
-            op.spender = walletName;
+            op.spender = signer;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Allowance or balance too low");
             }
 
@@ -5023,7 +5024,7 @@ static RPCHelpMan tokenincreaseallowance()
         "tokenincreaseallowance",
         "\nIncrease spender allowance.\n",
         {
-            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet"},
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to increase (string to preserve decimal precision)"},
         },
@@ -5084,17 +5085,17 @@ static RPCHelpMan tokenincreaseallowance()
 
             TokenOperation op;
             op.op = TokenOp::INCREASE_ALLOWANCE;
-            op.from = walletName;
+            op.from = signer;
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Allowance increase failed");
             }
 
@@ -5109,7 +5110,7 @@ static RPCHelpMan tokendecreaseallowance()
         "tokendecreaseallowance",
         "\nDecrease spender allowance.\n",
         {
-            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet"},
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to decrease (string to preserve decimal precision)"},
         },
@@ -5170,17 +5171,17 @@ static RPCHelpMan tokendecreaseallowance()
 
             TokenOperation op;
             op.op = TokenOp::DECREASE_ALLOWANCE;
-            op.from = walletName;
+            op.from = signer;
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Allowance update failed");
             }
 
@@ -5254,16 +5255,16 @@ static RPCHelpMan tokenburn()
 
             TokenOperation op;
             op.op = TokenOp::BURN;
-            op.from = walletName;
+            op.from = signer;
             op.token = token_id;
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
-            if (!g_token_ledger.ApplyOperation(op)) {
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Burn failed (balance too low?)");
             }
 
@@ -5409,7 +5410,8 @@ static RPCHelpMan my_tokens()
             const CWallet* const pwallet = wallet.get();
             LOCK(pwallet->cs_wallet);
 
-            auto list = g_token_ledger.ListWalletTokens(pwallet->GetName());
+            std::string signer = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            auto list = g_token_ledger.ListWalletTokens(signer);
             UniValue arr(UniValue::VARR);
 
             for (const auto& item : list) {
@@ -5417,7 +5419,7 @@ static RPCHelpMan my_tokens()
                 const std::string& name = std::get<1>(item);
                 const std::string& symbol = std::get<2>(item);
 
-                CAmount balance = g_token_ledger.GetBalance(pwallet->GetName(), token_id);
+                CAmount balance = g_token_ledger.GetBalance(signer, token_id);
                 if (balance <= 0) continue;
 
                 int decimals = g_token_ledger.GetDecimals(token_id);
