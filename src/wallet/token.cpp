@@ -87,7 +87,10 @@ std::string GenerateTokenId(const std::string& creator, const std::string& name)
 
 uint256 TokenOperationHash(const TokenOperation& op)
 {
-    return SerializeHash(op);
+    TokenOperation tmp = op;
+    tmp.signature.clear();
+    tmp.signer.clear();
+    return SerializeHash(tmp);
 }
 
 void BroadcastTokenOp(const TokenOperation& op)
@@ -325,10 +328,7 @@ bool TokenLedger::VerifySignature(const TokenOperation& op) const
         return false;
     }
 
-    TokenOperation tmp = op;
-    tmp.signature.clear();
-    tmp.signer.clear();
-    uint256 h = TokenOperationHash(tmp);
+    uint256 h = TokenOperationHash(op);
     std::string msg = h.GetHex();
 
     auto result = MessageVerify(op.signer, op.signature, msg);
