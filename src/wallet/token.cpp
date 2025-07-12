@@ -90,7 +90,14 @@ std::string GenerateTokenId(const std::string& creator, const std::string& name)
 
 uint256 TokenOperationHash(const TokenOperation& op)
 {
-    return SerializeHash(op);
+    TokenOperation tmp = op;
+    tmp.signature.clear();
+    tmp.signer.clear();
+    LogPrintf("🔍 TokenOperationHash: %s\n", SerializeHash(tmp).GetHex());
+    LogPrintf("🔍 TokenOperationHash tmp: %s\n", tmp.ToString());
+    LogPrintf("🔍 TokenOperationHash op: %s\n", op.ToString());
+
+    return SerializeHash(tmp);
 }
 
 void BroadcastTokenOp(const TokenOperation& op)
@@ -278,6 +285,45 @@ bool TokenLedger::SendGovernanceFee(const std::string& wallet, CAmount fee)
     return true;
 }
 
+bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName)
+{
+    std::string signer = GetSignerAddress(walletName, wallet);
+    if (signer.empty()) {
+        LogPrintf("❌ SignTokenOperation: No signer address found\n");
+        return false;
+    }
+
+    op.signer = signer;
+    LogPrintf("✍️ SignTokenOperation: OP to sign: %s\n", op.ToString());
+
+    CTxDestination dest = DecodeDestination(signer);
+    if (!IsValidDestination(dest)) {
+        LogPrintf("❌ SignTokenOperation: Invalid destination '%s'\n", signer);
+        return false;
+    }
+
+    LegacyScriptPubKeyMan* spk_man = wallet.GetLegacyScriptPubKeyMan();
+    if (!spk_man) {
+        LogPrintf("❌ SignTokenOperation: LegacyScriptPubKeyMan not available\n");
+        return false;
+    }
+
+    CKeyID keyID = GetKeyForDestination(*spk_man, dest);
+    if (keyID.IsNull()) {
+        LogPrintf("❌ SignTokenOperation: Failed to extract key ID from destination\n");
+        return false;
+    }
+
+    std::string message = op.ToString(); // must be deterministic & match verifier
+
+    CKey key;
+    if (!spk_man->GetKey(keyID, key)) return false;
+    if (!MessageSign(key, message, op.signature)) return false;
+
+    LogPrintf("✅ SignTokenOperation: Signed by %s\n", signer);
+    return true;
+}
+
 std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 {
     LOCK(m_mutex);
@@ -287,15 +333,14 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 
     const std::string dummy_msg = "signer_check";
 
-    for (const std::pair<CTxDestination, CAddressBookData>& entry : w.m_address_book) {
-        const CTxDestination& dest = entry.first;
+    for (const auto& scriptPubKey : w.GetAllDestinations()) {
         std::string sig;
         SigningResult err;
 
-        if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
+        if (const PKHash* pkhash = boost::get<PKHash>(&scriptPubKey)) {
             err = w.SignMessage(dummy_msg, *pkhash, sig);
         }
-        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&scriptPubKey)) {
             err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
         }
         else {
@@ -303,7 +348,7 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
         }
 
         if (err == SigningResult::OK) {
-            std::string addr = EncodeDestination(dest);
+            std::string addr = EncodeDestination(scriptPubKey);
             m_wallet_signers[wallet] = addr;
             Flush();
             LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
@@ -332,27 +377,22 @@ std::string BuildTokenMsg(const TokenOperation& op) {
 
 bool TokenLedger::VerifySignature(const TokenOperation& op) const
 {
-    LogPrintf("OP: %s\n", op.ToString());
-    auto signer_id = (op.op == TokenOp::TRANSFERFROM ? op.spender : op.from);
-    auto it = m_wallet_signers.find(signer_id);
-    if (it == m_wallet_signers.end()) {
-        LogPrintf("❌ Signer not found for wallet: %s\n", signer_id);
+    LOCK(m_mutex);  // Safe internal lock
+    CTxDestination dest = DecodeDestination(op.signer);
+    if (!IsValidDestination(dest)) {
+        LogPrintf("❌ VerifyTokenOperation: Invalid signer address\n");
         return false;
     }
-    if (it->second != op.signer) {
-        LogPrintf("❌ Signer mismatch: expected %s, got %s\n", it->second, op.signer);
+    LogPrintf("✍️ VerifySignature: OP to verify: %s\n", op.ToString());
+    MessageVerificationResult result = MessageVerify(op.signer, op.signature, op.ToString());
+
+    if (result != MessageVerificationResult::OK) {
+        LogPrintf("❌ VerifySignature: Failed for %s\n", op.signer);
         return false;
     }
 
-    std::string msg = "Hello Universe";
-
-    // 🔐 Use MessageVerify() with proper message magic internally
-    auto result = MessageVerify(op.signer, op.signature, msg);
-
-    LogPrintf("🔍 Signature verification for msg: %s -> %s\n", msg, 
-        (result == MessageVerificationResult::OK ? "✅ OK" : "❌ FAIL"));
-
-    return result == MessageVerificationResult::OK;
+    LogPrintf("✅ VerifySignature: Signature valid for %s\n", op.signer);
+    return true;
 }
 
 bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenOperation& op)
@@ -381,8 +421,16 @@ bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenO
 bool TokenLedger::ApplyOperation(const TokenOperation& op, bool broadcast)
 {
     LOCK(m_mutex);
-    LogPrintf("📥 ApplyOperation called: op=%u token=%s from=%s to=%s\n", uint8_t(op.op), op.token, op.from, op.to);
-    if (!VerifySignature(op)) {
+    LogPrintf("📥 ApplyOperation called: op=%u token=%s from=%s to=%s signer=%s signature=%s\n", uint8_t(op.op), op.token, op.from, op.to, op.signer, op.signature);
+    
+    TokenOperation op_h;
+    op_h.op = op.op;
+    op_h.from = op.from;
+    op_h.token = op.token;
+    op_h.signer = op.signer;
+    op_h.signature = op.signature;
+    
+    if (!VerifySignature(op_h)) {
         LogPrintf("❌ Signature invalid for op: %s\n", op.token);
         return false;
     }

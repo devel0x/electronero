@@ -11,7 +11,7 @@
 #include <serialize.h>       // For SER_GETHASH
 #include <util/message.h>
 #include <util/strencodings.h> // For DecodeBase64()
-
+#include <logging.h>   
 #include <string>
 #include <vector>
 
@@ -28,28 +28,48 @@ MessageVerificationResult MessageVerify(
 {
     CTxDestination destination = DecodeDestination(address);
     if (!IsValidDestination(destination)) {
+        LogPrintf("❌ MessageVerify: Invalid address '%s'\n", address);
         return MessageVerificationResult::ERR_INVALID_ADDRESS;
     }
 
-    if (boost::get<PKHash>(&destination) == nullptr) {
+    if (!boost::get<PKHash>(&destination) && !boost::get<WitnessV0KeyHash>(&destination)) {
+        LogPrintf("❌ MessageVerify: Unsupported address type for '%s'\n", address);
         return MessageVerificationResult::ERR_ADDRESS_NO_KEY;
     }
 
-    bool invalid = false;
-    std::vector<unsigned char> signature_bytes = DecodeBase64(signature.c_str(), &invalid);
-    if (invalid) {
+    std::vector<unsigned char> signature_bytes;
+    if (!DecodeBase64ToBytes(signature, signature_bytes)) {
+        LogPrintf("❌ MessageVerify: Failed to decode base64 signature for '%s'\n", address);
         return MessageVerificationResult::ERR_MALFORMED_SIGNATURE;
     }
+    LogPrintf("🔏 MessageVerify: Signature (base64): %s\n", signature);
+    LogPrintf("🔏 MessageVerify: Digest being signed: %s\n", MessageHash(message).ToString());
+
+    uint256 digest = MessageHash(message);
+    LogPrintf("🔍 MessageVerify: Digest for verification: %s\n", digest.ToString());
 
     CPubKey pubkey;
-    if (!pubkey.RecoverCompact(MessageHash(message), signature_bytes)) {
+    if (!pubkey.RecoverCompact(digest, signature_bytes)) {
+        LogPrintf("❌ MessageVerify: Failed to recover public key from signature\n");
         return MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED;
     }
 
-    if (!(CTxDestination(PKHash(pubkey)) == destination)) {
-        return MessageVerificationResult::ERR_NOT_SIGNED;
+    if (auto pkhash = boost::get<PKHash>(&destination)) {
+        if (PKHash(pubkey) != *pkhash) {
+            LogPrintf("❌ MessageVerify: Recovered pubkey does not match PKHash for '%s'\n", address);
+            return MessageVerificationResult::ERR_NOT_SIGNED;
+        }
+    } else if (auto wpkh = boost::get<WitnessV0KeyHash>(&destination)) {
+        if (WitnessV0KeyHash(pubkey) != *wpkh) {
+            LogPrintf("❌ MessageVerify: Recovered pubkey does not match WPKH for '%s'\n", address);
+            return MessageVerificationResult::ERR_NOT_SIGNED;
+        }
+    } else {
+        LogPrintf("❌ MessageVerify: Address type did not resolve as expected\n");
+        return MessageVerificationResult::ERR_ADDRESS_NO_KEY;
     }
 
+    LogPrintf("✅ MessageVerify: Signature is valid for '%s'\n", address);
     return MessageVerificationResult::OK;
 }
 
@@ -65,6 +85,9 @@ bool MessageSign(
     }
 
     signature = EncodeBase64(signature_bytes);
+    
+    LogPrintf("🔏 MessageSign: Signature (base64): %s\n", signature);
+    LogPrintf("🔏 MessageSign: Digest being signed: %s\n", MessageHash(message).ToString());
 
     return true;
 }

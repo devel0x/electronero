@@ -2582,6 +2582,20 @@ TransactionError CWallet::FillPSBT(PartiallySignedTransaction& psbtx, bool& comp
     return TransactionError::OK;
 }
 
+std::vector<CTxDestination> CWallet::GetAllDestinations() const {
+    LOCK(cs_wallet); // required for GetKeyBirthTimes
+
+    std::vector<CTxDestination> result;
+    std::map<CKeyID, int64_t> keyBirthMap;
+    GetKeyBirthTimes(keyBirthMap);
+
+    for (const auto& entry : keyBirthMap) {
+        result.push_back(PKHash(entry.first));
+    }
+
+    return result;
+}
+
 SigningResult CWallet::SignMessageHash(const uint256& hash, const PKHash& pkhash, std::string& strSig) const {
     LOCK(cs_wallet);
 

@@ -46,14 +46,11 @@ struct TokenOperation {
 
     std::string ToString() const {
         return strprintf(
-            "op=%d token=%d from=%s to=%s amount=%d signer=%s signature=%s",
+            "op=%d token=%s from=%s signer=%s",
             static_cast<int>(op),   // 👈 Cast the enum
             token,
             from,
-            to,
-            amount,
-            signer,
-            signature
+            signer.c_str()
         );
     }
 
@@ -147,9 +144,10 @@ public:
     bool RescanFromHeight(int from_height);
     bool ReplayOperation(const TokenOperation& op, int64_t height) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
     std::string GetSignerAddress(const std::string& wallet, CWallet& w);
-    bool VerifySignature(const TokenOperation& op) const EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+    bool VerifySignature(const TokenOperation& op) const;
     void ProcessBlock(const CBlock& block, int height);
     int GetDecimals(const std::string& token_id) const;
+    bool SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName);
 
 private:
     void CreateToken(const std::string& wallet, const std::string& token, CAmount amount,
@@ -183,6 +181,7 @@ private:
 
 extern TokenLedger g_token_ledger;
 
+bool VerifyMessage(const CTxDestination& address, const std::string& signature, const std::string& message);
 void RegisterTokenValidationInterface();
 void UnregisterTokenValidationInterface();
 

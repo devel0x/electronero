@@ -280,6 +280,18 @@ std::string DecodeBase32(const std::string& str, bool* pf_invalid)
     return std::string((const char*)vchRet.data(), vchRet.size());
 }
 
+bool DecodeBase64ToBytes(const std::string& str, std::vector<unsigned char>& out)
+{
+    if (!ValidAsCString(str)) {
+        return false;
+    }
+    bool invalid = false;
+    std::vector<unsigned char> vchRet = DecodeBase64(str.c_str(), &invalid);
+    if (invalid) return false;
+    out = std::move(vchRet);
+    return true;
+}
+
 NODISCARD static bool ParsePrechecks(const std::string& str)
 {
     if (str.empty()) // No empty string allowed

@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,9 @@ std::string EncodeBase64(Span<const unsigned char> input);
 std::string EncodeBase64(const std::string& str);
 std::vector<unsigned char> DecodeBase32(const char* p, bool* pf_invalid = nullptr);
 std::string DecodeBase32(const std::string& str, bool* pf_invalid = nullptr);
+/** Decode base64 to bytes. Returns false on failure */
+bool DecodeBase64ToBytes(const std::string& str, std::vector<unsigned char>& out);
+
 
 /**
  * Base32 encode.
