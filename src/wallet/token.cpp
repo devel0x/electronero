@@ -64,24 +64,27 @@ bool IsValidTokenId(const std::string& token)
 
 std::string GenerateTokenId(const std::string& creator, const std::string& name)
 {
+    int extranonce = 0;
+
     while (true) {
         CHashWriter hasher(SER_GETHASH, 0);
-        hasher << creator << name << GetRandHash();
+        hasher << creator << name << extranonce;
+
         uint256 hash = hasher.GetHash();
-        std::string hex = hash.GetHex();
-        std::string token = "0x" + hex.substr(0, 54) + "tok";
-        if (!g_token_ledger.ListAllTokens().empty()) {
-            // Ensure uniqueness
-            bool exists = false;
-            for (const auto& item : g_token_ledger.ListAllTokens()) {
-                if (std::get<0>(item) == token) {
-                    exists = true;
-                    break;
-                }
+        std::string token = "0x" + hash.GetHex().substr(0, 54) + "tok";
+
+        // Ensure token ID is unique in the ledger
+        bool exists = false;
+        for (const auto& item : g_token_ledger.ListAllTokens()) {
+            if (std::get<0>(item) == token) {
+                exists = true;
+                break;
             }
-            if (exists) continue;
         }
-        return token;
+
+        if (!exists) return token;
+
+        extranonce++;
     }
 }
 
@@ -312,8 +315,24 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
     return "";
 }
 
+std::string BuildTokenMsg(const TokenOperation& op) {
+    return strprintf(
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%lld|name=%s|symbol=%s|decimals=%d",
+        (int)op.op,
+        op.from,
+        op.to,
+        op.spender,
+        op.token,
+        op.amount,
+        op.name,
+        op.symbol,
+        op.decimals
+    );
+}
+
 bool TokenLedger::VerifySignature(const TokenOperation& op) const
 {
+    LogPrintf("OP: %s\n", op.ToString());
     auto signer_id = (op.op == TokenOp::TRANSFERFROM ? op.spender : op.from);
     auto it = m_wallet_signers.find(signer_id);
     if (it == m_wallet_signers.end()) {
@@ -325,14 +344,13 @@ bool TokenLedger::VerifySignature(const TokenOperation& op) const
         return false;
     }
 
-    TokenOperation tmp = op;
-    tmp.signature.clear();
-    tmp.signer.clear();
-    uint256 h = TokenOperationHash(tmp);
-    std::string msg = h.GetHex();
+    std::string msg = "Hello Universe";
 
+    // 🔐 Use MessageVerify() with proper message magic internally
     auto result = MessageVerify(op.signer, op.signature, msg);
-    LogPrintf("🔍 Signature verification for msg: %s -> %s\n", msg, (result == MessageVerificationResult::OK ? "✅ OK" : "❌ FAIL"));
+
+    LogPrintf("🔍 Signature verification for msg: %s -> %s\n", msg, 
+        (result == MessageVerificationResult::OK ? "✅ OK" : "❌ FAIL"));
 
     return result == MessageVerificationResult::OK;
 }

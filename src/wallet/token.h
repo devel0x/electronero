@@ -44,6 +44,20 @@ struct TokenOperation {
     std::string signer;
     std::string signature;
 
+    std::string ToString() const {
+        return strprintf(
+            "op=%d token=%d from=%s to=%s amount=%d signer=%s signature=%s",
+            static_cast<int>(op),   // 👈 Cast the enum
+            token,
+            from,
+            to,
+            amount,
+            signer,
+            signature
+        );
+    }
+
+
     SERIALIZE_METHODS(TokenOperation, obj) {
         uint8_t op_val;
         if (ser_action.ForRead()) {
