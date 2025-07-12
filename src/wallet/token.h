@@ -120,6 +120,7 @@ public:
     CAmount FeeRate() const;
     CAmount GovernanceBalance() const;
 
+    CAmount GetBalance(const std::string& wallet, const std::string& token) const;
     CAmount Balance(const std::string& wallet, const std::string& token) const;
     CAmount Allowance(const std::string& owner, const std::string& spender, const std::string& token) const;
     CAmount TotalSupply(const std::string& token) const;
@@ -134,6 +135,7 @@ public:
     std::string GetSignerAddress(const std::string& wallet, CWallet& w);
     bool VerifySignature(const TokenOperation& op) const EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
     void ProcessBlock(const CBlock& block, int height);
+    int GetDecimals(const std::string& token_id) const;
 
 private:
     void CreateToken(const std::string& wallet, const std::string& token, CAmount amount,

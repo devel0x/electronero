@@ -126,6 +126,14 @@ CAmount TokenLedger::Balance(const std::string& wallet, const std::string& token
     return it->second;
 }
 
+CAmount TokenLedger::GetBalance(const std::string& wallet, const std::string& token) const
+{
+    LOCK(m_mutex);
+    auto it = m_balances.find({wallet, token});
+    if (it == m_balances.end()) return 0;
+    return it->second;
+}
+
 void TokenLedger::Approve(const std::string& owner, const std::string& spender, const std::string& token, CAmount amount)
 {
     LOCK(m_mutex);
@@ -270,28 +278,63 @@ bool TokenLedger::SendGovernanceFee(const std::string& wallet, CAmount fee)
 std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 {
     LOCK(m_mutex);
+
     auto it = m_wallet_signers.find(wallet);
     if (it != m_wallet_signers.end()) return it->second;
-    CTxDestination dest;
-    std::string error;
-    if (!w.GetNewDestination(OutputType::BECH32, "", dest, error)) return "";
-    std::string addr = EncodeDestination(dest);
-    m_wallet_signers[wallet] = addr;
-    Flush();
-    return addr;
+
+    const std::string dummy_msg = "signer_check";
+
+    for (const std::pair<CTxDestination, CAddressBookData>& entry : w.m_address_book) {
+        const CTxDestination& dest = entry.first;
+        std::string sig;
+        SigningResult err;
+
+        if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
+            err = w.SignMessage(dummy_msg, *pkhash, sig);
+        }
+        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+            err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
+        }
+        else {
+            continue;
+        }
+
+        if (err == SigningResult::OK) {
+            std::string addr = EncodeDestination(dest);
+            m_wallet_signers[wallet] = addr;
+            Flush();
+            LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
+            return addr;
+        }
+    }
+
+    LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
+    return "";
 }
 
 bool TokenLedger::VerifySignature(const TokenOperation& op) const
 {
-    auto it = m_wallet_signers.find(op.op == TokenOp::TRANSFERFROM ? op.spender : op.from);
-    if (it == m_wallet_signers.end()) return false;
-    if (it->second != op.signer) return false;
+    auto signer_id = (op.op == TokenOp::TRANSFERFROM ? op.spender : op.from);
+    auto it = m_wallet_signers.find(signer_id);
+    if (it == m_wallet_signers.end()) {
+        LogPrintf("❌ Signer not found for wallet: %s\n", signer_id);
+        return false;
+    }
+    if (it->second != op.signer) {
+        LogPrintf("❌ Signer mismatch: expected %s, got %s\n", it->second, op.signer);
+        return false;
+    }
+
     TokenOperation tmp = op;
     tmp.signature.clear();
     tmp.signer.clear();
     uint256 h = TokenOperationHash(tmp);
     std::string msg = h.GetHex();
-    return MessageVerify(op.signer, op.signature, msg) == MessageVerificationResult::OK;
+
+    auto result = MessageVerify(op.signer, op.signature, msg);
+    LogPrintf("🔍 Signature verification for msg: %s -> %s\n", msg, (result == MessageVerificationResult::OK ? "✅ OK" : "❌ FAIL"));
+
+    return result == MessageVerificationResult::OK;
 }
 
 bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenOperation& op)
@@ -320,13 +363,21 @@ bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenO
 bool TokenLedger::ApplyOperation(const TokenOperation& op, bool broadcast)
 {
     LOCK(m_mutex);
-    if (!VerifySignature(op)) return false;
+    LogPrintf("📥 ApplyOperation called: op=%u token=%s from=%s to=%s\n", uint8_t(op.op), op.token, op.from, op.to);
+    if (!VerifySignature(op)) {
+        LogPrintf("❌ Signature invalid for op: %s\n", op.token);
+        return false;
+    }
     uint256 hash = TokenOperationHash(op);
-    if (!m_seen_ops.insert(hash).second) return false;
+    if (!m_seen_ops.insert(hash).second) {
+        LogPrintf("⚠️ Token operation already seen: %s\n", hash.GetHex());
+        return false;
+    }
     bool ok = true;
     switch (op.op) {
     case TokenOp::CREATE: {
         int64_t height = ::ChainActive().Height();
+        LogPrintf("🪙 Creating token: name=%s symbol=%s amount=%d\n", op.name, op.symbol, op.amount);
         CreateToken(op.from, op.token, op.amount, op.name, op.symbol, op.decimals, height);
         break;
     }
@@ -556,6 +607,13 @@ CAmount TokenLedger::FeeRate() const
 {
     LOCK(m_mutex);
     return m_fee_per_vbyte;
+}
+
+int TokenLedger::GetDecimals(const std::string& token_id) const {
+    // auto it = tokens.find(token_id);
+    // if (it == tokens.end()) return 16; // Default to 16 if not found
+    // return it->second.decimals;
+    return 8;
 }
 
 void TokenLedger::ProcessBlock(const CBlock& block, int height)
