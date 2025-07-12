@@ -34,8 +34,134 @@ development of the GUI. Its master branch is identical in all monotree
 repositories. Release branches and tags do not exist, so please do not fork
 that repository unless it is for development reasons.
 
+
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+
+New Feature
+-----------
+
+Interchained Core now exposes a `getbestheaderhash` RPC call to retrieve the
+hash of the tip of the best known header chain. This will match the
+`getbestblockhash` result during normal operation, but can differ while the
+node is still validating blocks.
+
+The wallet introduces a `burn` RPC for destroying coins by sending them to a
+provably unspendable address.
+
+Transactions can now carry short notes via the `sendwithmemo` RPC, which
+attaches the provided text to an OP_RETURN output.
+
+Support for an embedded Ethereum Virtual Machine (EVM) relies on the external
+`evmone` project. The source is bundled in the `evmone/` directory so no
+additional steps are required. If you want to update the dependency yourself,
+run:
+
+```
+git clone --recursive https://github.com/ethereum/evmone.git evmone
+rm -rf evmone/.git evmone/**/.git
+```
+
+This keeps the project self contained while still allowing manual updates.
+If the `evmone` tree appears empty after cloning, initialize its
+submodules with:
+
+```
+git submodule update --init --recursive
+```
+
+All EVM dependencies will then be checked in locally so builds work
+offline.
+
+Wallets can lock coins for transfer to the Ethereum sidechain using the
+`bridgefunds` RPC. Coins are sent to a special bridge address and the
+destination Ethereum address is included in an OP_RETURN output. The example
+script `contrib/bridge/bridge_watcher.py` demonstrates how to automate
+sidechain credits by watching for these deposits and submitting matching
+transactions on chain B.
+The companion script `contrib/bridge/return_watcher.py` listens for burn events
+on the Ethereum sidechain. When users lock or destroy their sidechain tokens, it
+releases the original coins on chain A by calling the wallet RPC.
+
+### Using the embedded EVM
+
+With the `evmone` submodule initialized, Interchained exposes RPC calls for
+deploying and interacting with Ethereum-style contracts.
+
+1. **Import a key**
+
+   Load an Ethereum account so the node can sign transactions:
+
+   ```
+   importethkey 0x0123456789abcdef...
+   ```
+
+   The command returns the address associated with the private key.
+
+2. **Deploy a contract**
+
+   Compile your Solidity code and submit the bytecode using `evmdeploy`:
+
+   ```
+   evmdeploy <address> 0x60806040...
+   ```
+
+   The RPC broadcasts the transaction and replies with the new contract address
+   once mined.
+
+3. **Call a contract**
+
+   Invoke a method via `evmcall` by supplying ABI-encoded data:
+
+   ```
+   evmcall <address> <contract> 0xa9059cbb000000000000000000000000...
+   ```
+
+   The call executes inside the embedded EVM and returns the result as hex.
+
+4. **Encode call data**
+
+   The helper script `contrib/evm/abi_encode.py` constructs ABI payloads for
+   common function calls:
+
+   ```
+   python3 contrib/evm/abi_encode.py transfer(address,uint256) \
+       0x0123456789abcdef0123456789abcdef01234567 1000
+   ```
+
+   Use the returned hex string as the `data` argument to `evmcall`.
+
+These RPCs wrap the `evmone` interpreter so simple smart contract workflows can
+run directly from Interchained without relying on external chains.
+
+Keys and contract state are saved to `evmstate.dat` inside the data directory.
+State is reloaded at startup so contracts persist across restarts.
+
+5. **Bridge coins to the sidechain**
+
+   Lock funds and specify the destination Ethereum address with `bridgefunds`:
+
+   ```
+   bridgefunds <amount> <ethereum_address>
+   ```
+
+   A watcher such as `contrib/bridge/bridge_watcher.py` can then detect the
+   deposit on chain A and mint tokens for the recipient on chain B.
+
+6. **Return coins to the main chain**
+
+   When sidechain tokens are burned or locked on chain B, the
+   `contrib/bridge/return_watcher.py` script listens for the event and calls the
+   wallet RPC to release the locked coins back to the user on chain A.
+
+Mining defaults were improved: `setgenerate` now uses all CPU cores when
+`genproclimit` is set to 0 or a negative value, and the miner periodically
+logs total hashrate across threads. Block timestamps are updated less
+frequently during hashing to cut overhead and boost hashrate. Difficulty
+retargeting now uses a 12‑block window and the yespower PoW limit was
+eased so blocks can be found roughly every 30 seconds.
+The yespower algorithm now switches to a smaller N=512 parameter at block
+2500, reducing memory usage and speeding up hashing after the fork.
 
 Testing
 -------
