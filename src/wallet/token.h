@@ -1,0 +1,183 @@
+#ifndef BITCOIN_WALLET_TOKEN_H
+#define BITCOIN_WALLET_TOKEN_H
+
+#include <amount.h>
+#include <map>
+#include <string>
+#include <tuple>
+#include <sync.h>
+#include <set>
+#include <vector>
+#include <hash.h>
+#include <serialize.h>
+#include <wallet/wallet.h>
+#include <primitives/block.h>
+#include <cstdint>
+
+static const uint32_t TOKEN_DB_VERSION = 1;
+
+enum class TokenOp : uint8_t {
+    CREATE=0,
+    TRANSFER=1,
+    APPROVE=2,
+    TRANSFERFROM=3,
+    INCREASE_ALLOWANCE=4,
+    DECREASE_ALLOWANCE=5,
+    BURN=6,
+    MINT=7
+};
+
+struct TokenOperation {
+    TokenOp op{TokenOp::CREATE};
+    std::string from;
+    std::string to;
+    std::string spender;
+    std::string token;
+    CAmount amount{0};
+    std::string name;
+    std::string symbol;
+    uint8_t decimals{0};
+    std::string signer;
+    std::string signature;
+
+    SERIALIZE_METHODS(TokenOperation, obj)
+    {
+        READWRITE(obj.op, obj.from, obj.to, obj.spender, obj.token, obj.amount, obj.name, obj.symbol, obj.decimals, obj.signer, obj.signature);
+    }
+};
+
+struct TokenMeta {
+    std::string name;
+    std::string symbol;
+    uint8_t decimals{0};
+    std::string operator_wallet;
+    int64_t creation_height{0};
+
+    SERIALIZE_METHODS(TokenMeta, obj)
+    {
+        READWRITE(obj.name, obj.symbol, obj.decimals, obj.operator_wallet, obj.creation_height);
+    }
+};
+
+struct AllowanceKey {
+    std::string owner;
+    std::string spender;
+    std::string token;
+
+    SERIALIZE_METHODS(AllowanceKey, obj)
+    {
+        READWRITE(obj.owner, obj.spender, obj.token);
+    }
+
+    bool operator<(const AllowanceKey& o) const
+    {
+        return std::tie(owner, spender, token) < std::tie(o.owner, o.spender, o.token);
+    }
+};
+
+uint256 TokenOperationHash(const TokenOperation& op);
+
+void BroadcastTokenOp(const TokenOperation& op);
+
+bool IsValidTokenId(const std::string& token);
+
+//! Create a unique token identifier derived from creator and name
+std::string GenerateTokenId(const std::string& creator, const std::string& name);
+
+struct TokenLedgerState {
+    std::map<std::pair<std::string,std::string>, CAmount> balances;
+    std::map<AllowanceKey, CAmount> allowances;
+    std::map<std::string, CAmount> totalSupply;
+    std::map<std::string, TokenMeta> token_meta;
+    std::map<std::string, std::vector<TokenOperation>> history;
+    CAmount governance_fees{0};
+    CAmount fee_per_vbyte{1};
+    CAmount create_fee_per_vbyte{10000000};
+    std::map<std::string, std::string> wallet_signers;
+    int64_t tip_height{0};
+    uint32_t version{TOKEN_DB_VERSION};
+
+    SERIALIZE_METHODS(TokenLedgerState, obj)
+    {
+        READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history, obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte, obj.wallet_signers, obj.tip_height, obj.version);
+    }
+};
+
+class TokenLedger {
+public:
+    bool ApplyOperation(const TokenOperation& op, bool broadcast = true);
+
+    //! Load and flush state
+    bool Load();
+    bool Flush() const;
+
+    void SetFeeRate(CAmount fee_per_vbyte);
+    CAmount FeeRate() const;
+
+    //! Total fees collected for the governance wallet
+    CAmount GovernanceBalance() const;
+
+    CAmount Balance(const std::string& wallet, const std::string& token) const;
+    CAmount Allowance(const std::string& owner, const std::string& spender, const std::string& token) const;
+    CAmount TotalSupply(const std::string& token) const;
+    Optional<TokenMeta> GetTokenMeta(const std::string& token) const;
+
+    std::vector<std::tuple<std::string,std::string,std::string>> ListWalletTokens(const std::string& wallet) const;
+    std::vector<std::tuple<std::string,std::string,std::string>> ListAllTokens() const;
+
+    //! Return history of operations for a token, optionally filtered by address
+    std::vector<TokenOperation> TokenHistory(const std::string& token, const std::string& address_filter = "") const;
+
+    //! Rescan blockchain from given height and rebuild token state
+    bool RescanFromHeight(int from_height);
+
+    //! Replay a token operation at a specific block height (internal)
+    bool ReplayOperation(const TokenOperation& op, int64_t height) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+
+    //! Obtain signing address for wallet, generating one if necessary
+    std::string GetSignerAddress(const std::string& wallet, CWallet& w);
+
+    //! Verify the signature on an operation and record the signer for new wallets
+    bool VerifySignature(const TokenOperation& op) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+
+    //! Process token operations in a connected block
+    void ProcessBlock(const CBlock& block, int height);
+
+private:
+    void CreateToken(const std::string& wallet, const std::string& token, CAmount amount, const std::string& name, const std::string& symbol, uint8_t decimals, int64_t height);
+    void RegisterToken(const std::string& token, const std::string& name, const std::string& symbol, uint8_t decimals, const std::string& owner, int64_t height);
+    void Approve(const std::string& owner, const std::string& spender, const std::string& token, CAmount amount);
+    void IncreaseAllowance(const std::string& owner, const std::string& spender, const std::string& token, CAmount amount);
+    void DecreaseAllowance(const std::string& owner, const std::string& spender, const std::string& token, CAmount amount);
+    bool Transfer(const std::string& from, const std::string& to, const std::string& token, CAmount amount);
+    bool TransferFrom(const std::string& spender, const std::string& from, const std::string& to, const std::string& token, CAmount amount);
+    bool Burn(const std::string& wallet, const std::string& token, CAmount amount);
+
+    //! Send the governance fee as a coin transaction
+    bool SendGovernanceFee(const std::string& wallet, CAmount fee);
+    bool RecordOperationOnChain(const std::string& wallet, const TokenOperation& op);
+
+    mutable RecursiveMutex m_mutex;
+    std::map<std::pair<std::string,std::string>, CAmount> m_balances;
+    std::map<AllowanceKey, CAmount> m_allowances;
+    std::map<std::string, CAmount> m_totalSupply;
+    std::map<std::string, TokenMeta> m_token_meta;
+    std::set<uint256> m_seen_ops;
+
+    // per-token list of operations in order applied
+    std::map<std::string, std::vector<TokenOperation>> m_history;
+
+    std::string m_governance_wallet{"governance"};
+    CAmount m_governance_fees{0};
+    CAmount m_fee_per_vbyte{1};
+    CAmount m_create_fee_per_vbyte{10000000};
+    std::map<std::string, std::string> m_wallet_signers;
+    int64_t m_tip_height{0};
+};
+
+extern TokenLedger g_token_ledger;
+
+void RegisterTokenValidationInterface();
+void UnregisterTokenValidationInterface();
+
+#endif // BITCOIN_WALLET_TOKEN_H
