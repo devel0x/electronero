@@ -209,6 +209,16 @@ bool TokenLedger::Burn(const std::string& wallet, const std::string& token, CAmo
     return true;
 }
 
+bool TokenLedger::Mint(const std::string& wallet, const std::string& token, CAmount amount)
+{
+    LOCK(m_mutex);
+    auto meta_it = m_token_meta.find(token);
+    if (meta_it == m_token_meta.end()) return false;
+    m_balances[{wallet, token}] += amount;
+    m_totalSupply[token] += amount;
+    return true;
+}
+
 CAmount TokenLedger::TotalSupply(const std::string& token) const
 {
     LOCK(m_mutex);
@@ -390,6 +400,17 @@ bool TokenLedger::VerifySignature(const TokenOperation& op) const
         LogPrintf("❌ VerifyTokenOperation: Invalid signer address\n");
         return false;
     }
+
+    // Determine the wallet this signature is claiming to represent
+    std::string wallet = op.from;
+    if (op.op == TokenOp::TRANSFERFROM) wallet = op.spender;
+
+    auto it = m_wallet_signers.find(wallet);
+    if (it == m_wallet_signers.end() || it->second != op.signer) {
+        LogPrintf("❌ VerifySignature: signer mismatch for wallet '%s'\n", wallet);
+        return false;
+    }
+
     LogPrintf("✍️ VerifySignature: OP to verify: %s\n", op.ToString());
     MessageVerificationResult result = MessageVerify(op.signer, op.signature, op.ToString());
 
@@ -475,8 +496,7 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, bool broadcast)
     case TokenOp::MINT: {
         auto it = m_token_meta.find(op.token);
         if (it == m_token_meta.end() || it->second.operator_wallet != op.from) return false;
-        int64_t height = ::ChainActive().Height();
-        CreateToken(op.from, op.token, op.amount, it->second.name, it->second.symbol, it->second.decimals, height);
+        ok = Mint(op.from, op.token, op.amount);
         break;
     }
     }
@@ -567,7 +587,7 @@ bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height)
     case TokenOp::MINT: {
         auto it = m_token_meta.find(op.token);
         if (it == m_token_meta.end() || it->second.operator_wallet != op.from) return false;
-        CreateToken(op.from, op.token, op.amount, it->second.name, it->second.symbol, it->second.decimals, height);
+        ok = Mint(op.from, op.token, op.amount);
         break;
     }
     }

@@ -5272,6 +5272,89 @@ static RPCHelpMan tokenburn()
     };
 }
 
+static RPCHelpMan tokenmint()
+{
+    return RPCHelpMan{
+        "tokenmint",
+        "\nMint new tokens to the caller's wallet.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to mint (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokenmint", "\"tokenidtok\" \"1.00000000\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string token_id = request.params[0].get_str();
+            std::string amountStr = request.params[1].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            std::string walletName = pwallet->GetName();
+            std::string signer = g_token_ledger.GetSignerAddress(walletName, *wallet);
+            if (signer.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Unable to determine signer address");
+            }
+
+            CTxDestination dest = DecodeDestination(signer);
+            if (!IsValidDestination(dest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+
+            LegacyScriptPubKeyMan* spk_man = pwallet->GetLegacyScriptPubKeyMan();
+            if (!spk_man) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Legacy signing provider not available");
+            }
+
+            CKeyID keyID = GetKeyForDestination(*spk_man, dest);
+            if (keyID.IsNull()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Unable to resolve key ID from signer address");
+            }
+
+            CKey key;
+            if (!spk_man->GetKey(keyID, key)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Private key not found for signer");
+            }
+
+            TokenOperation op;
+            op.op = TokenOp::MINT;
+            op.from = walletName;
+            op.token = token_id;
+            op.amount = amount;
+            op.signer = signer;
+
+            if (!MessageSign(key, op.ToString(), op.signature)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
+            }
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Mint failed");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
 static RPCHelpMan tokentotalsupply()
 {
     return RPCHelpMan{
@@ -5488,6 +5571,7 @@ static std::string TokenOpToStr(TokenOp op)
         case TokenOp::INCREASE_ALLOWANCE: return "increase_allowance";
         case TokenOp::DECREASE_ALLOWANCE: return "decrease_allowance";
         case TokenOp::BURN:               return "burn";
+        case TokenOp::MINT:               return "mint";
         default:                          return "unknown";
     }
 }
@@ -5608,6 +5692,7 @@ RPCHelpMan tokentransferfrom();
 RPCHelpMan tokenincreaseallowance();
 RPCHelpMan tokendecreaseallowance();
 RPCHelpMan tokenburn();
+RPCHelpMan tokenmint();
 RPCHelpMan tokentotalsupply();
 RPCHelpMan getgovernancebalance();
 RPCHelpMan my_tokens();
@@ -5691,6 +5776,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "tokenincreaseallowance",           &tokenincreaseallowance,        {"spender","token","amount"} },
     { "wallet",             "tokendecreaseallowance",           &tokendecreaseallowance,        {"spender","token","amount"} },
     { "wallet",             "tokenburn",                        &tokenburn,                     {"token","amount"} },
+    { "wallet",             "tokenmint",                        &tokenmint,                     {"token","amount"} },
     { "wallet",             "tokentotalsupply",                 &tokentotalsupply,              {"token"} },
     { "wallet",             "getgovernancebalance",             &getgovernancebalance,          {} },
     { "wallet",             "my_tokens",                        &my_tokens,                     {} },
