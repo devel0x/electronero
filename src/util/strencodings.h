@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,8 @@ bool IsHex(const std::string& str);
 bool IsHexNumber(const std::string& str);
 std::vector<unsigned char> DecodeBase64(const char* p, bool* pf_invalid = nullptr);
 std::string DecodeBase64(const std::string& str, bool* pf_invalid = nullptr);
+/** Decode base64 to bytes. Returns std::nullopt on failure. */
+std::optional<std::vector<unsigned char>> DecodeBase64ToBytes(const std::string& str);
 std::string EncodeBase64(Span<const unsigned char> input);
 std::string EncodeBase64(const std::string& str);
 std::vector<unsigned char> DecodeBase32(const char* p, bool* pf_invalid = nullptr);

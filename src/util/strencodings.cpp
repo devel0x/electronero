@@ -201,6 +201,17 @@ std::string DecodeBase64(const std::string& str, bool* pf_invalid)
     return std::string((const char*)vchRet.data(), vchRet.size());
 }
 
+std::optional<std::vector<unsigned char>> DecodeBase64ToBytes(const std::string& str)
+{
+    if (!ValidAsCString(str)) {
+        return std::nullopt;
+    }
+    bool invalid = false;
+    std::vector<unsigned char> vchRet = DecodeBase64(str.c_str(), &invalid);
+    if (invalid) return std::nullopt;
+    return vchRet;
+}
+
 std::string EncodeBase32(Span<const unsigned char> input, bool pad)
 {
     static const char *pbase32 = "abcdefghijklmnopqrstuvwxyz234567";
