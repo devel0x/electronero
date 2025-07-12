@@ -64,7 +64,7 @@ class CMainParams : public CChainParams {
 public:
     CMainParams() {
         strNetworkID = CBaseChainParams::MAIN;
-        strGovernanceWallet = "governance";
+        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
         nTokenActivationHeight = 2500;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();

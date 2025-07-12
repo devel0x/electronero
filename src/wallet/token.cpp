@@ -260,17 +260,20 @@ std::vector<std::tuple<std::string,std::string,std::string>> TokenLedger::ListWa
 bool TokenLedger::SendGovernanceFee(const std::string& wallet, CAmount fee)
 {
     std::shared_ptr<CWallet> from = GetWallet(wallet);
-    std::shared_ptr<CWallet> dest_wallet = GetWallet(m_governance_wallet);
-    if (!from || !dest_wallet) return false;
+    if (!from) {
+        LogPrintf("❌ Source wallet not found: %s\n", wallet);
+        return false;
+    }
 
     LOCK(from->cs_wallet);
-    LOCK(dest_wallet->cs_wallet);
 
-    CTxDestination dest;
-    std::string error;
-    if (!dest_wallet->GetNewDestination(OutputType::BECH32, "", dest, error)) return false;
+    CTxDestination dest = DecodeDestination(m_governance_wallet);
+    if (!IsValidDestination(dest)) {
+        LogPrintf("❌ Invalid governance wallet address: %s\n", m_governance_wallet);
+        return false;
+    }
 
-    CRecipient recipient{GetScriptForDestination(dest), fee, false};
+    CRecipient recipient{GetScriptForDestination(dest), fee, /*subtractFeeFromAmount=*/false};
     CCoinControl cc;
     std::vector<CRecipient> vecSend{recipient};
     CAmount nFeeRequired;
@@ -280,8 +283,12 @@ bool TokenLedger::SendGovernanceFee(const std::string& wallet, CAmount fee)
     FeeCalculation fee_calc;
 
     bool created = from->CreateTransaction(vecSend, tx, nFeeRequired, nChangePosRet, err, cc, fee_calc, !from->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
-    if (!created) return false;
+    if (!created || !tx) {
+        LogPrintf("❌ Failed to create governance fee transaction: %s\n", err.original);
+        return false;
+    }
     from->CommitTransaction(tx, {}, {});
+    LogPrintf("✅ Governance fee transaction committed: %s\n", tx->GetHash().ToString());
     return true;
 }
 
@@ -404,7 +411,7 @@ bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenO
     ss << op;
     CScript script;
     script << OP_RETURN << ToByteVector(ss);
-    CRecipient recipient{script, 0, false};
+    CRecipient recipient{script, 546, false};
     CCoinControl cc;
     std::vector<CRecipient> vecSend{recipient};
     CAmount nFeeRequired;
