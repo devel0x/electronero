@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+export LC_ALL=C
 
 CLI="./src/interchained-cli -rpcuser=interchainrpc -rpcpassword=supersecure"
 

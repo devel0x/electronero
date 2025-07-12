@@ -38,6 +38,7 @@
 #include <wallet/feebumper.h>
 #include <wallet/load.h>
 #include <wallet/rpcwallet.h>
+#include <util/strencodings.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
@@ -4562,18 +4563,16 @@ static std::string FormatTokenAmount(const CAmount& amount, uint8_t decimals) {
 static CAmount ParseTokenAmount(const std::string& str, uint8_t decimals) {
     if (decimals > 16) decimals = 16;
 
-    double d;
-    try {
-        d = std::stod(str);
-    } catch (const std::exception&) {
+    int64_t amount = 0;
+    if (!ParseFixedPoint(str, decimals, &amount)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid amount format");
     }
 
-    if (d < 0)
+    if (amount < 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative amounts not allowed");
+    }
 
-    CAmount multiplier = pow(10, decimals);
-    return static_cast<CAmount>(std::round(d * multiplier));
+    return amount;
 }
 
 static RPCHelpMan createtoken()
@@ -4611,10 +4610,8 @@ static RPCHelpMan createtoken()
             std::string symbol = request.params[2].get_str();
             std::string decimalsStr = request.params[3].get_str();
 
-            int decimalsInt;
-            try {
-                decimalsInt = std::stoi(decimalsStr);
-            } catch (const std::exception&) {
+            int32_t decimalsInt;
+            if (!ParseInt32(decimalsStr, &decimalsInt)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid decimals format, must be integer between 0 and 16");
             }
 
