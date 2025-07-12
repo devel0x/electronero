@@ -4604,25 +4604,24 @@ static RPCHelpMan createtoken()
 
             std::string token_id = GenerateTokenId(pwallet->GetName(), name);
 
+            // Ensure signer address is registered with the token ledger
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::CREATE, pwallet->GetName(), "", token_id, FormatTokenAmount(rawAmount, decimals)};
             op.name = name;
             op.symbol = symbol;
             op.decimals = decimals;
 
-            // ✅ Use wallet's default public key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            // Use the registered signer address to sign the operation
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -4731,6 +4730,12 @@ static RPCHelpMan tokenapprove()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op;
             op.op = TokenOp::APPROVE;
             op.from = pwallet->GetName();
@@ -4738,20 +4743,12 @@ static RPCHelpMan tokenapprove()
             op.token = token_id;
             op.amount = amount;
 
-            // ✅ Use wallet's default key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -4859,22 +4856,20 @@ static RPCHelpMan tokentransfer()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and sign with that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::TRANSFER, pwallet->GetName(), to, token_id, FormatTokenAmount(amount, decimals)};
 
-            // ✅ Use wallet's default key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -4949,23 +4944,21 @@ static RPCHelpMan tokentransferfrom()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::TRANSFERFROM, from, to, token_id, FormatTokenAmount(amount, decimals)};
             op.spender = pwallet->GetName();
 
-            // ✅ Use wallet's default key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -5038,23 +5031,21 @@ static RPCHelpMan tokenincreaseallowance()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::INCREASE_ALLOWANCE, pwallet->GetName(), spender, token_id, FormatTokenAmount(amount, decimals)};
             op.spender = spender;
 
-            // ✅ Use wallet's default key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -5127,23 +5118,21 @@ static RPCHelpMan tokendecreaseallowance()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::DECREASE_ALLOWANCE, pwallet->GetName(), spender, token_id, FormatTokenAmount(amount, decimals)};
             op.spender = spender;
 
-            // ✅ Use wallet's default key/address to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("👤 Signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
@@ -5214,22 +5203,20 @@ static RPCHelpMan tokenburn()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
             }
 
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
             TokenOperation op{TokenOp::BURN, pwallet->GetName(), "", token_id, FormatTokenAmount(amount, decimals)};
 
-            // 🔐 Use wallet's default public key to sign
-            CTxDestination defDest;
-            bool found = false;
-            for (const std::pair<CTxDestination, CAddressBookData>& entry : pwallet->m_address_book) {
-                defDest = entry.first;
-                found = true;
-                break;
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
             }
-            if (!found) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "No available address in wallet");
-            }
-            std::string signer = EncodeDestination(defDest);
-            op.signer = signer;
-            LogPrintf("🔥 Burn signer address: %s\n", signer);
+            op.signer = signer_addr;
+            LogPrintf("🔥 Burn signer address: %s\n", signer_addr);
 
             TokenOperation tmp = op;
             tmp.signature.clear();
