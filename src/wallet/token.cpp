@@ -284,18 +284,17 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 
     const std::string dummy_msg = "signer_check";
 
-    for (const std::pair<CTxDestination, CAddressBookData>& entry : w.m_address_book) {
+    // Check existing address book entries first
+    for (const auto& entry : w.m_address_book) {
         const CTxDestination& dest = entry.first;
         std::string sig;
         SigningResult err;
 
         if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
             err = w.SignMessage(dummy_msg, *pkhash, sig);
-        }
-        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+        } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
             err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
-        }
-        else {
+        } else {
             continue;
         }
 
@@ -303,10 +302,36 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
             std::string addr = EncodeDestination(dest);
             m_wallet_signers[wallet] = addr;
             Flush();
-            LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
+            LogPrintf("👤 Valid signer found for wallet %s -> %s\n", wallet, addr);
             return addr;
         }
     }
+
+    // If none found, generate a new address and test it
+    if (w.CanGetAddresses()) {
+        CTxDestination dest;
+        std::string error;
+        if (w.GetNewDestination(OutputType::BECH32, "", dest, error)) {
+            std::string sig;
+            SigningResult err;
+            if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
+                err = w.SignMessage(dummy_msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+                err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                err = SigningResult::SIGNING_FAILED;
+            }
+
+            if (err == SigningResult::OK) {
+                std::string addr = EncodeDestination(dest);
+                m_wallet_signers[wallet] = addr;
+                Flush();
+                LogPrintf("👤 New signer generated for wallet %s -> %s\n", wallet, addr);
+                return addr;
+            }
+        }
+    }
+
 
     LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
     return "";
