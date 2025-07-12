@@ -160,6 +160,7 @@ private:
     bool Transfer(const std::string& from, const std::string& to, const std::string& token, CAmount amount);
     bool TransferFrom(const std::string& spender, const std::string& from, const std::string& to, const std::string& token, CAmount amount);
     bool Burn(const std::string& wallet, const std::string& token, CAmount amount);
+    bool Mint(const std::string& wallet, const std::string& token, CAmount amount);
     bool SendGovernanceFee(const std::string& wallet, CAmount fee);
     bool RecordOperationOnChain(const std::string& wallet, const TokenOperation& op);
 
