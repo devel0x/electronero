@@ -98,6 +98,8 @@ struct AllowanceKey {
 
 uint256 TokenOperationHash(const TokenOperation& op);
 void BroadcastTokenOp(const TokenOperation& op);
+//! Build deterministic message string for signing token operations
+std::string BuildTokenMsg(const TokenOperation& op);
 bool IsValidTokenId(const std::string& token);
 std::string GenerateTokenId(const std::string& creator, const std::string& name);
 
