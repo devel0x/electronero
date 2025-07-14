@@ -202,10 +202,22 @@ bool TokenLedger::TransferFrom(const std::string& spender, const std::string& fr
 bool TokenLedger::Burn(const std::string& wallet, const std::string& token, CAmount amount)
 {
     LOCK(m_mutex);
+    auto meta_it = m_token_meta.find(token);
+    if (meta_it == m_token_meta.end()) return false;
     CAmount& bal = m_balances[{wallet, token}];
     if (bal < amount) return false;
     bal -= amount;
     m_totalSupply[token] -= amount;
+    return true;
+}
+
+bool TokenLedger::Mint(const std::string& wallet, const std::string& token, CAmount amount)
+{
+    LOCK(m_mutex);
+    auto meta_it = m_token_meta.find(token);
+    if (meta_it == m_token_meta.end()) return false;
+    m_balances[{wallet, token}] += amount;
+    m_totalSupply[token] += amount;
     return true;
 }
 
@@ -472,13 +484,13 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, const std::string& wa
         DecreaseAllowance(op.from, op.to, op.token, op.amount);
         break;
     case TokenOp::BURN:
+        if (m_token_meta.find(op.token) == m_token_meta.end()) return false;
         ok = Burn(op.from, op.token, op.amount);
         break;
     case TokenOp::MINT: {
         auto it = m_token_meta.find(op.token);
         if (it == m_token_meta.end() || it->second.operator_wallet != op.from) return false;
-        int64_t height = ::ChainActive().Height();
-        CreateToken(op.from, op.token, op.amount, it->second.name, it->second.symbol, it->second.decimals, height);
+        ok = Mint(op.from, op.token, op.amount);
         break;
     }
     }
@@ -564,12 +576,13 @@ bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height)
         DecreaseAllowance(op.from, op.to, op.token, op.amount);
         break;
     case TokenOp::BURN:
+        if (m_token_meta.find(op.token) == m_token_meta.end()) return false;
         ok = Burn(op.from, op.token, op.amount);
         break;
     case TokenOp::MINT: {
         auto it = m_token_meta.find(op.token);
         if (it == m_token_meta.end() || it->second.operator_wallet != op.from) return false;
-        CreateToken(op.from, op.token, op.amount, it->second.name, it->second.symbol, it->second.decimals, height);
+        ok = Mint(op.from, op.token, op.amount);
         break;
     }
     }
