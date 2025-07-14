@@ -73,6 +73,7 @@ public:
         consensus.yespowerForkHeight = 1;
         consensus.kawpowForkHeight = std::numeric_limits<int>::max();
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
+        consensus.nextDifficultyForkHeight = 4500;
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
@@ -203,6 +204,7 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
+        consensus.nextDifficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nRuleChangeActivationThreshold = 1512; // 75% for testchains
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -402,6 +404,7 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
+        consensus.nextDifficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
         consensus.nMinerConfirmationWindow = 144; // Faster than normal for regtest (144 instead of 2016)
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
