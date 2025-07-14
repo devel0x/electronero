@@ -20,12 +20,14 @@ class TokenWalletTest(InterchainedTestFramework):
         assert_equal(node.gettokenbalance(token_id), 100)
         node.createwallet(wallet_name="bob")
         node.tokentransfer("bob", token_id, 25)
+        assert_equal(node.gettokenbalanceof(token_id, "bob"), 25)
         bob = node.get_wallet_rpc("bob")
         assert_equal(bob.gettokenbalance(token_id), 25)
         node.tokenapprove("bob", token_id, 10)
         assert_equal(node.tokenallowance(node.getwalletinfo()["walletname"], "bob", token_id), 10)
         bob.tokentransferfrom(node.getwalletinfo()["walletname"], "bob", token_id, 5)
         assert_equal(bob.gettokenbalance(token_id), 30)
+        assert_equal(node.gettokenbalanceof(token_id, "bob"), 30)
 
 if __name__ == '__main__':
     TokenWalletTest().main()

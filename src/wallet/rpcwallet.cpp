@@ -4721,6 +4721,40 @@ static RPCHelpMan gettokenbalance()
     };
 }
 
+static RPCHelpMan gettokenbalanceof()
+{
+    return RPCHelpMan{
+        "gettokenbalanceof",
+        "\nGet the token balance of an address.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "Address to query"},
+        },
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Token balance (formatted string)"
+        },
+        RPCExamples{
+            HelpExampleCli("gettokenbalanceof", "\"tokenidtok\" \"address\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VSTR});
+
+            std::string token_id = request.params[0].get_str();
+            std::string address = request.params[1].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+            }
+
+            CAmount bal = g_token_ledger.Balance(address, token_id);
+            return ValueFromAmount(bal);
+        }
+    };
+}
+
 static RPCHelpMan tokenapprove()
 {
     return RPCHelpMan{
@@ -5703,6 +5737,7 @@ RPCHelpMan importmulti();
 RPCHelpMan importdescriptors();
 RPCHelpMan createtoken();
 RPCHelpMan gettokenbalance();
+RPCHelpMan gettokenbalanceof();
 RPCHelpMan tokenapprove();
 RPCHelpMan tokenallowance();
 RPCHelpMan tokentransfer();
@@ -5787,6 +5822,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
     { "wallet",             "createtoken",                      &createtoken,                   {"amount","name","symbol","decimals"} },
     { "wallet",             "gettokenbalance",                  &gettokenbalance,               {"token"} },
+    { "wallet",             "gettokenbalanceof",               &gettokenbalanceof,            {"token","address"} },
     { "wallet",             "tokenapprove",                     &tokenapprove,                  {"spender","token","amount"} },
     { "wallet",             "tokenallowance",                   &tokenallowance,                {"owner","spender","token"} },
     { "wallet",             "tokentransfer",                    &tokentransfer,                 {"to","token","amount"} },
