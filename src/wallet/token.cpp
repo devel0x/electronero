@@ -382,7 +382,7 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 
 std::string BuildTokenMsg(const TokenOperation& op) {
     return strprintf(
-        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%lld|name=%s|symbol=%s|decimals=%d",
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d",
         (int)op.op,
         op.from,
         op.to,

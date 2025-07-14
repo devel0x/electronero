@@ -43,6 +43,7 @@ struct TokenOperation {
     uint8_t decimals{0};
     std::string signer;
     std::string signature;
+    std::string wallet_name;
 
     std::string ToString() const {
         return strprintf(

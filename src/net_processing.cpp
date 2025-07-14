@@ -3751,7 +3751,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
     if (msg_type == NetMsgType::TOKENTX) {
         TokenOperation op;
         vRecv >> op;
-        if (!g_token_ledger.ApplyOperation(op, /*broadcast=*/false)) {
+        if (!g_token_ledger.ApplyOperation(op, op.wallet_name, /*broadcast=*/false)) {
             Misbehaving(pfrom.GetId(), 10, "invalid token operation");
         }
         return;
