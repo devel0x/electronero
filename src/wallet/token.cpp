@@ -499,13 +499,13 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, const std::string& wa
         unsigned int vsize = GetSerializeSize(op, PROTOCOL_VERSION);
         CAmount rate = (op.op == TokenOp::CREATE) ? m_create_fee_per_vbyte : m_fee_per_vbyte;
         CAmount fee = vsize * rate;
-        if (!wallet_name.empty() && SendGovernanceFee(wallet_name, fee)) {
+        if (broadcast && !wallet_name.empty() && SendGovernanceFee(wallet_name, fee)) {
             m_governance_fees += fee;
         }
         m_history[op.token].push_back(op);
         LogPrintf("token op %u token=%s from=%s to=%s amount=%d\n", uint8_t(op.op), op.token, op.from, op.to, op.amount);
         Flush();
-        if (!wallet_name.empty()) RecordOperationOnChain(wallet_name, op);
+        if (broadcast && !wallet_name.empty()) RecordOperationOnChain(wallet_name, op);
     }
 
     if (broadcast && ok) BroadcastTokenOp(op);
