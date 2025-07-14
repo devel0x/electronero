@@ -542,7 +542,9 @@ static UniValue setgenerate(const JSONRPCRequest& request)
         if (request.params[1].isNum()) {
             nGenProcLimit = request.params[1].get_int();
         } else if (request.params[1].isStr()) {
-            nGenProcLimit = std::stoi(request.params[1].get_str());
+            if (!ParseInt32(request.params[1].get_str(), &nGenProcLimit)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid value for 'genproclimit'. Must be an integer.");
+            }
         } else {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid value for 'genproclimit'. Must be an integer.");
         }
