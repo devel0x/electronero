@@ -127,6 +127,12 @@ Query the token balance for the current wallet:
 $ bitcoin-cli gettokenbalance "tokenidtok"
 ```
 
+Query the token balance of another address:
+
+```
+$ bitcoin-cli gettokenbalanceof "tokenidtok" "address"
+```
+
 Approve a spender:
 
 ```
