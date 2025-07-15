@@ -84,6 +84,7 @@ public:
         consensus.MinBIP9WarningHeight = 1476; // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimitEasyBlocks = uint256S("000ffff000000000000000000000000000000000000000000000000000000000");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
         consensus.nPowTargetSpacing = 30; // 30 seconds
         consensus.fPowAllowMinDifficultyBlocks = false;
