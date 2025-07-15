@@ -199,15 +199,6 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
     if (nextTarget > bnPowLimit)
         nextTarget = bnPowLimit;
     
-    // Emergency fallback if no blocks found for a while (stall prevention)
-    int64_t now = GetTime();
-    if (now > pindexLast->GetBlockTime() + 10 * params.nPowTargetSpacing) {
-        arith_uint256 minDiff = bnPowLimit;
-        minDiff >>= 2; // Increase difficulty by a factor (e.g. divide by 4)
-        LogPrintf("⛏️ Chain stalled at height=%d retargeting LWMA3 \n", pindexLast->nHeight);
-        return minDiff.GetCompact();
-    }
-    
     LogPrintf("⛏️ Retargeting at height=%d with LWMA3\n", pindexLast->nHeight);
     return nextTarget.GetCompact();
 }
