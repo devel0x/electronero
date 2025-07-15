@@ -94,8 +94,8 @@ uint256 TokenOperationHash(const TokenOperation& op)
     tmp.signature.clear();
     tmp.signer.clear();
     LogPrintf("🔍 TokenOperationHash: %s\n", SerializeHash(tmp).GetHex());
-    LogPrintf("🔍 TokenOperationHash tmp: %s\n", tmp.ToString());
-    LogPrintf("🔍 TokenOperationHash op: %s\n", op.ToString());
+    LogPrintf("🔍 TokenOperationHash tmp: %s\n", BuildTokenMsg(tmp));
+    LogPrintf("🔍 TokenOperationHash op: %s\n", BuildTokenMsg(op));
 
     return SerializeHash(tmp);
 }
