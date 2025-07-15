@@ -4825,11 +4825,7 @@ static RPCHelpMan tokenapprove()
             if (signer.empty()) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Unable to determine signer address");
             }
-
-            if (meta->operator_wallet != signer) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Only the token operator can transfer ownership");
-            }
-
+            
             CTxDestination dest = DecodeDestination(signer);
             if (!IsValidDestination(dest)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
