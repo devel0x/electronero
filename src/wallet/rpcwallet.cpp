@@ -5433,6 +5433,86 @@ static RPCHelpMan tokenmint()
     };
 }
 
+static RPCHelpMan tokentransferownership()
+{
+    return RPCHelpMan{
+        "tokentransferownership",
+        "\nTransfer token operator rights to a new address.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"new_owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Address to assign ownership"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokentransferownership", "\"tokenidtok\" \"newowner\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string token_id = request.params[0].get_str();
+            std::string new_owner = request.params[1].get_str();
+
+            if (!IsValidTokenId(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+
+            if (!g_token_ledger.GetTokenMeta(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Unknown token ID");
+
+            std::string walletName = pwallet->GetName();
+            std::string signer = g_token_ledger.GetSignerAddress(walletName, *wallet);
+            if (signer.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Unable to determine signer address");
+            }
+
+            CTxDestination dest = DecodeDestination(signer);
+            if (!IsValidDestination(dest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+
+            LegacyScriptPubKeyMan* spk_man = pwallet->GetLegacyScriptPubKeyMan();
+            if (!spk_man) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Legacy signing provider not available");
+            }
+
+            CKeyID keyID = GetKeyForDestination(*spk_man, dest);
+            if (keyID.IsNull()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Unable to resolve key ID from signer address");
+            }
+
+            CKey key;
+            if (!spk_man->GetKey(keyID, key)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Private key not found for signer");
+            }
+
+            TokenOperation op;
+            op.op = TokenOp::TRANSFER_OWNERSHIP;
+            op.from = signer;
+            op.to = new_owner;
+            op.token = token_id;
+            op.signer = signer;
+            op.wallet_name = walletName;
+
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
+            }
+
+            if (!g_token_ledger.ApplyOperation(op, walletName)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Ownership transfer failed");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
 static RPCHelpMan tokentotalsupply()
 {
     return RPCHelpMan{
@@ -5651,6 +5731,7 @@ static std::string TokenOpToStr(TokenOp op)
         case TokenOp::DECREASE_ALLOWANCE: return "decrease_allowance";
         case TokenOp::BURN:               return "burn";
         case TokenOp::MINT:               return "mint";
+        case TokenOp::TRANSFER_OWNERSHIP: return "transfer_ownership";
         default:                          return "unknown";
     }
 }
@@ -5774,6 +5855,7 @@ RPCHelpMan tokenincreaseallowance();
 RPCHelpMan tokendecreaseallowance();
 RPCHelpMan tokenburn();
 RPCHelpMan tokenmint();
+RPCHelpMan tokentransferownership();
 RPCHelpMan tokentotalsupply();
 RPCHelpMan getgovernancebalance();
 RPCHelpMan my_tokens();
@@ -5860,6 +5942,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "tokendecreaseallowance",           &tokendecreaseallowance,        {"spender","token","amount"} },
     { "wallet",             "tokenburn",                        &tokenburn,                     {"token","amount"} },
     { "wallet",             "tokenmint",                        &tokenmint,                     {"token","amount"} },
+    { "wallet",             "tokentransferownership",           &tokentransferownership,        {"token","new_owner"} },
     { "wallet",             "tokentotalsupply",                 &tokentotalsupply,              {"token"} },
     { "wallet",             "getgovernancebalance",             &getgovernancebalance,          {} },
     { "wallet",             "my_tokens",                        &my_tokens,                     {} },

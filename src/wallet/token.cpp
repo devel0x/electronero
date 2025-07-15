@@ -221,6 +221,15 @@ bool TokenLedger::Mint(const std::string& wallet, const std::string& token, CAmo
     return true;
 }
 
+bool TokenLedger::TransferOwnership(const std::string& from, const std::string& to, const std::string& token)
+{
+    LOCK(m_mutex);
+    auto it = m_token_meta.find(token);
+    if (it == m_token_meta.end() || it->second.operator_wallet != from) return false;
+    it->second.operator_wallet = to;
+    return true;
+}
+
 CAmount TokenLedger::TotalSupply(const std::string& token) const
 {
     LOCK(m_mutex);
@@ -493,6 +502,9 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, const std::string& wa
         ok = Mint(op.from, op.token, op.amount);
         break;
     }
+    case TokenOp::TRANSFER_OWNERSHIP:
+        ok = TransferOwnership(op.from, op.to, op.token);
+        break;
     }
     if (ok) {
         // charge a network fee per configured rate and send it to the governance wallet
@@ -585,6 +597,9 @@ bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height)
         ok = Mint(op.from, op.token, op.amount);
         break;
     }
+    case TokenOp::TRANSFER_OWNERSHIP:
+        ok = TransferOwnership(op.from, op.to, op.token);
+        break;
     }
     if (ok) {
         m_history[op.token].push_back(op);
