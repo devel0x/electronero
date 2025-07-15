@@ -188,6 +188,12 @@ Burn some of your tokens:
 $ interchained-cli tokenburn "tokenidtok" 1
 ```
 
+Transfer token ownership (must be called from the current operator's wallet):
+
+```
+$ bitcoin-cli tokentransferownership "tokenidtok" "newowner"
+```
+
 Check the total supply of a token:
 
 ```

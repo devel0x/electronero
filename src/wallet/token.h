@@ -28,7 +28,8 @@ enum class TokenOp : uint8_t {
     INCREASE_ALLOWANCE = 4,
     DECREASE_ALLOWANCE = 5,
     BURN = 6,
-    MINT = 7
+    MINT = 7,
+    TRANSFER_OWNERSHIP = 8
 };
 
 struct TokenOperation {
@@ -164,6 +165,7 @@ private:
     bool TransferFrom(const std::string& spender, const std::string& from, const std::string& to, const std::string& token, CAmount amount);
     bool Burn(const std::string& wallet, const std::string& token, CAmount amount);
     bool Mint(const std::string& wallet, const std::string& token, CAmount amount);
+    bool TransferOwnership(const std::string& from, const std::string& to, const std::string& token);
     bool SendGovernanceFee(const std::string& wallet, CAmount fee);
     bool RecordOperationOnChain(const std::string& wallet, const TokenOperation& op);
 
