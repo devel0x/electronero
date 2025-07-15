@@ -106,25 +106,37 @@ Token RPC usage examples
 Create a token with an auto-generated id:
 
 ```
-$ bitcoin-cli createtoken 100 "MyToken" "MTK" 0
+$ interchained-cli createtoken 100 "MyToken" "MTK" 0
 ```
 Create a token with 8 decimals and an auto-generated id:
 
 ```
-$ bitcoin-cli createtoken 100 "AnotherToken" "ATK" 8
+$ interchained-cli createtoken 100 "AnotherToken" "ATK" 8
 ```
 
 
 Create a token with a specific id:
 
 ```
-$ bitcoin-cli createtoken "001122...tok" 100 "MyToken" "MTK" 0
+$ interchained-cli createtoken "001122...tok" 100 "MyToken" "MTK" 0
 ```
 
 Query the token balance for the current wallet:
 
 ```
-$ bitcoin-cli gettokenbalance "tokenidtok"
+$ interchained-cli gettokenbalance "tokenidtok"
+```
+
+Query the token balance of another address:
+
+```
+$ interchained-cli gettokenbalanceof "tokenidtok" "address"
+```
+
+Retrieve this wallet's signer address:
+
+```
+$ interchained-cli getsigneraddress
 ```
 
 Query the token balance of another address:
@@ -136,88 +148,88 @@ $ bitcoin-cli gettokenbalanceof "tokenidtok" "address"
 Approve a spender:
 
 ```
-$ bitcoin-cli tokenapprove "spender" "tokenidtok" 10
+$ interchained-cli tokenapprove "spender" "tokenidtok" 10
 ```
 
 Check remaining allowance:
 
 ```
-$ bitcoin-cli tokenallowance "owner" "spender" "tokenidtok"
+$ interchained-cli tokenallowance "owner" "spender" "tokenidtok"
 ```
 
 Transfer tokens to another wallet:
 
 ```
-$ bitcoin-cli tokentransfer "other" "tokenidtok" 5
+$ interchained-cli tokentransfer "other" "tokenidtok" 5
 ```
 
 Transfer tokens using an allowance:
 
 ```
-$ bitcoin-cli tokentransferfrom "alice" "bob" "tokenidtok" 1
+$ interchained-cli tokentransferfrom "alice" "bob" "tokenidtok" 1
 ```
 
 
 Increase a spender's allowance:
 
 ```
-$ bitcoin-cli tokenincreaseallowance "spender" "tokenidtok" 1
+$ interchained-cli tokenincreaseallowance "spender" "tokenidtok" 1
 ```
 
 Decrease a spender's allowance:
 
 ```
-$ bitcoin-cli tokendecreaseallowance "spender" "tokenidtok" 1
+$ interchained-cli tokendecreaseallowance "spender" "tokenidtok" 1
 ```
 
 Burn some of your tokens:
 
 ```
-$ bitcoin-cli tokenburn "tokenidtok" 1
+$ interchained-cli tokenburn "tokenidtok" 1
 ```
 
 Check the total supply of a token:
 
 ```
-$ bitcoin-cli tokentotalsupply "tokenidtok"
+$ interchained-cli tokentotalsupply "tokenidtok"
 ```
 
 Look up token metadata:
 
 ```
-$ bitcoin-cli token_meta "tokenidtok"
+$ interchained-cli token_meta "tokenidtok"
 ```
 
 List your tokens with positive balances:
 
 ```
-$ bitcoin-cli my_tokens
+$ interchained-cli my_tokens
 ```
 
 List all known tokens:
 
 ```
-$ bitcoin-cli all_tokens
+$ interchained-cli all_tokens
 ```
 
 Show token history:
 
 ```
-$ bitcoin-cli token_history "tokenidtok"
-$ bitcoin-cli token_history "tokenidtok" "recipient"
-$ bitcoin-cli token_history "tokenidtok" "bob"
+$ interchained-cli token_history "tokenidtok"
+$ interchained-cli token_history "tokenidtok" "recipient"
+$ interchained-cli token_history "tokenidtok" "bob"
 ```
 
 Check accumulated governance fees:
 
 ```
-$ bitcoin-cli getgovernancebalance
+$ interchained-cli getgovernancebalance
 ```
 
 Rescan token transactions from a specific block height:
 
 ```
-$ bitcoin-cli rescan_tokentx 3000
+$ interchained-cli rescan_tokentx 3000
 ```
 
 Run the basic token functional test:

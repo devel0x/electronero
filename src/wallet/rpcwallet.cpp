@@ -4752,6 +4752,33 @@ static RPCHelpMan gettokenbalanceof()
             CAmount bal = g_token_ledger.Balance(address, token_id);
             return ValueFromAmount(bal);
         }
+    }; 
+}
+
+static RPCHelpMan getsigneraddress()
+{
+    return RPCHelpMan{
+        "getsigneraddress",
+        "\nReturn the address this wallet uses to sign token operations.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Signer address"
+        },
+        RPCExamples{
+            HelpExampleCli("getsigneraddress", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string signer = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            return UniValue(signer);
+        }
     };
 }
 
@@ -5738,6 +5765,7 @@ RPCHelpMan importdescriptors();
 RPCHelpMan createtoken();
 RPCHelpMan gettokenbalance();
 RPCHelpMan gettokenbalanceof();
+RPCHelpMan getsigneraddress();
 RPCHelpMan tokenapprove();
 RPCHelpMan tokenallowance();
 RPCHelpMan tokentransfer();
@@ -5822,7 +5850,8 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
     { "wallet",             "createtoken",                      &createtoken,                   {"amount","name","symbol","decimals"} },
     { "wallet",             "gettokenbalance",                  &gettokenbalance,               {"token"} },
-    { "wallet",             "gettokenbalanceof",               &gettokenbalanceof,            {"token","address"} },
+    { "wallet",             "gettokenbalanceof",                &gettokenbalanceof,             {"token","address"} },
+    { "wallet",             "getsigneraddress",                 &getsigneraddress,             {} },
     { "wallet",             "tokenapprove",                     &tokenapprove,                  {"spender","token","amount"} },
     { "wallet",             "tokenallowance",                   &tokenallowance,                {"owner","spender","token"} },
     { "wallet",             "tokentransfer",                    &tokentransfer,                 {"to","token","amount"} },
