@@ -170,6 +170,12 @@ Burn some of your tokens:
 $ bitcoin-cli tokenburn "tokenidtok" 1
 ```
 
+Transfer token ownership:
+
+```
+$ bitcoin-cli tokentransferownership "tokenidtok" "newowner"
+```
+
 Check the total supply of a token:
 
 ```
