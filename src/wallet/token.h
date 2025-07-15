@@ -44,6 +44,7 @@ struct TokenOperation {
     std::string signer;
     std::string signature;
     std::string wallet_name;
+    std::string memo;
 
     std::string ToString() const {
         return strprintf(
@@ -68,6 +69,15 @@ struct TokenOperation {
 
         READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount,
                   obj.name, obj.symbol, obj.decimals, obj.signer, obj.signature);
+        if (ser_action.ForRead()) {
+            if (s.size() > 0) {
+                READWRITE(obj.memo);
+            } else {
+                obj.memo.clear();
+            }
+        } else {
+            READWRITE(obj.memo);
+        }
     }
 };
 
@@ -143,6 +153,7 @@ public:
     std::vector<std::tuple<std::string, std::string, std::string>> ListWalletTokens(const std::string& address) const;
     std::vector<std::tuple<std::string, std::string, std::string>> ListAllTokens() const;
     std::vector<TokenOperation> TokenHistory(const std::string& token, const std::string& address_filter = "") const;
+    std::string GetTokenTxMemo(const std::string& token, const uint256& hash) const;
 
     bool RescanFromHeight(int from_height);
     bool ReplayOperation(const TokenOperation& op, int64_t height) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
