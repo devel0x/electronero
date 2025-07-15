@@ -139,6 +139,12 @@ Retrieve this wallet's signer address:
 $ interchained-cli getsigneraddress
 ```
 
+Query the token balance of another address:
+
+```
+$ bitcoin-cli gettokenbalanceof "tokenidtok" "address"
+```
+
 Approve a spender:
 
 ```

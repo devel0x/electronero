@@ -20,6 +20,8 @@ class TokenWalletTest(InterchainedTestFramework):
         assert node.getsigneraddress()
         assert_equal(node.gettokenbalance(token_id), 100)
         node.createwallet(wallet_name="bob")
+        node.tokentransfer("bob", token_id, 25)
+        assert_equal(node.gettokenbalanceof(token_id, "bob"), 25)
         bob = node.get_wallet_rpc("bob")
         assert bob.getsigneraddress()
         node.tokentransfer("bob", token_id, 25)
