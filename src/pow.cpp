@@ -29,8 +29,8 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return DarkGravityWave3(pindexLast, params);
     }
     
-    arith_uint256 limit = UintToArith256((nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
-    LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
+    arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    LogPrintf("💡 GetNextWorkRequired: powLimit used = %s\n", limit.ToString());
     unsigned int nProofOfWorkLimit = limit.GetCompact();
 
     // Only change once per difficulty adjustment interval
