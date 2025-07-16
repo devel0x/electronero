@@ -125,17 +125,17 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if ((pindexLast->nHeight + 1 >= params.difficultyFork2Height) && newDifficulty < bnPowLimit) {
+    if ((pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) && newDifficulty < bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
 
-    if ((pindexLast->nHeight + 1 < params.difficultyFork2Height) && newDifficulty > bnPowLimit) {
+    if ((pindexLast->nHeight + 1 < params.nextDifficultyFork2Height) && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
     
-    if ((pindexLast->nHeight + 1 >= params.difficultyFork2Height) && newDifficulty > UintToArith256(params.powLimit)) {
-        newDifficulty = UintToArith256(params.powLimit);
-    }
+    // if ((pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) && newDifficulty > UintToArith256(params.powLimit)) {
+    //     newDifficulty = UintToArith256(params.powLimit);
+    // }
 
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
