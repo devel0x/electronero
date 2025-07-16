@@ -5060,6 +5060,17 @@ static RPCHelpMan tokentransferfrom()
                 throw JSONRPCError(RPC_WALLET_ERROR, "Private key not found for signer");
             }
 
+            // Automatically approve the transfer if the source address is
+            // present in this wallet's address book. This lets tokens held by
+            // segwit addresses controlled by the legacy signer be spent without
+            // requiring a manual tokenapprove call.
+            CTxDestination from_dest = DecodeDestination(from);
+            if (IsValidDestination(from_dest)) {
+                if (pwallet->FindAddressBookEntry(from_dest)) {
+                    g_token_ledger.Approve(from, signer, token_id, amount);
+                }
+            }
+
             TokenOperation op;
             op.op = TokenOp::TRANSFERFROM;
             op.from = from;
