@@ -177,7 +177,7 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
     arith_uint256 bnPowLimit = UintToArith256(powLimit);
 
     // Prevent division by zero at fork
-    if (pindexLast->nHeight + 1 < params.lwma3ForkHeight + N) {
+    if (pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + N) {
         LogPrintf("🧪 Not enough history for LWMA3, returning powLimit\n");
         return bnPowLimit.GetCompact();
     }
