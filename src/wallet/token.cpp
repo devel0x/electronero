@@ -390,7 +390,7 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 }
 
 std::string BuildTokenMsg(const TokenOperation& op) {
-    return strprintf(
+    std::string msg = strprintf(
         "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d",
         (int)op.op,
         op.from,
@@ -402,6 +402,10 @@ std::string BuildTokenMsg(const TokenOperation& op) {
         op.symbol,
         op.decimals
     );
+    if (!op.memo.empty()) {
+        msg += "|memo=" + op.memo;
+    }
+    return msg;
 }
 
 bool TokenLedger::VerifySignature(const TokenOperation& op) const
@@ -541,6 +545,19 @@ std::vector<TokenOperation> TokenLedger::TokenHistory(const std::string& token, 
         out.push_back(op);
     }
     return out;
+}
+
+std::string TokenLedger::GetTokenTxMemo(const std::string& token, const uint256& hash) const
+{
+    LOCK(m_mutex);
+    auto it = m_history.find(token);
+    if (it == m_history.end()) return "";
+    for (const auto& op : it->second) {
+        if (TokenOperationHash(op) == hash) {
+            return op.memo;
+        }
+    }
+    return "";
 }
 
 static bool DecodeTokenOp(const CScript& script, TokenOperation& op)
