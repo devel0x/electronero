@@ -129,7 +129,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         newDifficulty = UintToArith256(params.powLimit);
     }
 
-    if ((pindexLast->nHeight + 1 < params.nextDifficultyFork2Heigh) && newDifficulty > bnPowLimit) {
+    if ((pindexLast->nHeight + 1 < params.nextDifficultyFork2Height) && newDifficulty > bnPowLimit) {
         newDifficulty = UintToArith256(params.powLimitYespower);
     }
     
