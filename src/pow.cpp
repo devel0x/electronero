@@ -156,8 +156,8 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     bnNew *= nActualTimespan;
     bnNew /= params.nPowTargetTimespan;
 
-    if (bnNew > bnPowLimit)
-        bnNew = bnPowLimit;
+    if (bnNew > UintToArith256(params.powLimit))
+        bnNew = UintToArith256(params.powLimit);
     
     LogPrintf("CalculateNextWorkRequired: nBits=%08x, target=%s\n",
               bnNew.GetCompact(), bnNew.ToString());
