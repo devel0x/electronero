@@ -54,6 +54,7 @@ struct Params {
     int kawpowForkHeight;
     int difficultyForkHeight;
     int nextDifficultyForkHeight;
+    int nextDifficultyFork2Height;
     uint256 powLimitEasyBlocks;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
