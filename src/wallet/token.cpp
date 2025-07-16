@@ -361,29 +361,49 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
     if (it != m_wallet_signers.end()) return it->second;
 
     const std::string dummy_msg = "signer_check";
+    // Prefer witness destinations when available. Collect witness and legacy
+    // addresses separately and attempt to sign with witness addresses first.
+    std::vector<CTxDestination> witness_dests;
+    std::vector<CTxDestination> legacy_dests;
 
-    for (const auto& scriptPubKey : w.GetAllDestinations()) {
-        std::string sig;
-        SigningResult err;
-
-        if (const PKHash* pkhash = boost::get<PKHash>(&scriptPubKey)) {
-            err = w.SignMessage(dummy_msg, *pkhash, sig);
-        }
-        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&scriptPubKey)) {
-            err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
-        }
-        else {
-            continue;
-        }
-
-        if (err == SigningResult::OK) {
-            std::string addr = EncodeDestination(scriptPubKey);
-            m_wallet_signers[wallet] = addr;
-            Flush();
-            LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
-            return addr;
+    for (const auto& dest : w.GetAllDestinations()) {
+        if (boost::get<WitnessV0KeyHash>(&dest) != nullptr) {
+            witness_dests.push_back(dest);
+        } else if (boost::get<PKHash>(&dest) != nullptr) {
+            legacy_dests.push_back(dest);
         }
     }
+
+    auto try_sign = [&](const std::vector<CTxDestination>& list) -> std::string {
+        for (const auto& dest : list) {
+            std::string sig;
+            SigningResult err;
+
+            if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+                err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
+            } else if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
+                err = w.SignMessage(dummy_msg, *pkhash, sig);
+            } else {
+                continue;
+            }
+
+            if (err == SigningResult::OK) {
+                std::string addr = EncodeDestination(dest);
+                m_wallet_signers[wallet] = addr;
+                Flush();
+                LogPrintf("\xF0\x9F\x91\xA4 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
+                return addr;
+            }
+        }
+        return "";
+    };
+
+    std::string addr = try_sign(witness_dests);
+    if (!addr.empty()) return addr;
+
+    addr = try_sign(legacy_dests);
+    if (!addr.empty()) return addr;
+
 
     LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
     return "";
