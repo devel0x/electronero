@@ -165,6 +165,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
+
     const int N = 60;
     const int64_t T = params.nPowTargetSpacing;
     const int64_t k = N * (N + 1) / 2;
@@ -172,10 +173,22 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
     uint256 powLimit = (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
                            ? params.powLimitYespower
                            : params.powLimit;
+
     arith_uint256 bnPowLimit = UintToArith256(powLimit);
 
-    if (pindexLast->nHeight < N) {
+    // Prevent division by zero at fork
+    if (pindexLast->nHeight + 1 < params.lwma3ForkHeight + N) {
+        LogPrintf("🧪 Not enough history for LWMA3, returning powLimit\n");
         return bnPowLimit.GetCompact();
+    }
+
+    // Stall protection: if no blocks in a while, lower difficulty
+    int64_t now = GetTime();
+    if (now > pindexLast->GetBlockTime() + 10 * T) {
+        arith_uint256 easyTarget = bnPowLimit;
+        easyTarget <<= 2; // Lower difficulty 4x
+        LogPrintf("🆘 Chain stalled at height=%d, lowering difficulty\n", pindexLast->nHeight);
+        return easyTarget.GetCompact();
     }
 
     arith_uint256 sumTarget;
@@ -193,14 +206,16 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
         pindex = pindex->pprev;
     }
 
-    if (t <= 0)
+    if (t <= 0) {
+        LogPrintf("⚠️ Bad LWMA3 t <= 0, fallback to powLimit\n");
         return bnPowLimit.GetCompact();
+    }
 
     arith_uint256 nextTarget = sumTarget * T / (k * t);
     if (nextTarget > bnPowLimit)
         nextTarget = bnPowLimit;
-    
-    LogPrintf("⛏️ Retargeting at height=%d with LWMA3\n", pindexLast->nHeight);
+
+    LogPrintf("⛏️ LWMA3: height=%d target=%s\n", pindexLast->nHeight + 1, nextTarget.ToString());
     return nextTarget.GetCompact();
 }
 
