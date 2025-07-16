@@ -21,14 +21,17 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
           (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
     
-    if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight) {
+    if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + 59) {
         return Lwma3(pindexLast, params);
     }
     // Activate DGW3 from block 1 (for example)
-    if (pindexLast->nHeight + 1 >= params.nDGW3Height) {
+    if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight) {
         return DarkGravityWave3(pindexLast, params);
     }
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+    
+    arith_uint256 limit = UintToArith256((nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
+    unsigned int nProofOfWorkLimit = limit.GetCompact();
 
     // Only change once per difficulty adjustment interval
     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
