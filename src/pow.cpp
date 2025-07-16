@@ -170,8 +170,7 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
     const int64_t k = N * (N + 1) / 2;
 
     uint256 powLimit = (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
-                           ? params.powLimitYespower :  (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight)
-                           ? params.powLimitEasyBlocks
+                           ? params.powLimitYespower
                            : params.powLimit;
     arith_uint256 bnPowLimit = UintToArith256(powLimit);
 
