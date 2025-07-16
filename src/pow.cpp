@@ -182,15 +182,6 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
         return bnPowLimit.GetCompact();
     }
 
-    // Stall protection: if no blocks in a while, lower difficulty
-    int64_t now = GetTime();
-    if (now > pindexLast->GetBlockTime() + 10 * T) {
-        arith_uint256 easyTarget = bnPowLimit;
-        easyTarget <<= 2; // Lower difficulty 4x
-        LogPrintf("🆘 Chain stalled at height=%d, lowering difficulty\n", pindexLast->nHeight);
-        return easyTarget.GetCompact();
-    }
-
     arith_uint256 sumTarget;
     int64_t t = 0;
 
