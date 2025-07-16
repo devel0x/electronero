@@ -94,6 +94,7 @@ Recent additions improve robustness:
 * **Signed operations** – token actions are signed by the controlling wallet so peers reject unauthorized spends.
 * **Operator minting** – only the wallet that created a token may mint additional supply.
 * **Metadata lookup** – the `token_meta` RPC returns name, symbol, decimals, creator, creation height and total supply for any token.
+* **Decimal-aware transfers** – RPC commands parse amounts according to each token's declared decimals so that "1" sends one unit when the token has zero decimals.
 * **Authenticated network messages** – incoming `TOKENTX` messages are verified and peers sending invalid ones are penalized.
 * **Consensus ordering** – token operations are processed as blocks connect, giving all nodes the same history.
 * **Versioned database** – ledger state stored in LevelDB includes a version number to support future migrations.
@@ -162,6 +163,8 @@ Transfer tokens to another wallet:
 ```
 $ interchained-cli tokentransfer "other" "tokenidtok" 5
 ```
+Amounts are interpreted with the token's decimals; for a zero-decimal token,
+`5` transfers exactly five tokens.
 
 Transfer tokens using an allowance:
 

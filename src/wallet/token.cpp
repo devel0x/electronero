@@ -712,10 +712,15 @@ CAmount TokenLedger::FeeRate() const
     return m_fee_per_vbyte;
 }
 
-int TokenLedger::GetDecimals(const std::string& token_id) const {
-    // auto it = tokens.find(token_id);
-    // if (it == tokens.end()) return 16; // Default to 16 if not found
-    // return it->second.decimals;
+int TokenLedger::GetDecimals(const std::string& token_id) const
+{
+    LOCK(m_mutex);
+    auto it = m_token_meta.find(token_id);
+    if (it != m_token_meta.end()) {
+        return it->second.decimals;
+    }
+    // Default to 8 decimals when metadata is missing to preserve the previous
+    // behavior of this method.
     return 8;
 }
 
