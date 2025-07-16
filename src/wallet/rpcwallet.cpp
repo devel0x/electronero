@@ -25,6 +25,7 @@
 #include <script/sign.h>
 #include <util/bip32.h>
 #include <util/fees.h>
+#include <util/time.h>
 #include <util/message.h> // For MessageSign()
 #include <util/moneystr.h>
 #include <util/ref.h>
@@ -4663,6 +4664,7 @@ static RPCHelpMan createtoken()
             op.name = name;
             op.symbol = symbol;
             op.decimals = decimals;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -4852,6 +4854,7 @@ static RPCHelpMan tokenapprove()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -4977,6 +4980,7 @@ static RPCHelpMan tokentransfer()
             op.to = to;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5067,6 +5071,7 @@ static RPCHelpMan tokentransferfrom()
             op.spender = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5154,6 +5159,7 @@ static RPCHelpMan tokenincreaseallowance()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5241,6 +5247,7 @@ static RPCHelpMan tokendecreaseallowance()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5329,6 +5336,7 @@ static RPCHelpMan tokenburn()
             op.from = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5417,6 +5425,7 @@ static RPCHelpMan tokenmint()
             op.from = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5503,6 +5512,7 @@ static RPCHelpMan tokentransferownership()
             op.from = signer;
             op.to = new_owner;
             op.token = token_id;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 

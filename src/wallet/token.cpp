@@ -4,6 +4,7 @@
 #include <protocol.h>
 #include <wallet/wallet.h>
 #include <util/message.h>
+#include <util/time.h>
 #include <key_io.h>
 #include <wallet/coincontrol.h>
 #include <script/standard.h>
@@ -322,6 +323,7 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
     }
 
     op.signer = signer;
+    op.timestamp = GetTime();
     LogPrintf("✍️ SignTokenOperation: OP to sign: %s\n", BuildTokenMsg(op));
 
     CTxDestination dest = DecodeDestination(signer);
@@ -391,7 +393,7 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 
 std::string BuildTokenMsg(const TokenOperation& op) {
     return strprintf(
-        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d",
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d|timestamp=%d",
         (int)op.op,
         op.from,
         op.to,
@@ -400,7 +402,8 @@ std::string BuildTokenMsg(const TokenOperation& op) {
         op.amount,
         op.name,
         op.symbol,
-        op.decimals
+        op.decimals,
+        op.timestamp
     );
 }
 

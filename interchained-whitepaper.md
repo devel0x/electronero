@@ -64,7 +64,7 @@ Before signing, a deterministic message is generated using `BuildTokenMsg`:
 std::string BuildTokenMsg(const TokenOperation& op)
 {
     return strprintf(
-        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%lld|name=%s|symbol=%s|decimals=%d",
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%lld|name=%s|symbol=%s|decimals=%d|timestamp=%d",
         static_cast<int>(op.op),
         op.from,
         op.to,
@@ -73,7 +73,8 @@ std::string BuildTokenMsg(const TokenOperation& op)
         op.amount,
         op.name,
         op.symbol,
-        op.decimals);
+        op.decimals,
+        op.timestamp);
 }
 ```
 

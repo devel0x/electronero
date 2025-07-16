@@ -18,7 +18,7 @@ The `BuildTokenMsg` helper constructs the message in a stable format so that bot
 ```cpp
 std::string BuildTokenMsg(const TokenOperation& op) {
     return strprintf(
-        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d",
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d|timestamp=%d",
         (int)op.op,
         op.from,
         op.to,
@@ -27,7 +27,8 @@ std::string BuildTokenMsg(const TokenOperation& op) {
         op.amount,
         op.name,
         op.symbol,
-        op.decimals
+        op.decimals,
+        op.timestamp
     );
 }
 ```
