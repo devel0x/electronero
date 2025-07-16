@@ -25,7 +25,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return Lwma3(pindexLast, params);
     }
     // Activate DGW3 from block 1 (for example)
-    if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight) {
+    if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
         return DarkGravityWave3(pindexLast, params);
     }
     
@@ -125,10 +125,18 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty > bnPowLimit) { 
+    if ((pindexLast->nHeight + 1 >= params.difficultyFork2Height) && newDifficulty < bnPowLimit) {
+        newDifficulty = bnPowLimit;
+    }
+
+    if ((pindexLast->nHeight + 1 < params.difficultyFork2Height) && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
     
+    if ((pindexLast->nHeight + 1 >= params.difficultyFork2Height) && newDifficulty > UintToArith256(params.powLimit)) {
+        newDifficulty = UintToArith256(params.powLimit);
+    }
+
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
     return newDifficulty.GetCompact();
