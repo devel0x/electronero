@@ -5351,7 +5351,7 @@ static RPCHelpMan tokenmint()
             op.amount = amount;
             op.signer = signer;
 
-            if (!MessageSign(key, op.ToString(), op.signature)) {
+            if (!MessageSign(key, BuildTokenMsg(op), op.signature)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
             }
 
