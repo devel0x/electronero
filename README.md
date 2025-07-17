@@ -244,3 +244,9 @@ Run the basic token functional test:
 $ test/functional/test_runner.py wallet_tokens.py
 ```
 
+Bulk transfer payments from a CSV file:
+
+```
+$ interchained-cli bulktransfer "/path/to/payments.csv"
+```
+

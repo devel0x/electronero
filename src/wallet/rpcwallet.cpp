@@ -43,6 +43,9 @@
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 #include <wallet/token.h>
+#include <fs.h>
+#include <sstream>
+#include <boost/algorithm/string/replace.hpp>
 
 #include <stdint.h>
 
@@ -969,6 +972,85 @@ static RPCHelpMan sendmany()
     std::vector<CRecipient> recipients;
     ParseRecipients(sendTo, subtractFeeFromAmount, recipients);
     const bool verbose{request.params[9].isNull() ? false : request.params[9].get_bool()};
+
+    return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
+},
+    };
+}
+
+
+static RPCHelpMan bulktransfer()
+{
+    return RPCHelpMan{"bulktransfer",
+                "\nSend multiple payments specified in a CSV file. Each line in the file\n"
+                "must contain an address and amount separated by either a comma or space." +
+        HELP_REQUIRING_PASSPHRASE,
+                {
+                    {"csv", RPCArg::Type::STR, RPCArg::Optional::NO, "Path to the CSV file."},
+                    {"replaceable", RPCArg::Type::BOOL, /* default */ "wallet default", "Allow this transaction to be replaced by a transaction with higher fees via BIP 125"},
+                    {"conf_target", RPCArg::Type::NUM, /* default */ "wallet -txconfirmtarget", "Confirmation target in blocks"},
+                    {"estimate_mode", RPCArg::Type::STR, /* default */ "unset", std::string() + "The fee estimate mode, must be one of (case insensitive):\n" +
+            "       \"" + FeeModes("\"\n\"") + "\""},
+                    {"fee_rate", RPCArg::Type::AMOUNT, /* default */ "not set, fall back to wallet fee estimation", "Specify a fee rate in " + CURRENCY_ATOM + "/vB."},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information about the transaction."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id for the send."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id for the send."},
+                            {RPCResult::Type::STR, "fee reason", "The transaction fee reason."}
+                        },
+                    },
+                },
+                RPCExamples{
+            "\nSend outputs from a csv file:\n" +
+            HelpExampleCli("bulktransfer", "\"/path/to/payments.csv\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    fs::path csv_path = fs::path(request.params[0].get_str());
+    fsbridge::ifstream file(csv_path);
+    if (!file.is_open()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unable to open CSV file");
+    }
+
+    UniValue sendTo(UniValue::VOBJ);
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        boost::replace_all(line, ",", " ");
+        std::istringstream iss(line);
+        std::string address;
+        std::string amount;
+        if (!(iss >> address >> amount)) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Malformed line in CSV file");
+        }
+        sendTo.pushKV(address, amount);
+    }
+
+    mapValue_t mapValue;
+    UniValue subtractFeeFromAmount(UniValue::VARR);
+    CCoinControl coin_control;
+    if (!request.params[1].isNull()) {
+        coin_control.m_signal_bip125_rbf = request.params[1].get_bool();
+    }
+
+    SetFeeEstimateMode(*pwallet, coin_control, /* conf_target */ request.params[2], /* estimate_mode */ request.params[3], /* fee_rate */ request.params[4], /* override_min_fee */ false);
+
+    std::vector<CRecipient> recipients;
+    ParseRecipients(sendTo, subtractFeeFromAmount, recipients);
+    const bool verbose{request.params[5].isNull() ? false : request.params[5].get_bool()};
 
     return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
 },
@@ -5972,6 +6054,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "rescanblockchain",                 &rescanblockchain,              {"start_height", "stop_height"} },
     { "wallet",             "send",                             &send,                          {"outputs","conf_target","estimate_mode","fee_rate","options"} },
     { "wallet",             "sendmany",                         &sendmany,                      {"dummy","amounts","minconf","comment","subtractfeefrom","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
+    { "wallet",             "bulktransfer",                    &bulktransfer,                {"csv","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "sendtoaddress",                    &sendtoaddress,                 {"address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode","avoid_reuse","fee_rate","verbose"} },
     { "wallet",             "sethdseed",                        &sethdseed,                     {"newkeypool","seed"} },
     { "wallet",             "setlabel",                         &setlabel,                      {"address","label"} },
