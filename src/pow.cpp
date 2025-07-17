@@ -237,6 +237,9 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
                    ? params.powLimitYespower
                    : params.powLimit;
     // Check range
+    LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
+    LogPrintf("    Block hash : %s\n", hash.ToString());
+    LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
     if(nHeight >= 5880) {
         if (fNegative || bnTarget == 0 || fOverflow || bnTarget < UintToArith256(powLimit)) {
             LogPrintf("❌ Rejected block due to invalid target range at height=%d\n", nHeight);
