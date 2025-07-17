@@ -125,9 +125,12 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty < bnPowLimit) {
+    if (pindexLast->nHeight + 1 <= 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
-    }
+    } 
+    if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
+        newDifficulty = bnPowLimit;
+    } 
     
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
