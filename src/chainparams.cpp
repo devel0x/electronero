@@ -72,7 +72,7 @@ public:
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
         consensus.kawpowForkHeight = std::numeric_limits<int>::max();
-        consensus.difficultyForkHeight = std::numeric_limits<int>::max();
+        consensus.difficultyForkHeight = 5500;
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
         consensus.BIP16Exception = uint256(); // no exception

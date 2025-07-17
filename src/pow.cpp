@@ -14,6 +14,7 @@
 
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
+unsigned int Yespower30s(const CBlockIndex* pindexLast, const Consensus::Params& params);
 // BITCOIN LEGACY DAA
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
@@ -21,6 +22,9 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
           (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
     
+    if (pindexLast->nHeight + 1 >= params.difficultyForkHeight) {
+        return Yespower30s(pindexLast, params);
+    }
     if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + 59) {
         return Lwma3(pindexLast, params);
     }
@@ -213,6 +217,52 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
         nextTarget = bnPowLimit;
 
     LogPrintf("⛏️ LWMA3: height=%d target=%s\n", pindexLast->nHeight + 1, nextTarget.ToString());
+    return nextTarget.GetCompact();
+}
+
+// New difficulty algorithm tuned for 30-second blocks using yespower
+unsigned int Yespower30s(const CBlockIndex* pindexLast, const Consensus::Params& params)
+{
+    assert(pindexLast != nullptr);
+
+    const int N = 30; // number of blocks to average
+    const int64_t T = params.nPowTargetSpacing; // 30 seconds
+    const int64_t k = N * (N + 1) / 2;
+
+    uint256 powLimit = (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+                           ? params.powLimitYespower
+                           : params.powLimit;
+
+    arith_uint256 bnPowLimit = UintToArith256(powLimit);
+
+    if (pindexLast->nHeight + 1 < params.difficultyForkHeight + N) {
+        return bnPowLimit.GetCompact();
+    }
+
+    arith_uint256 sumTarget;
+    int64_t t = 0;
+
+    const CBlockIndex* pindex = pindexLast;
+    for (int i = 0; i < N; ++i) {
+        if (!pindex->pprev) break;
+        int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
+        if (solvetime > 6 * T) solvetime = 6 * T;
+        if (solvetime < -6 * T) solvetime = -6 * T;
+        int weight = i + 1;
+        t += solvetime * weight;
+        sumTarget += arith_uint256().SetCompact(pindex->nBits) * weight;
+        pindex = pindex->pprev;
+    }
+
+    if (t <= 0) {
+        return bnPowLimit.GetCompact();
+    }
+
+    arith_uint256 nextTarget = sumTarget * T / (k * t);
+    if (nextTarget > bnPowLimit)
+        nextTarget = bnPowLimit;
+
+    LogPrintf("⛏️ Yespower30s: height=%d target=%s\n", pindexLast->nHeight + 1, nextTarget.ToString());
     return nextTarget.GetCompact();
 }
 
