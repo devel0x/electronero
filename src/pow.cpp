@@ -125,7 +125,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (pindexLast->nHeight + 1 <= 5880 && newDifficulty > bnPowLimit) {
+    if (pindexLast->nHeight + 1 < 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     } 
     if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
