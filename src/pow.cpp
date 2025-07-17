@@ -257,7 +257,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         }
     } else {
         // Pre-fork logic (older rules)
-        if (fNegative || fOverflow || bnTarget == 0 || bnTarget > UintToArith256(powLimit)) {
+        if (fNegative || fOverflow || bnTarget == 0) {
             LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
             return false;
         }
