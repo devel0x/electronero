@@ -128,9 +128,9 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
     if (pindexLast->nHeight + 1 < 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     } 
-    if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
-        newDifficulty = bnPowLimit;
-    } 
+    // if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
+    //     newDifficulty = bnPowLimit;
+    // } 
     
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
@@ -250,11 +250,11 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
             LogPrintf("❌ Invalid target format at height %d\n", nHeight);
             return false;
         }
-        // Allow rising difficulty: only reject if too hard
-        if (bnTarget < UintToArith256(powLimit)) {
-            LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
-            return false;
-        }
+        // // Allow rising difficulty: only reject if too hard
+        // if (bnTarget < UintToArith256(powLimit)) {
+        //     LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
+        //     return false;
+        // }
     } else {
         // Pre-fork logic (older rules)
         if (fNegative || fOverflow || bnTarget == 0) {
