@@ -237,8 +237,15 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
                    ? params.powLimitYespower
                    : params.powLimit;
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget < UintToArith256(powLimit))
-        return false;
+    if(nHeight >= 5880) {
+        if (fNegative || bnTarget == 0 || fOverflow || bnTarget < UintToArith256(powLimit)) {
+            return false;
+        }
+    } else {
+        if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit)) {
+            return false;
+        }
+    }
 
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
