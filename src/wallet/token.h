@@ -42,17 +42,19 @@ struct TokenOperation {
     std::string name;
     std::string symbol;
     uint8_t decimals{0};
+    int64_t timestamp{0};
     std::string signer;
     std::string signature;
     std::string wallet_name;
 
     std::string ToString() const {
         return strprintf(
-            "op=%d token=%s from=%s signer=%s",
+            "op=%d token=%s from=%s signer=%s ts=%d",
             static_cast<int>(op),   // 👈 Cast the enum
             token,
             from,
-            signer.c_str()
+            signer.c_str(),
+            timestamp
         );
     }
 
@@ -68,7 +70,8 @@ struct TokenOperation {
         }
 
         READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount,
-                  obj.name, obj.symbol, obj.decimals, obj.signer, obj.signature);
+                  obj.name, obj.symbol, obj.decimals, obj.timestamp,
+                  obj.signer, obj.signature);
     }
 };
 
