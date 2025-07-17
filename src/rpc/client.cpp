@@ -76,6 +76,14 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendmany", 6 , "conf_target" },
     { "sendmany", 8, "fee_rate"},
     { "sendmany", 9, "verbose" },
+    // bulktransfer takes a CSV path as the first argument (index 0), which is a
+    // string and therefore does not require conversion. The numeric parameters
+    // follow starting at index 1.
+    { "bulktransfer", 1, "replaceable" },
+    { "bulktransfer", 2, "conf_target" },
+    { "bulktransfer", 3, "estimate_mode" },
+    { "bulktransfer", 4, "fee_rate"},
+    { "bulktransfer", 5, "verbose" },
     { "deriveaddresses", 1, "range" },
     { "scantxoutset", 1, "scanobjects" },
     { "addmultisigaddress", 0, "nrequired" },
