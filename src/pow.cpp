@@ -240,6 +240,11 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
     LogPrintf("    Block hash : %s\n", hash.ToString());
     LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
+    // Skip PoW check for genesis block
+    if (nHeight == 0 || hash == params.hashGenesisBlock) {
+        LogPrintf("🧱 Skipping PoW check for genesis block\n");
+        return true;
+    }
     if (nHeight >= 5880) {
         if (fNegative || fOverflow || bnTarget == 0) {
             LogPrintf("❌ Invalid target format at height %d\n", nHeight);
