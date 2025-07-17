@@ -240,15 +240,20 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
     LogPrintf("    Block hash : %s\n", hash.ToString());
     LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
-    if(nHeight >= 5880) {
-        if (fNegative || bnTarget == 0 || fOverflow || bnTarget < UintToArith256(powLimit)) {
-            LogPrintf("❌ Rejected block due to invalid target range at height=%d\n", nHeight);
-            LogPrintf("    Target = %s\n", bnTarget.ToString());
-            LogPrintf("    powLimit = %s\n", UintToArith256(powLimit).ToString());
+    if (nHeight >= 5880) {
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
+            return false;
+        }
+        // Allow rising difficulty: only reject if too hard
+        if (bnTarget < UintToArith256(powLimit)) {
+            LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
             return false;
         }
     } else {
-        if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit)) {
+        // Pre-fork logic (older rules)
+        if (fNegative || fOverflow || bnTarget == 0 || bnTarget > UintToArith256(powLimit)) {
+            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
             return false;
         }
     }
