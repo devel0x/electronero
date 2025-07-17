@@ -13,17 +13,25 @@
 #include <uint256.h>
 
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
+unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 // BITCOIN LEGACY DAA
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
     LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
           (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
+    
+    if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + 59) {
+        return Lwma3(pindexLast, params);
+    }
     // Activate DGW3 from block 1 (for example)
-    if (pindexLast->nHeight + 1 >= params.nDGW3Height) {
+    if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
         return DarkGravityWave3(pindexLast, params);
     }
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+    
+    arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    LogPrintf("💡 GetNextWorkRequired: powLimit used = %s\n", limit.ToString());
+    unsigned int nProofOfWorkLimit = limit.GetCompact();
 
     // Only change once per difficulty adjustment interval
     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
@@ -55,44 +63,6 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 
     return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
 }
-
-// LWMA
-// unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params)
-// {
-//     const int64_t T = params.nPowTargetSpacing; // Target block time (30 sec)
-//     const int N = 60; // Averaging window (60 blocks ~ 30 minutes)
-//     const int k = N * (N + 1) * T / 2;
-
-//     assert(pindexLast != nullptr);
-//     if (pindexLast->nHeight < N) {
-//         return UintToArith256(params.powLimit).GetCompact();
-//     }
-
-//     arith_uint256 sumTarget;
-//     int64_t t = 0;
-//     int64_t j = 0;
-
-//     const CBlockIndex* pindex = pindexLast;
-//     for (int i = 0; i < N; ++i) {
-//         if (!pindex->pprev) break;
-
-//         int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
-//         solvetime = std::max<int64_t>(-6 * T, std::min(solvetime, 6 * T));
-//         j += 1;
-//         t += solvetime * j;
-//         sumTarget += arith_uint256().SetCompact(pindex->nBits) * j;
-
-//         pindex = pindex->pprev;
-//     }
-
-//     if (t == 0 || j == 0) return UintToArith256(params.powLimit).GetCompact();
-
-//     arith_uint256 nextTarget = (sumTarget / k) * T;
-//     if (nextTarget > UintToArith256(params.powLimit))
-//         nextTarget = UintToArith256(params.powLimit);
-
-//     return nextTarget.GetCompact();
-// }
 
 // DGW3
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
@@ -155,9 +125,12 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty > bnPowLimit) { 
+    if (pindexLast->nHeight + 1 < 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
-    }
+    } 
+    // if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
+    //     newDifficulty = bnPowLimit;
+    // } 
     
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
@@ -186,13 +159,61 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     bnNew *= nActualTimespan;
     bnNew /= params.nPowTargetTimespan;
 
-    if (bnNew > bnPowLimit)
-        bnNew = bnPowLimit;
+    if (bnNew > UintToArith256(params.powLimit))
+        bnNew = UintToArith256(params.powLimit);
     
     LogPrintf("CalculateNextWorkRequired: nBits=%08x, target=%s\n",
               bnNew.GetCompact(), bnNew.ToString());
     
     return bnNew.GetCompact();
+}
+
+unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params)
+{
+    assert(pindexLast != nullptr);
+
+    const int N = 60;
+    const int64_t T = params.nPowTargetSpacing;
+    const int64_t k = N * (N + 1) / 2;
+
+    uint256 powLimit = (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+                           ? params.powLimitYespower
+                           : params.powLimit;
+
+    arith_uint256 bnPowLimit = UintToArith256(powLimit);
+
+    // Prevent division by zero at fork
+    if (pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + N) {
+        LogPrintf("🧪 Not enough history for LWMA3, returning powLimit\n");
+        return bnPowLimit.GetCompact();
+    }
+
+    arith_uint256 sumTarget;
+    int64_t t = 0;
+
+    const CBlockIndex* pindex = pindexLast;
+    for (int i = 0; i < N; ++i) {
+        if (!pindex->pprev) break;
+        int64_t solvetime = pindex->GetBlockTime() - pindex->pprev->GetBlockTime();
+        if (solvetime > 6 * T) solvetime = 6 * T;
+        if (solvetime < -6 * T) solvetime = -6 * T;
+        int weight = i + 1;
+        t += solvetime * weight;
+        sumTarget += arith_uint256().SetCompact(pindex->nBits) * weight;
+        pindex = pindex->pprev;
+    }
+
+    if (t <= 0) {
+        LogPrintf("⚠️ Bad LWMA3 t <= 0, fallback to powLimit\n");
+        return bnPowLimit.GetCompact();
+    }
+
+    arith_uint256 nextTarget = sumTarget * T / (k * t);
+    if (nextTarget > bnPowLimit)
+        nextTarget = bnPowLimit;
+
+    LogPrintf("⛏️ LWMA3: height=%d target=%s\n", pindexLast->nHeight + 1, nextTarget.ToString());
+    return nextTarget.GetCompact();
 }
 
 bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
@@ -216,8 +237,31 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
                    ? params.powLimitYespower
                    : params.powLimit;
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
-        return false;
+    LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
+    LogPrintf("    Block hash : %s\n", hash.ToString());
+    LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
+    // Skip PoW check for genesis block
+    if (nHeight == 0 || hash == params.hashGenesisBlock) {
+        LogPrintf("🧱 Skipping PoW check for genesis block\n");
+        return true;
+    }
+    if (nHeight >= 5880) {
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
+            return false;
+        }
+        // // Allow rising difficulty: only reject if too hard
+        // if (bnTarget < UintToArith256(powLimit)) {
+        //     LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
+        //     return false;
+        // }
+    } else {
+        // Pre-fork logic (older rules)
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
+            return false;
+        }
+    }
 
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);

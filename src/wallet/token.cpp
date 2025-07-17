@@ -4,6 +4,7 @@
 #include <protocol.h>
 #include <wallet/wallet.h>
 #include <util/message.h>
+#include <util/time.h>
 #include <key_io.h>
 #include <wallet/coincontrol.h>
 #include <script/standard.h>
@@ -94,8 +95,8 @@ uint256 TokenOperationHash(const TokenOperation& op)
     tmp.signature.clear();
     tmp.signer.clear();
     LogPrintf("🔍 TokenOperationHash: %s\n", SerializeHash(tmp).GetHex());
-    LogPrintf("🔍 TokenOperationHash tmp: %s\n", tmp.ToString());
-    LogPrintf("🔍 TokenOperationHash op: %s\n", op.ToString());
+    LogPrintf("🔍 TokenOperationHash tmp: %s\n", BuildTokenMsg(tmp));
+    LogPrintf("🔍 TokenOperationHash op: %s\n", BuildTokenMsg(op));
 
     return SerializeHash(tmp);
 }
@@ -221,6 +222,15 @@ bool TokenLedger::Mint(const std::string& wallet, const std::string& token, CAmo
     return true;
 }
 
+bool TokenLedger::TransferOwnership(const std::string& from, const std::string& to, const std::string& token)
+{
+    LOCK(m_mutex);
+    auto it = m_token_meta.find(token);
+    if (it == m_token_meta.end() || it->second.operator_wallet != from) return false;
+    it->second.operator_wallet = to;
+    return true;
+}
+
 CAmount TokenLedger::TotalSupply(const std::string& token) const
 {
     LOCK(m_mutex);
@@ -313,6 +323,7 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
     }
 
     op.signer = signer;
+    op.timestamp = GetTime();
     LogPrintf("✍️ SignTokenOperation: OP to sign: %s\n", BuildTokenMsg(op));
 
     CTxDestination dest = DecodeDestination(signer);
@@ -382,7 +393,7 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
 
 std::string BuildTokenMsg(const TokenOperation& op) {
     std::string msg = strprintf(
-        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d",
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%d|name=%s|symbol=%s|decimals=%d|timestamp=%d",
         (int)op.op,
         op.from,
         op.to,
@@ -391,7 +402,8 @@ std::string BuildTokenMsg(const TokenOperation& op) {
         op.amount,
         op.name,
         op.symbol,
-        op.decimals
+        op.decimals,
+        op.timestamp
     );
     if (!op.memo.empty()) {
         msg += "|memo=" + op.memo;
@@ -497,19 +509,22 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, const std::string& wa
         ok = Mint(op.from, op.token, op.amount);
         break;
     }
+    case TokenOp::TRANSFER_OWNERSHIP:
+        ok = TransferOwnership(op.from, op.to, op.token);
+        break;
     }
     if (ok) {
         // charge a network fee per configured rate and send it to the governance wallet
         unsigned int vsize = GetSerializeSize(op, PROTOCOL_VERSION);
         CAmount rate = (op.op == TokenOp::CREATE) ? m_create_fee_per_vbyte : m_fee_per_vbyte;
         CAmount fee = vsize * rate;
-        if (!wallet_name.empty() && SendGovernanceFee(wallet_name, fee)) {
+        if (broadcast && !wallet_name.empty() && SendGovernanceFee(wallet_name, fee)) {
             m_governance_fees += fee;
         }
         m_history[op.token].push_back(op);
         LogPrintf("token op %u token=%s from=%s to=%s amount=%d\n", uint8_t(op.op), op.token, op.from, op.to, op.amount);
         Flush();
-        if (!wallet_name.empty()) RecordOperationOnChain(wallet_name, op);
+        if (broadcast && !wallet_name.empty()) RecordOperationOnChain(wallet_name, op);
     }
 
     if (broadcast && ok) BroadcastTokenOp(op);
@@ -602,6 +617,9 @@ bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height)
         ok = Mint(op.from, op.token, op.amount);
         break;
     }
+    case TokenOp::TRANSFER_OWNERSHIP:
+        ok = TransferOwnership(op.from, op.to, op.token);
+        break;
     }
     if (ok) {
         m_history[op.token].push_back(op);

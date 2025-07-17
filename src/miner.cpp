@@ -112,7 +112,10 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     block.vtx[0] = MakeTransactionRef(coinbaseTx);
                     block.hashMerkleRoot = BlockMerkleRoot(block);
                     block.vchWitness = {GenerateCoinbaseCommitment(block, ::ChainActive().Tip(), Params().GetConsensus())};
-                    uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
+                    // uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
+                    arith_uint256 bnTarget;
+                    bnTarget.SetCompact(block.nBits);
+                    uint256 hashTarget = ArithToUint256(bnTarget);
 
                     uint64_t hashesDone = 0;
                     int64_t hashStart = GetTimeMillis();
