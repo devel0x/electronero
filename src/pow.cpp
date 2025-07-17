@@ -125,7 +125,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty > bnPowLimit) {
+    if (newDifficulty < bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
     
@@ -234,7 +234,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
                    ? params.powLimitYespower
                    : params.powLimit;
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget < UintToArith256(powLimit))
         return false;
 
     if (nHeight >= params.yespowerForkHeight) {
