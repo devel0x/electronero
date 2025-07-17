@@ -18,7 +18,7 @@ class TokenWalletTest(InterchainedTestFramework):
         token_id = "0x" + "1"*54 + "tok"
         node.createtoken(token_id, 100, "TestToken", "TST", 0)
         assert node.getsigneraddress()
-        assert_equal(node.gettokenbalance(token_id), 100)
+        assert_equal(node.gettokenbalance(token_id, False), 100)
         node.createwallet(wallet_name="bob")
         node.tokentransfer("bob", token_id, 25)
         assert_equal(node.gettokenbalanceof(token_id, "bob"), 25)
@@ -26,11 +26,11 @@ class TokenWalletTest(InterchainedTestFramework):
         assert bob.getsigneraddress()
         node.tokentransfer("bob", token_id, 25)
         assert_equal(node.gettokenbalanceof(token_id, "bob"), 25)
-        assert_equal(bob.gettokenbalance(token_id), 25)
+        assert_equal(bob.gettokenbalance(token_id, False), 25)
         node.tokenapprove("bob", token_id, 10)
         assert_equal(node.tokenallowance(node.getwalletinfo()["walletname"], "bob", token_id), 10)
         bob.tokentransferfrom(node.getwalletinfo()["walletname"], "bob", token_id, 5)
-        assert_equal(bob.gettokenbalance(token_id), 30)
+        assert_equal(bob.gettokenbalance(token_id, False), 30)
         assert_equal(node.gettokenbalanceof(token_id, "bob"), 30)
 
 if __name__ == '__main__':

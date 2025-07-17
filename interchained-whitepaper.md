@@ -281,7 +281,7 @@ $ interchained-cli tokenburn 0xtokenid "10"
 Several RPCs return information without needing a signature:
 
 ```bash
-$ interchained-cli gettokenbalance 0xtokenid
+$ interchained-cli gettokenbalance 0xtokenid false
 $ interchained-cli tokenallowance alice bob 0xtokenid
 $ interchained-cli tokentotalsupply 0xtokenid
 $ interchained-cli token_meta 0xtokenid

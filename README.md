@@ -124,7 +124,7 @@ $ interchained-cli createtoken "001122...tok" 100 "MyToken" "MTK" 0
 Query the token balance for the current wallet:
 
 ```
-$ interchained-cli gettokenbalance "tokenidtok"
+$ interchained-cli gettokenbalance "tokenidtok" false
 ```
 
 Query the token balance of another address:
