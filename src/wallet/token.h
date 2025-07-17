@@ -147,11 +147,11 @@ public:
 
     bool RescanFromHeight(int from_height);
     bool ReplayOperation(const TokenOperation& op, int64_t height) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
-    std::string GetSignerAddress(const std::string& wallet, CWallet& w);
+    std::string GetSignerAddress(const std::string& wallet, CWallet& w, bool witness);
     bool VerifySignature(const TokenOperation& op) const;
     void ProcessBlock(const CBlock& block, int height);
     int GetDecimals(const std::string& token_id) const;
-    bool SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName);
+    bool SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName, bool witness);
 
 private:
     void CreateToken(const std::string& wallet, const std::string& token, CAmount amount,
