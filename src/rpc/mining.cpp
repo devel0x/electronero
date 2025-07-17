@@ -5,6 +5,7 @@
 
 #include <amount.h>
 #include <chain.h>
+#include <node/context.h>
 #include <chainparams.h>
 #include <pow/yespower.h>
 #include <consensus/consensus.h>
@@ -555,8 +556,7 @@ static UniValue setgenerate(const JSONRPCRequest& request)
     if (fGenerate && payoutAddress.empty()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Address is required when enabling generation");
     }
-
-    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress, mempool);
+    GenerateBitcoins(fGenerate, g_connman.get(), nGenProcLimit, payoutAddress, request.context);
     return NullUniValue;
 }
 

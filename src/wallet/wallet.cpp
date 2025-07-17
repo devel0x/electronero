@@ -2582,6 +2582,33 @@ TransactionError CWallet::FillPSBT(PartiallySignedTransaction& psbtx, bool& comp
     return TransactionError::OK;
 }
 
+SigningResult CWallet::SignMessageHash(const uint256& hash, const PKHash& pkhash, std::string& strSig) const {
+    LOCK(cs_wallet);
+
+    CKey key;
+    LegacyScriptPubKeyMan* spk_man = GetLegacyScriptPubKeyMan();
+    if (!spk_man) return SigningResult::SIGNING_FAILED;
+
+    if (!spk_man->GetKey(CKeyID(uint160(pkhash)), key)) {
+        return SigningResult::SIGNING_FAILED;
+    }
+
+    std::vector<unsigned char> vchSig;
+    if (!key.Sign(hash, vchSig)) {
+        return SigningResult::SIGNING_FAILED;
+    }
+
+    strSig = EncodeBase64(vchSig);
+    return SigningResult::OK;
+}
+
+SigningResult CWallet::SignMessageHash(const uint256& hash, const WitnessV0KeyHash& wpkh, std::string& strSig) const
+{
+    // Convert WitnessV0KeyHash to PKHash (same 20-byte hash)
+    return SignMessageHash(hash, PKHash(uint160(wpkh)), strSig);
+}
+
+
 SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
 {
     SignatureData sigdata;

@@ -264,7 +264,7 @@ CRPCTable::CRPCTable()
 void CRPCTable::appendCommand(const std::string& name, const CRPCCommand* pcmd)
 {
     CHECK_NONFATAL(!IsRPCRunning()); // Only add commands before rpc is running
-
+    LogPrintf("📦 Registering RPC command: %s\n", name);
     mapCommands[name].push_back(pcmd);
 }
 

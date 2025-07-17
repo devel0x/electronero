@@ -3,6 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chain.h>  
+#include <validation.h>
+#include <net.h>
+#include <net_processing.h>
 #include <amount.h>
 #include <core_io.h>
 #include <interfaces/chain.h>
@@ -37,6 +41,8 @@
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
+#include <wallet/token.h>
+#include <util/message.h> // for MESSAGE_MAGIC
 
 #include <stdint.h>
 
@@ -4521,6 +4527,1062 @@ static RPCHelpMan upgradewallet()
     };
 }
 
+static std::string FormatTokenAmount(const CAmount& amount, uint8_t decimals) {
+    if (decimals > 16) decimals = 16;
+    std::string str = strprintf("%.*f", decimals, amount / std::pow(10.0, decimals));
+    str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+    if (!str.empty() && str.back() == '.') str.pop_back();
+    return str;
+}
+
+static CAmount ParseTokenAmount(const std::string& str, uint8_t decimals) {
+    if (decimals > 16) decimals = 16;
+
+    double d;
+    try {
+        d = std::stod(str);
+    } catch (const std::exception&) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid amount format");
+    }
+
+    if (d < 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative amounts not allowed");
+
+    CAmount multiplier = pow(10, decimals);
+    return static_cast<CAmount>(std::round(d * multiplier));
+}
+
+std::string BuildTokenMessage(const TokenOperation& op) {
+    return strprintf(
+        "op=%d|from=%s|to=%s|spender=%s|token=%s|amount=%lld|name=%s|symbol=%s|decimals=%d",
+        (int)op.op,
+        op.from,
+        op.to,
+        op.spender,
+        op.token,
+        op.amount,
+        op.name,
+        op.symbol,
+        op.decimals
+    );
+}
+
+static RPCHelpMan createtoken()
+{
+    return RPCHelpMan{
+        "createtoken",
+        "\nCreate a token and credit the caller with the initial supply.\n",
+        {
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount of tokens to create (use string to preserve decimal precision)"},
+            {"name", RPCArg::Type::STR, RPCArg::Optional::NO, "Token name"},
+            {"symbol", RPCArg::Type::STR, RPCArg::Optional::NO, "Token symbol"},
+            {"decimals", RPCArg::Type::STR, RPCArg::Optional::NO, "Number of decimals (0-16)"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::BOOL, "success", "True if the token was created successfully"},
+                {RPCResult::Type::STR, "token_id", "Generated token identifier"}
+            },
+        },
+        RPCExamples{
+            HelpExampleCli("createtoken", "\"1000.12345678\" \"MyToken\" \"MTK\" \"8\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string amountStr = request.params[0].get_str();
+            std::string name = request.params[1].get_str();
+            std::string symbol = request.params[2].get_str();
+            std::string decimalsStr = request.params[3].get_str();
+
+            int decimalsInt;
+            try {
+                decimalsInt = std::stoi(decimalsStr);
+            } catch (const std::exception& e) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid decimals format, must be integer between 0 and 16");
+            }
+
+            if (decimalsInt < 0 || decimalsInt > 16) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Decimals must be between 0 and 16");
+            }
+
+            uint8_t decimals = static_cast<uint8_t>(decimalsInt);
+
+            CAmount rawAmount;
+            if (!ParseFixedPoint(amountStr, decimals, &rawAmount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            std::string token_id = GenerateTokenId(pwallet->GetName(), name);
+
+            // Ensure signer address is registered with the token ledger
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::CREATE, pwallet->GetName(), "", token_id, FormatTokenAmount(rawAmount, decimals)};
+            op.name = name;
+            op.symbol = symbol;
+            op.decimals = decimals;
+            // Use the registered signer address to sign the operation
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            // Prepare message to sign (must match exactly the message used in VerifySignature)
+            CHashWriter ss(SER_GETHASH, 0);
+            ss << MESSAGE_MAGIC;
+            ss << "Hello Universe";
+            uint256 msgHash = ss.GetHash();
+
+            // Sign using the wallet
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessageHash(msgHash, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessageHash(msgHash, *wpkh, sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Token creation failed");
+            }
+
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("success", true);
+            result.pushKV("token_id", token_id);
+            return result;
+        }
+    };
+}
+
+static RPCHelpMan gettokenbalance()
+{
+    return RPCHelpMan{
+        "gettokenbalance",
+        "\nGet the token balance of this wallet.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+        },
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Token balance (formatted string)"
+        },
+        RPCExamples{
+            HelpExampleCli("gettokenbalance", "\"tokenidtok\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string token_id = request.params[0].get_str();
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+            }
+
+            CAmount bal = g_token_ledger.Balance(pwallet->GetName(), token_id);
+            return ValueFromAmount(bal);
+        }
+    };
+}
+
+static RPCHelpMan tokenapprove()
+{
+    return RPCHelpMan{
+        "tokenapprove",
+        "\nApprove a spender for a given token amount.\n",
+        {
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Wallet name of spender"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to approve (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokenapprove", "\"spender\" \"tokenidtok\" \"10.00000001\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string spender = request.params[0].get_str();
+            std::string token_id = request.params[1].get_str();
+            std::string amountStr = request.params[2].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op;
+            op.op = TokenOp::APPROVE;
+            op.from = pwallet->GetName();
+            op.spender = spender;
+            op.token = token_id;
+            op.amount = amount;
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Approve failed");
+            }
+
+            return true;
+        }
+    };
+}
+
+static RPCHelpMan tokenallowance()
+{
+    return RPCHelpMan{
+        "tokenallowance",
+        "\nGet the remaining allowance from owner to spender.\n",
+        {
+            {"owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Owner wallet name"},
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet name"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+        },
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Remaining allowance (formatted string)"
+        },
+        RPCExamples{
+            HelpExampleCli("tokenallowance", "\"owner\" \"spender\" \"tokenidtok\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VSTR, UniValue::VSTR});
+
+            std::string owner = request.params[0].get_str();
+            std::string spender = request.params[1].get_str();
+            std::string token_id = request.params[2].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+            }
+
+            CAmount val = g_token_ledger.Allowance(owner, spender, token_id);
+            return ValueFromAmount(val);
+        }
+    };
+}
+
+static RPCHelpMan tokentransfer()
+{
+    return RPCHelpMan{
+        "tokentransfer",
+        "\nTransfer tokens to another wallet.\n",
+        {
+            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokentransfer", "\"other\" \"tokenidtok\" \"5.000001\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string to = request.params[0].get_str();
+            std::string token_id = request.params[1].get_str();
+            std::string amountStr = request.params[2].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and sign with that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::TRANSFER, pwallet->GetName(), to, token_id, FormatTokenAmount(amount, decimals)};
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "insufficient token balance or failed to apply transfer");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
+static RPCHelpMan tokentransferfrom()
+{
+    return RPCHelpMan{
+        "tokentransferfrom",
+        "\nTransfer tokens using an allowance.\n",
+        {
+            {"from", RPCArg::Type::STR, RPCArg::Optional::NO, "Source wallet"},
+            {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination wallet"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokentransferfrom", "\"alice\" \"bob\" \"tokenidtok\" \"1.00000001\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string from = request.params[0].get_str();
+            std::string to = request.params[1].get_str();
+            std::string token_id = request.params[2].get_str();
+            std::string amountStr = request.params[3].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::TRANSFERFROM, from, to, token_id, FormatTokenAmount(amount, decimals)};
+            op.spender = pwallet->GetName();
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Allowance or balance too low");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
+static RPCHelpMan tokenincreaseallowance()
+{
+    return RPCHelpMan{
+        "tokenincreaseallowance",
+        "\nIncrease spender allowance.\n",
+        {
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to increase (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokenincreaseallowance", "\"spender\" \"tokenidtok\" \"1.00000001\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string spender = request.params[0].get_str();
+            std::string token_id = request.params[1].get_str();
+            std::string amountStr = request.params[2].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::INCREASE_ALLOWANCE, pwallet->GetName(), spender, token_id, FormatTokenAmount(amount, decimals)};
+            op.spender = spender;
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Allowance increase failed");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
+static RPCHelpMan tokendecreaseallowance()
+{
+    return RPCHelpMan{
+        "tokendecreaseallowance",
+        "\nDecrease spender allowance.\n",
+        {
+            {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender wallet"},
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to decrease (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokendecreaseallowance", "\"spender\" \"tokenidtok\" \"1.00000000\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string spender = request.params[0].get_str();
+            std::string token_id = request.params[1].get_str();
+            std::string amountStr = request.params[2].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::DECREASE_ALLOWANCE, pwallet->GetName(), spender, token_id, FormatTokenAmount(amount, decimals)};
+            op.spender = spender;
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("👤 Signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unsupported default signer (must be P2PKH or P2WPKH)");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Allowance update failed");
+            }
+
+            return UniValue(true);
+        }
+    };
+}
+
+static RPCHelpMan tokenburn()
+{
+    return RPCHelpMan{
+        "tokenburn",
+        "\nBurn tokens from this wallet.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to burn (string to preserve decimal precision)"},
+        },
+        RPCResult{
+            RPCResult::Type::BOOL,
+            "",
+            "true if successful"
+        },
+        RPCExamples{
+            HelpExampleCli("tokenburn", "\"tokenidtok\" \"1.00000000\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            std::string token_id = request.params[0].get_str();
+            std::string amountStr = request.params[1].get_str();
+
+            if (!IsValidTokenId(token_id)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+            }
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+            CAmount amount;
+            if (!ParseFixedPoint(amountStr, decimals, &amount)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token amount format");
+            }
+
+            // Ensure signer is registered and use that address
+            std::string signer_addr = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet);
+            if (signer_addr.empty()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "No valid signer address found");
+            }
+
+            TokenOperation op{TokenOp::BURN, pwallet->GetName(), "", token_id, FormatTokenAmount(amount, decimals)};
+
+            CTxDestination defDest = DecodeDestination(signer_addr);
+            if (!IsValidDestination(defDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid signer address");
+            }
+            op.signer = signer_addr;
+            LogPrintf("🔥 Burn signer address: %s\n", signer_addr);
+
+            TokenOperation tmp = op;
+            tmp.signature.clear();
+            tmp.signer.clear();
+            std::string msg = BuildTokenMessage(tmp);
+
+            std::string sig;
+            SigningResult err = SigningResult::SIGNING_FAILED;
+
+            if (const PKHash* pkhash = boost::get<PKHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, *pkhash, sig);
+            } else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&defDest)) {
+                err = pwallet->SignMessage(msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Default signer must be P2PKH or P2WPKH");
+            }
+
+            if (err != SigningResult::OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "sign failed");
+            }
+
+            op.signature = sig;
+
+            if (!g_token_ledger.ApplyOperation(op)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Burn failed (balance too low?)");
+            }
+
+            return true;
+        }
+    };
+}
+
+static RPCHelpMan tokentotalsupply()
+{
+    return RPCHelpMan{
+        "tokentotalsupply",
+        "\nGet the total supply of a token.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+        },
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Total supply (formatted string)"
+        },
+        RPCExamples{
+            HelpExampleCli("tokentotalsupply", "\"tokenidtok\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string token_id = request.params[0].get_str();
+            if (!IsValidTokenId(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
+
+            CAmount rawAmount = g_token_ledger.TotalSupply(token_id);
+            int decimals = g_token_ledger.GetDecimals(token_id);
+
+            return FormatTokenAmount(rawAmount, decimals);
+        }
+    };
+}
+
+static RPCHelpMan token_meta()
+{
+    return RPCHelpMan{
+        "token_meta",
+        "\nReturn metadata for a token.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ,
+            "",
+            "Token metadata object",
+            {
+                {RPCResult::Type::STR, "name", "Token name"},
+                {RPCResult::Type::STR, "symbol", "Token symbol"},
+                {RPCResult::Type::NUM, "decimals", "Token decimals"},
+                {RPCResult::Type::STR, "creator", "Creator wallet"},
+                {RPCResult::Type::NUM, "created_height", "Creation block"},
+                {RPCResult::Type::STR, "total_supply", "Total supply (formatted string)"}
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("token_meta", "\"tokenidtok\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string token_id = request.params[0].get_str();
+            if (!IsValidTokenId(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+
+            auto meta_opt = g_token_ledger.GetTokenMeta(token_id);
+            if (!meta_opt)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "unknown token");
+
+            CAmount supply = g_token_ledger.TotalSupply(token_id);
+
+            UniValue obj(UniValue::VOBJ);
+            obj.pushKV("name", meta_opt->name);
+            obj.pushKV("symbol", meta_opt->symbol);
+            obj.pushKV("decimals", meta_opt->decimals);
+            obj.pushKV("creator", meta_opt->operator_wallet);
+            obj.pushKV("created_height", meta_opt->creation_height);
+            obj.pushKV("total_supply", ValueFromAmount(supply));
+            return obj;
+        }
+    };
+}
+
+static RPCHelpMan getgovernancebalance()
+{
+    return RPCHelpMan{
+        "getgovernancebalance",
+        "\nReturn total fees collected for the governance wallet.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::OBJ, "", "Object containing the governance balance",
+            {
+                {RPCResult::Type::STR, "amount", "Fee amount (formatted string)"}
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("getgovernancebalance", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            CAmount val = g_token_ledger.GovernanceBalance();
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("amount", ValueFromAmount(val));
+            return result;
+        }
+    };
+}
+
+static RPCHelpMan my_tokens()
+{
+    return RPCHelpMan{
+        "my_tokens",
+        "\nList tokens with positive balance in this wallet.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::ARR,
+            "",
+            "Array of tokens held by this wallet",
+            {
+                RPCResult{
+                    RPCResult::Type::OBJ,
+                    "",
+                    "Token metadata",
+                    {
+                        {RPCResult::Type::STR, "symbol", "Token symbol"},
+                        {RPCResult::Type::STR, "name", "Token name"},
+                        {RPCResult::Type::STR, "address", "Token ID"},
+                        {RPCResult::Type::STR, "balance", "Formatted token balance string"}
+                    }
+                }
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("my_tokens", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            const CWallet* const pwallet = wallet.get();
+            LOCK(pwallet->cs_wallet);
+
+            auto list = g_token_ledger.ListWalletTokens(pwallet->GetName());
+            UniValue arr(UniValue::VARR);
+
+            for (const auto& item : list) {
+                const std::string& token_id = std::get<0>(item);
+                const std::string& name = std::get<1>(item);
+                const std::string& symbol = std::get<2>(item);
+
+                CAmount balance = g_token_ledger.GetBalance(pwallet->GetName(), token_id);
+                if (balance <= 0) continue;
+
+                int decimals = g_token_ledger.GetDecimals(token_id);
+                std::string formatted = FormatTokenAmount(balance, decimals);
+
+                UniValue obj(UniValue::VOBJ);
+                obj.pushKV("symbol", symbol);
+                obj.pushKV("name", name);
+                obj.pushKV("address", token_id);
+                obj.pushKV("balance", formatted);
+                arr.push_back(obj);
+            }
+
+            return arr;
+        }
+    };
+}
+
+static RPCHelpMan all_tokens()
+{
+    return RPCHelpMan{
+        "all_tokens",
+        "\nList all tokens known to the token subsystem.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::ARR,
+            "",
+            "Array of known tokens",
+            {
+                RPCResult{
+                    RPCResult::Type::OBJ,
+                    "",
+                    "Token details",
+                    {
+                        {RPCResult::Type::STR, "symbol", "Token symbol"},
+                        {RPCResult::Type::STR, "name", "Token name"},
+                        {RPCResult::Type::STR, "address", "Token ID"}
+                    }
+                }
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("all_tokens", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            auto list = g_token_ledger.ListAllTokens();
+            UniValue arr(UniValue::VARR);
+            for (const auto& item : list) {
+                UniValue obj(UniValue::VOBJ);
+                obj.pushKV("symbol", std::get<2>(item));
+                obj.pushKV("name", std::get<1>(item));
+                obj.pushKV("address", std::get<0>(item));
+                arr.push_back(obj);
+            }
+            return arr;
+        }
+    };
+}
+
+static std::string TokenOpToStr(TokenOp op)
+{
+    switch (op) {
+        case TokenOp::CREATE:             return "create";
+        case TokenOp::TRANSFER:           return "transfer";
+        case TokenOp::APPROVE:            return "approve";
+        case TokenOp::TRANSFERFROM:       return "transferfrom";
+        case TokenOp::INCREASE_ALLOWANCE: return "increase_allowance";
+        case TokenOp::DECREASE_ALLOWANCE: return "decrease_allowance";
+        case TokenOp::BURN:               return "burn";
+        default:                          return "unknown";
+    }
+}
+
+static RPCHelpMan token_history()
+{
+    return RPCHelpMan{
+        "token_history",
+        "\nList history of token operations.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"filter", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional address filter"},
+        },
+        RPCResult{
+            RPCResult::Type::ARR,
+            "",
+            "List of token operations",
+            {
+                RPCResult{
+                    RPCResult::Type::OBJ,
+                    "",
+                    "Token operation details",
+                    {
+                        {RPCResult::Type::STR, "op", "Operation type"},
+                        {RPCResult::Type::STR, "from", "Sender address"},
+                        {RPCResult::Type::STR, "to", "Receiver address"},
+                        {RPCResult::Type::STR, "amount", "Amount (formatted string)"}
+                    }
+                }
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("token_history", "\"tokenidtok\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string token_id = request.params[0].get_str();
+            if (!IsValidTokenId(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+
+            std::string filter;
+            if (request.params.size() > 1)
+                filter = request.params[1].get_str();
+
+            int decimals = g_token_ledger.GetDecimals(token_id);
+
+            auto list = g_token_ledger.TokenHistory(token_id, filter);
+            UniValue arr(UniValue::VARR);
+            for (const auto& op : list) {
+                UniValue obj(UniValue::VOBJ);
+                obj.pushKV("op", TokenOpToStr(op.op));
+                obj.pushKV("from", op.from);
+                obj.pushKV("to", op.to);
+                obj.pushKV("amount", FormatTokenAmount(op.amount, decimals));
+                arr.push_back(obj);
+            }
+            return arr;
+        }
+    };
+}
+
+static RPCHelpMan rescan_tokentx()
+{
+    return RPCHelpMan{
+        "rescan_tokentx",
+        "\nRescan the blockchain for token operations and rebuild the token store.\n",
+        {
+            {"from_height", RPCArg::Type::NUM, RPCArg::Optional::OMITTED_NAMED_ARG, "Height to start scanning"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ,
+            "",
+            "Scan result object",
+            {
+                {RPCResult::Type::NUM, "start_height", "First scanned height"},
+                {RPCResult::Type::NUM, "stop_height", "Last scanned height"}
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("rescan_tokentx", "3000")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+            int start_height = Params().TokenActivationHeight();
+            if (request.params.size() > 0 && !request.params[0].isNull()) {
+                start_height = request.params[0].get_int();
+            }
+            if (start_height < Params().TokenActivationHeight()) {
+                start_height = Params().TokenActivationHeight();
+            }
+
+            g_token_ledger.RescanFromHeight(start_height);
+
+            UniValue obj(UniValue::VOBJ);
+            obj.pushKV("start_height", start_height);
+            obj.pushKV("stop_height", ::ChainActive().Height());
+            return obj;
+        }
+    };
+}
+
 RPCHelpMan abortrescan();
 RPCHelpMan dumpprivkey();
 RPCHelpMan importprivkey();
@@ -4532,6 +5594,22 @@ RPCHelpMan importprunedfunds();
 RPCHelpMan removeprunedfunds();
 RPCHelpMan importmulti();
 RPCHelpMan importdescriptors();
+RPCHelpMan createtoken();
+RPCHelpMan gettokenbalance();
+RPCHelpMan tokenapprove();
+RPCHelpMan tokenallowance();
+RPCHelpMan tokentransfer();
+RPCHelpMan tokentransferfrom();
+RPCHelpMan tokenincreaseallowance();
+RPCHelpMan tokendecreaseallowance();
+RPCHelpMan tokenburn();
+RPCHelpMan tokentotalsupply();
+RPCHelpMan getgovernancebalance();
+RPCHelpMan my_tokens();
+RPCHelpMan all_tokens();
+RPCHelpMan token_history();
+RPCHelpMan token_meta();
+RPCHelpMan rescan_tokentx();
 
 Span<const CRPCCommand> GetWalletRPCCommands()
 {
@@ -4599,6 +5677,22 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletpassphrase",                 &walletpassphrase,              {"passphrase","timeout"} },
     { "wallet",             "walletpassphrasechange",           &walletpassphrasechange,        {"oldpassphrase","newpassphrase"} },
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
+    { "wallet",             "createtoken",                      &createtoken,                   {"amount","name","symbol","decimals"} },
+    { "wallet",             "gettokenbalance",                  &gettokenbalance,               {"token"} },
+    { "wallet",             "tokenapprove",                     &tokenapprove,                  {"spender","token","amount"} },
+    { "wallet",             "tokenallowance",                   &tokenallowance,                {"owner","spender","token"} },
+    { "wallet",             "tokentransfer",                    &tokentransfer,                 {"to","token","amount"} },
+    { "wallet",             "tokentransferfrom",                &tokentransferfrom,             {"from","to","token","amount"} },
+    { "wallet",             "tokenincreaseallowance",           &tokenincreaseallowance,        {"spender","token","amount"} },
+    { "wallet",             "tokendecreaseallowance",           &tokendecreaseallowance,        {"spender","token","amount"} },
+    { "wallet",             "tokenburn",                        &tokenburn,                     {"token","amount"} },
+    { "wallet",             "tokentotalsupply",                 &tokentotalsupply,              {"token"} },
+    { "wallet",             "getgovernancebalance",             &getgovernancebalance,          {} },
+    { "wallet",             "my_tokens",                        &my_tokens,                     {} },
+    { "wallet",             "all_tokens",                       &all_tokens,                    {} },
+    { "wallet",             "token_history",                    &token_history,                 {"token","filter"} },
+    { "wallet",             "token_meta",                       &token_meta,                    {"token"} },
+    { "wallet",             "rescan_tokentx",                   &rescan_tokentx,                {"from_height"} },
 };
 // clang-format on
     return MakeSpan(commands);
