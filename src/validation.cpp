@@ -50,6 +50,7 @@
 #include <util/translation.h>
 #include <validationinterface.h>
 #include <warnings.h>
+#include <script/standard.h>
 
 #include <string>
 
