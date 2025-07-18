@@ -2228,6 +2228,27 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
 
+    CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
+    if (IsValidDestination(govDest)) {
+        CScript govScript = GetScriptForDestination(govDest);
+        CAmount expectedGov = blockReward / 10;
+        bool foundGov = false;
+        for (const auto& out : block.vtx[0]->vout) {
+            if (out.scriptPubKey == govScript) {
+                if (out.nValue < expectedGov) {
+                    LogPrintf("ERROR: ConnectBlock(): governance output pays too little (actual=%d vs expected=%d)\n", out.nValue, expectedGov);
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-governance-amount");
+                }
+                foundGov = true;
+                break;
+            }
+        }
+        if (!foundGov) {
+            LogPrintf("ERROR: ConnectBlock(): missing governance output\n");
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "missing-governance");
+        }
+    }
+
     if (!control.Wait()) {
         LogPrintf("ERROR: %s: CheckQueue failed\n", __func__);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "block-validation-failed");
