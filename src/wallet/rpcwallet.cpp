@@ -25,6 +25,7 @@
 #include <script/sign.h>
 #include <util/bip32.h>
 #include <util/fees.h>
+#include <util/time.h>
 #include <util/message.h> // For MessageSign()
 #include <util/moneystr.h>
 #include <util/ref.h>
@@ -42,6 +43,9 @@
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 #include <wallet/token.h>
+#include <fs.h>
+#include <sstream>
+#include <boost/algorithm/string/replace.hpp>
 
 #include <stdint.h>
 
@@ -968,6 +972,85 @@ static RPCHelpMan sendmany()
     std::vector<CRecipient> recipients;
     ParseRecipients(sendTo, subtractFeeFromAmount, recipients);
     const bool verbose{request.params[9].isNull() ? false : request.params[9].get_bool()};
+
+    return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
+},
+    };
+}
+
+
+static RPCHelpMan bulktransfer()
+{
+    return RPCHelpMan{"bulktransfer",
+                "\nSend multiple payments specified in a CSV file. Each line in the file\n"
+                "must contain an address and amount separated by either a comma or space." +
+        HELP_REQUIRING_PASSPHRASE,
+                {
+                    {"csv", RPCArg::Type::STR, RPCArg::Optional::NO, "Path to the CSV file."},
+                    {"replaceable", RPCArg::Type::BOOL, /* default */ "wallet default", "Allow this transaction to be replaced by a transaction with higher fees via BIP 125"},
+                    {"conf_target", RPCArg::Type::NUM, /* default */ "wallet -txconfirmtarget", "Confirmation target in blocks"},
+                    {"estimate_mode", RPCArg::Type::STR, /* default */ "unset", std::string() + "The fee estimate mode, must be one of (case insensitive):\n" +
+            "       \"" + FeeModes("\"\n\"") + "\""},
+                    {"fee_rate", RPCArg::Type::AMOUNT, /* default */ "not set, fall back to wallet fee estimation", "Specify a fee rate in " + CURRENCY_ATOM + "/vB."},
+                    {"verbose", RPCArg::Type::BOOL, /* default */ "false", "If true, return extra information about the transaction."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id for the send."},
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id for the send."},
+                            {RPCResult::Type::STR, "fee reason", "The transaction fee reason."}
+                        },
+                    },
+                },
+                RPCExamples{
+            "\nSend outputs from a csv file:\n" +
+            HelpExampleCli("bulktransfer", "\"/path/to/payments.csv\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return NullUniValue;
+    CWallet* const pwallet = wallet.get();
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    fs::path csv_path = fs::path(request.params[0].get_str());
+    fsbridge::ifstream file(csv_path);
+    if (!file.is_open()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unable to open CSV file");
+    }
+
+    UniValue sendTo(UniValue::VOBJ);
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        boost::replace_all(line, ",", " ");
+        std::istringstream iss(line);
+        std::string address;
+        std::string amount;
+        if (!(iss >> address >> amount)) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Malformed line in CSV file");
+        }
+        sendTo.pushKV(address, amount);
+    }
+
+    mapValue_t mapValue;
+    UniValue subtractFeeFromAmount(UniValue::VARR);
+    CCoinControl coin_control;
+    if (!request.params[1].isNull()) {
+        coin_control.m_signal_bip125_rbf = request.params[1].get_bool();
+    }
+
+    SetFeeEstimateMode(*pwallet, coin_control, /* conf_target */ request.params[2], /* estimate_mode */ request.params[3], /* fee_rate */ request.params[4], /* override_min_fee */ false);
+
+    std::vector<CRecipient> recipients;
+    ParseRecipients(sendTo, subtractFeeFromAmount, recipients);
+    const bool verbose{request.params[5].isNull() ? false : request.params[5].get_bool()};
 
     return SendMoney(pwallet, coin_control, recipients, std::move(mapValue), verbose);
 },
@@ -4651,6 +4734,7 @@ static RPCHelpMan createtoken()
             op.name = name;
             op.symbol = symbol;
             op.decimals = decimals;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -4801,6 +4885,7 @@ static RPCHelpMan tokenapprove()
             std::string spender = request.params[0].get_str();
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
+          
             bool witness = false;
             if (request.params.size() > 3) witness = request.params[3].get_bool();
 
@@ -4831,8 +4916,10 @@ static RPCHelpMan tokenapprove()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
+            op.memo = memo;
 
             if (!g_token_ledger.SignTokenOperation(op, *wallet, walletName, witness)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
@@ -4894,6 +4981,7 @@ static RPCHelpMan tokentransfer()
             {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
+            {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
             {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
         },
         RPCResult{
@@ -4902,7 +4990,7 @@ static RPCHelpMan tokentransfer()
             "true if successful"
         },
         RPCExamples{
-            HelpExampleCli("tokentransfer", "\"other\" \"tokenidtok\" \"5.000001\" false")
+            HelpExampleCli("tokentransfer", "\"other\" \"tokenidtok\" \"5.000001\" \"memo text\ false"")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -4914,8 +5002,10 @@ static RPCHelpMan tokentransfer()
             std::string to = request.params[0].get_str();
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
+            std::string memo;
+            if (request.params.size() > 3) memo = request.params[3].get_str();
             bool witness = false;
-            if (request.params.size() > 3) witness = request.params[3].get_bool();
+            if (request.params.size() > 4) witness = request.params[4].get_bool();
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -4944,8 +5034,10 @@ static RPCHelpMan tokentransfer()
             op.to = to;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
+            op.memo = memo;
 
             if (!g_token_ledger.SignTokenOperation(op, *wallet, walletName, witness)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
@@ -4970,6 +5062,7 @@ static RPCHelpMan tokentransferfrom()
             {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
+            {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
             {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
         },
         RPCResult{
@@ -4978,7 +5071,7 @@ static RPCHelpMan tokentransferfrom()
             "true if successful"
         },
         RPCExamples{
-            HelpExampleCli("tokentransferfrom", "\"alice\" \"bob\" \"tokenidtok\" \"1.00000001\" false")
+            HelpExampleCli("tokentransferfrom", "\"alice\" \"bob\" \"tokenidtok\" \"1.00000001\" \"memo text\ false"")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -4991,8 +5084,10 @@ static RPCHelpMan tokentransferfrom()
             std::string to = request.params[1].get_str();
             std::string token_id = request.params[2].get_str();
             std::string amountStr = request.params[3].get_str();
+            std::string memo;
+            if (request.params.size() > 4) memo = request.params[4].get_str();
             bool witness = false;
-            if (request.params.size() > 4) witness = request.params[4].get_bool();
+            if (request.params.size() > 5) witness = request.params[5].get_bool();
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5022,8 +5117,10 @@ static RPCHelpMan tokentransferfrom()
             op.spender = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
+            op.memo = memo;
 
             if (!g_token_ledger.SignTokenOperation(op, *wallet, walletName, witness)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
@@ -5097,6 +5194,7 @@ static RPCHelpMan tokenincreaseallowance()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5172,6 +5270,7 @@ static RPCHelpMan tokendecreaseallowance()
             op.spender = spender;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5248,6 +5347,7 @@ static RPCHelpMan tokenburn()
             op.from = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5324,6 +5424,7 @@ static RPCHelpMan tokenmint()
             op.from = signer;
             op.token = token_id;
             op.amount = amount;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5398,6 +5499,7 @@ static RPCHelpMan tokentransferownership()
             op.from = signer;
             op.to = new_owner;
             op.token = token_id;
+            op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
 
@@ -5659,7 +5761,8 @@ static RPCHelpMan token_history()
                         {RPCResult::Type::STR, "op", "Operation type"},
                         {RPCResult::Type::STR, "from", "Sender address"},
                         {RPCResult::Type::STR, "to", "Receiver address"},
-                        {RPCResult::Type::STR, "amount", "Amount (formatted string)"}
+                        {RPCResult::Type::STR, "amount", "Amount (formatted string)"},
+                        {RPCResult::Type::STR, "memo", "Optional memo"}
                     }
                 }
             }
@@ -5687,9 +5790,39 @@ static RPCHelpMan token_history()
                 obj.pushKV("from", op.from);
                 obj.pushKV("to", op.to);
                 obj.pushKV("amount", FormatTokenAmount(op.amount, decimals));
+                if (!op.memo.empty()) obj.pushKV("memo", op.memo);
                 arr.push_back(obj);
             }
             return arr;
+        }
+    };
+}
+
+static RPCHelpMan token_tx_memo()
+{
+    return RPCHelpMan{
+        "token_tx_memo",
+        "\nReturn memo for a token transaction.\n",
+        {
+            {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
+            {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "Token transaction hash"},
+        },
+        RPCResult{
+            RPCResult::Type::STR,
+            "",
+            "Memo string"
+        },
+        RPCExamples{
+            HelpExampleCli("token_tx_memo", "\"tokenidtok\" \"txidhash\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string token_id = request.params[0].get_str();
+            if (!IsValidTokenId(token_id))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
+            uint256 hash = ParseHashV(request.params[1], "txid");
+            std::string memo = g_token_ledger.GetTokenTxMemo(token_id, hash);
+            return UniValue(memo);
         }
     };
 }
@@ -5764,6 +5897,7 @@ RPCHelpMan all_tokens();
 RPCHelpMan token_history();
 RPCHelpMan token_meta();
 RPCHelpMan rescan_tokentx();
+RPCHelpMan token_tx_memo();
 
 Span<const CRPCCommand> GetWalletRPCCommands()
 {
@@ -5817,6 +5951,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "rescanblockchain",                 &rescanblockchain,              {"start_height", "stop_height"} },
     { "wallet",             "send",                             &send,                          {"outputs","conf_target","estimate_mode","fee_rate","options"} },
     { "wallet",             "sendmany",                         &sendmany,                      {"dummy","amounts","minconf","comment","subtractfeefrom","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
+    { "wallet",             "bulktransfer",                    &bulktransfer,                {"csv","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "sendtoaddress",                    &sendtoaddress,                 {"address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode","avoid_reuse","fee_rate","verbose"} },
     { "wallet",             "sethdseed",                        &sethdseed,                     {"newkeypool","seed"} },
     { "wallet",             "setlabel",                         &setlabel,                      {"address","label"} },
@@ -5837,8 +5972,8 @@ static const CRPCCommand commands[] =
     { "wallet",             "getsigneraddress",                 &getsigneraddress,             {} },
     { "wallet",             "tokenapprove",                     &tokenapprove,                  {"spender","token","amount","witness"} },
     { "wallet",             "tokenallowance",                   &tokenallowance,                {"owner","spender","token"} },
-    { "wallet",             "tokentransfer",                    &tokentransfer,                 {"to","token","amount","witness"} },
-    { "wallet",             "tokentransferfrom",                &tokentransferfrom,             {"from","to","token","amount","witness"} },
+    { "wallet",             "tokentransfer",                    &tokentransfer,                 {"to","token","amount","memo","witness"} },
+    { "wallet",             "tokentransferfrom",                &tokentransferfrom,             {"from","to","token","amount","memo","witness"} },
     { "wallet",             "tokenincreaseallowance",           &tokenincreaseallowance,        {"spender","token","amount","witness"} },
     { "wallet",             "tokendecreaseallowance",           &tokendecreaseallowance,        {"spender","token","amount","witness"} },
     { "wallet",             "tokenburn",                        &tokenburn,                     {"token","amount","witness"} },
@@ -5850,6 +5985,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "all_tokens",                       &all_tokens,                    {} },
     { "wallet",             "token_history",                    &token_history,                 {"token","filter"} },
     { "wallet",             "token_meta",                       &token_meta,                    {"token"} },
+    { "wallet",             "token_tx_memo",                   &token_tx_memo,               {"token","txid"} },
     { "wallet",             "rescan_tokentx",                   &rescan_tokentx,                {"from_height"} },
 };
 // clang-format on

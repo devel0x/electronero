@@ -42,17 +42,20 @@ struct TokenOperation {
     std::string name;
     std::string symbol;
     uint8_t decimals{0};
+    int64_t timestamp{0};
     std::string signer;
     std::string signature;
     std::string wallet_name;
+    std::string memo;
 
     std::string ToString() const {
         return strprintf(
-            "op=%d token=%s from=%s signer=%s",
+            "op=%d token=%s from=%s signer=%s ts=%d",
             static_cast<int>(op),   // 👈 Cast the enum
             token,
             from,
-            signer.c_str()
+            signer.c_str(),
+            timestamp
         );
     }
 
@@ -67,8 +70,16 @@ struct TokenOperation {
             READWRITE(op_val);
         }
 
-        READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount,
-                  obj.name, obj.symbol, obj.decimals, obj.signer, obj.signature);
+        READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount, obj.name, obj.symbol, obj.decimals, obj.timestamp, obj.signer, obj.signature);
+        if (ser_action.ForRead()) {
+            if (s.size() > 0) {
+                READWRITE(obj.memo);
+            } else {
+                obj.memo.clear();
+            }
+        } else {
+            READWRITE(obj.memo);
+        }
     }
 };
 
@@ -144,6 +155,7 @@ public:
     std::vector<std::tuple<std::string, std::string, std::string>> ListWalletTokens(const std::string& address) const;
     std::vector<std::tuple<std::string, std::string, std::string>> ListAllTokens() const;
     std::vector<TokenOperation> TokenHistory(const std::string& token, const std::string& address_filter = "") const;
+    std::string GetTokenTxMemo(const std::string& token, const uint256& hash) const;
 
     bool RescanFromHeight(int from_height);
     bool ReplayOperation(const TokenOperation& op, int64_t height) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);

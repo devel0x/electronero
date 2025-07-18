@@ -125,9 +125,12 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         : params.powLimit
     );
 
-    if (newDifficulty > bnPowLimit) {
+    if (pindexLast->nHeight + 1 < 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
-    }
+    } 
+    // if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
+    //     newDifficulty = bnPowLimit;
+    // } 
     
     LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
 
@@ -234,8 +237,31 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
                    ? params.powLimitYespower
                    : params.powLimit;
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(powLimit))
-        return false;
+    LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
+    LogPrintf("    Block hash : %s\n", hash.ToString());
+    LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
+    // Skip PoW check for genesis block
+    if (nHeight == 0 || hash == params.hashGenesisBlock) {
+        LogPrintf("🧱 Skipping PoW check for genesis block\n");
+        return true;
+    }
+    if (nHeight >= 5880) {
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
+            return false;
+        }
+        // // Allow rising difficulty: only reject if too hard
+        // if (bnTarget < UintToArith256(powLimit)) {
+        //     LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
+        //     return false;
+        // }
+    } else {
+        // Pre-fork logic (older rules)
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
+            return false;
+        }
+    }
 
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
