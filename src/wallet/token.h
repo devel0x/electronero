@@ -64,21 +64,31 @@ struct TokenOperation {
         uint8_t op_val;
         if (ser_action.ForRead()) {
             READWRITE(op_val);
-            const_cast<TokenOp&>(obj.op) = static_cast<TokenOp>(op_val); // Safe const cast here
+            const_cast<TokenOp&>(obj.op) = static_cast<TokenOp>(op_val);
         } else {
             op_val = static_cast<uint8_t>(obj.op);
             READWRITE(op_val);
         }
-
-        READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount, obj.name, obj.symbol, obj.decimals, obj.timestamp, obj.signer, obj.signature);
+    
+        READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount,
+                  obj.name, obj.symbol, obj.decimals, obj.timestamp,
+                  obj.signer, obj.signature);
+    
+        // Add optional memo field with explicit flag
+        uint8_t hasMemo;
         if (ser_action.ForRead()) {
-            if (s.size() > 0) {
+            READWRITE(hasMemo);
+            if (hasMemo) {
                 READWRITE(obj.memo);
             } else {
-                obj.memo.clear();
+                const_cast<std::string&>(obj.memo).clear();
             }
         } else {
-            READWRITE(obj.memo);
+            hasMemo = !obj.memo.empty();
+            READWRITE(hasMemo);
+            if (hasMemo) {
+                READWRITE(obj.memo);
+            }
         }
     }
 };
