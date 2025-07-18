@@ -468,9 +468,20 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-    coinbaseTx.vout.resize(1);
+    CAmount blockReward = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    CAmount governanceReward = blockReward / 10; // 10% goes to governance
+    coinbaseTx.vout.resize(2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
-    coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    coinbaseTx.vout[0].nValue = blockReward - governanceReward;
+    CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
+    if (IsValidDestination(govDest)) {
+        coinbaseTx.vout[1].scriptPubKey = GetScriptForDestination(govDest);
+        coinbaseTx.vout[1].nValue = governanceReward;
+    } else {
+        // Fallback: pay entire reward to miner if governance address invalid
+        coinbaseTx.vout.resize(1);
+        coinbaseTx.vout[0].nValue = blockReward;
+    }
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     // Add witness nonce to scriptWitness
     coinbaseTx.vin[0].scriptWitness.stack.push_back(std::vector<unsigned char>(32, 0x00)); // 32-byte reserved nonce
