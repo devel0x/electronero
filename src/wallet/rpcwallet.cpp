@@ -4990,7 +4990,7 @@ static RPCHelpMan tokentransfer()
             "true if successful"
         },
         RPCExamples{
-            HelpExampleCli("tokentransfer", "\"other\" \"tokenidtok\" \"5.000001\" \"memo text\ false"")
+            HelpExampleCli("tokentransfer", "\"other\" \"tokenidtok\" \"5.000001\" \"memo text\" false")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -5071,7 +5071,7 @@ static RPCHelpMan tokentransferfrom()
             "true if successful"
         },
         RPCExamples{
-            HelpExampleCli("tokentransferfrom", "\"alice\" \"bob\" \"tokenidtok\" \"1.00000001\" \"memo text\ false"")
+            HelpExampleCli("tokentransferfrom", "\"alice\" \"bob\" \"tokenidtok\" \"1.00000001\" \"memo text\" false")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
