@@ -2229,7 +2229,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
 
-    CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
+    CTxDestination govDest = ::DecodeDestination(chainparams.GovernanceWallet());
     if (IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
         CAmount expectedGov = blockReward / 10;
