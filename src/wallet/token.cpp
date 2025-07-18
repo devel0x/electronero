@@ -314,9 +314,9 @@ bool TokenLedger::SendGovernanceFee(const std::string& wallet, CAmount fee)
     return true;
 }
 
-bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName)
+bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const std::string& walletName, bool witness)
 {
-    std::string signer = GetSignerAddress(walletName, wallet);
+    std::string signer = GetSignerAddress(walletName, wallet, witness);
     if (signer.empty()) {
         LogPrintf("❌ SignTokenOperation: No signer address found\n");
         return false;
@@ -332,30 +332,35 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
         return false;
     }
 
-    LegacyScriptPubKeyMan* spk_man = wallet.GetLegacyScriptPubKeyMan();
-    if (!spk_man) {
-        LogPrintf("❌ SignTokenOperation: LegacyScriptPubKeyMan not available\n");
-        return false;
-    }
-
-    CKeyID keyID = GetKeyForDestination(*spk_man, dest);
-    if (keyID.IsNull()) {
-        LogPrintf("❌ SignTokenOperation: Failed to extract key ID from destination\n");
-        return false;
-    }
-
     // Sign over all token operation fields to prevent tampering
     std::string message = BuildTokenMsg(op);
 
-    CKey key;
-    if (!spk_man->GetKey(keyID, key)) return false;
-    if (!MessageSign(key, message, op.signature)) return false;
+    SigningResult err;
+    switch (witness) {
+    case true:
+        if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
+            err = wallet.SignMessage(message, PKHash(uint160(*wpkh)), op.signature);
+        } else {
+            LogPrintf("❌ SignTokenOperation: Signer not witness address\n");
+            return false;
+        }
+        break;
+    case false:
+        if (const PKHash* pkhash = boost::get<PKHash>(&dest)) {
+            err = wallet.SignMessage(message, *pkhash, op.signature);
+        } else {
+            LogPrintf("❌ SignTokenOperation: Signer not legacy address\n");
+            return false;
+        }
+        break;
+    }
+    if (err != SigningResult::OK) return false;
 
     LogPrintf("✅ SignTokenOperation: Signed by %s\n", signer);
     return true;
 }
 
-std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
+std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w, bool witness)
 {
     LOCK(m_mutex);
 
@@ -367,15 +372,21 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w)
     for (const auto& scriptPubKey : w.GetAllDestinations()) {
         std::string sig;
         SigningResult err;
-
-        if (const PKHash* pkhash = boost::get<PKHash>(&scriptPubKey)) {
-            err = w.SignMessage(dummy_msg, *pkhash, sig);
-        }
-        else if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&scriptPubKey)) {
-            err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
-        }
-        else {
-            continue;
+        switch (witness) {
+        case true:
+            if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&scriptPubKey)) {
+                err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
+            } else {
+                continue;
+            }
+            break;
+        case false:
+            if (const PKHash* pkhash = boost::get<PKHash>(&scriptPubKey)) {
+                err = w.SignMessage(dummy_msg, *pkhash, sig);
+            } else {
+                continue;
+            }
+            break;
         }
 
         if (err == SigningResult::OK) {
