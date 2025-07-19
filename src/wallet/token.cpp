@@ -696,38 +696,45 @@ bool TokenLedger::RescanFromHeight(int from_height)
     return true;
 }
 
+struct TokenLedgerStateV2 {
+    std::map<std::pair<std::string, std::string>, CAmount> balances;
+    std::map<AllowanceKey, CAmount> allowances;
+    std::map<std::string, CAmount> totalSupply;
+    std::map<std::string, TokenMeta> token_meta;
+    std::map<std::string, std::vector<TokenOperation>> history;
+    CAmount governance_fees{0};
+    CAmount fee_per_vbyte{1};
+    CAmount create_fee_per_vbyte{10000000};
+    std::map<std::string, std::string> wallet_signers;
+    int64_t tip_height{0};
+    uint32_t version{TOKEN_DB_VERSION};
+
+    SERIALIZE_METHODS(TokenLedgerStateV2, obj) {
+        READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history,
+                  obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
+                  obj.wallet_signers, obj.tip_height, obj.version);
+    }
+};
+
 bool TokenLedger::Load()
 {
     LOCK(m_mutex);
+
     if (!g_token_db) {
         g_token_db = std::make_unique<CDBWrapper>(GetDataDir() / "tokens", 1 << 20, false, false, true);
     }
+
     uint32_t version = 0;
     g_token_db->Read('v', version);
+
     TokenLedgerState state;
+
     if (version >= 3) {
         if (!g_token_db->Read('s', state)) return false;
     } else {
-        struct TokenLedgerStateV2 {
-            std::map<std::pair<std::string, std::string>, CAmount> balances;
-            std::map<AllowanceKey, CAmount> allowances;
-            std::map<std::string, CAmount> totalSupply;
-            std::map<std::string, TokenMeta> token_meta;
-            std::map<std::string, std::vector<TokenOperation>> history;
-            CAmount governance_fees{0};
-            CAmount fee_per_vbyte{1};
-            CAmount create_fee_per_vbyte{10000000};
-            std::map<std::string, std::string> wallet_signers;
-            int64_t tip_height{0};
-            uint32_t version{TOKEN_DB_VERSION};
-
-            SERIALIZE_METHODS(TokenLedgerStateV2, obj) {
-                READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history,
-                          obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
-                          obj.wallet_signers, obj.tip_height, obj.version);
-            }
-        } state_v2;
+        TokenLedgerStateV2 state_v2;
         if (!g_token_db->Read('s', state_v2)) return false;
+
         state.balances = state_v2.balances;
         state.allowances = state_v2.allowances;
         state.totalSupply = state_v2.totalSupply;
@@ -736,6 +743,8 @@ bool TokenLedger::Load()
         state.governance_fees = state_v2.governance_fees;
         state.fee_per_vbyte = state_v2.fee_per_vbyte;
         state.create_fee_per_vbyte = state_v2.create_fee_per_vbyte;
+
+        // Upgrade old signer format
         for (const auto& kv : state_v2.wallet_signers) {
             WalletSigners ws;
             if (kv.second.rfind("itc1", 0) == 0) {
@@ -745,14 +754,18 @@ bool TokenLedger::Load()
             }
             state.wallet_signers[kv.first] = ws;
         }
+
         state.tip_height = state_v2.tip_height;
     }
+
     if (version > TOKEN_DB_VERSION) return false;
+
     if (version < TOKEN_DB_VERSION) {
         state.version = TOKEN_DB_VERSION;
         g_token_db->Write('v', TOKEN_DB_VERSION);
         g_token_db->Write('s', state);
     }
+
     m_balances = state.balances;
     m_allowances = state.allowances;
     m_totalSupply = state.totalSupply;
@@ -763,8 +776,10 @@ bool TokenLedger::Load()
     m_create_fee_per_vbyte = state.create_fee_per_vbyte;
     m_wallet_signers = state.wallet_signers;
     m_tip_height = state.tip_height;
+
     if (m_tip_height == 0) m_tip_height = Params().TokenActivationHeight() - 1;
     m_governance_wallet = Params().GovernanceWallet();
+
     return true;
 }
 
