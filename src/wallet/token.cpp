@@ -379,22 +379,18 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
 
     for (const auto& dest : w.GetAllDestinations()) {
         std::string sig;
-        SigningResult err;
+        SigningResult err = w.SignMessage(dummy_msg, dest, sig);
+        if (err != SigningResult::OK) continue;
 
-        if (witness) {
-            if (!IsWitnessDestination(dest)) continue;
-        } else {
-            if (!IsLegacyDestination(dest)) continue;
-        }
+        std::string addr = EncodeDestination(dest);
 
-        err = w.SignMessage(dummy_msg, dest, sig);
-        if (err == SigningResult::OK) {
-            std::string addr = EncodeDestination(dest);
-            m_wallet_signers[wallet] = addr;
-            Flush();
-            LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
-            return addr;
-        }
+        if (witness && addr.substr(0, 4) != "itc1") continue; // native SegWit address check (like bc1 or itc1)
+        if (!witness && addr.substr(0, 1) != "1") continue;   // legacy P2PKH check (optional)
+
+        m_wallet_signers[wallet] = addr;
+        Flush();
+        LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
+        return addr;
     }
 
     LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
