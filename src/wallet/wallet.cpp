@@ -2652,7 +2652,7 @@ SigningResult CWallet::SignMessage(const std::string& message, const WitnessV0Ke
     CScript script_pub_key = GetScriptForDestination(wpkh);
     for (const auto& spk_man_pair : m_spk_managers) {
         if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
-            return spk_man_pair.second->SignMessage(message, CTxDestination(wpkh), str_sig);
+            return spk_man_pair.second->SignMessage(message, wpkh, str_sig);
         }
     }
     return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
