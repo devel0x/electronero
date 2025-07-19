@@ -287,6 +287,7 @@ libinterchained_server_a_SOURCES = \
   addrman.cpp \
   banman.cpp \
   pow/yespower.cpp \
+  pow/kawpow.cpp \
   blockencodings.cpp \
   blockfilter.cpp \
   chain.cpp \
@@ -510,6 +511,7 @@ libinterchained_consensus_a_SOURCES = \
   hash.cpp \
   hash.h \
   pow/yespower.cpp \
+  pow/kawpow.cpp \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \

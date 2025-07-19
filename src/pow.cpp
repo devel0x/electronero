@@ -7,6 +7,7 @@
 #include <arith_uint256.h>
 #include <chain.h>
 #include "pow/yespower.h"
+#include "pow/kawpow.h"
 #include "validation.h"      // for cs_main
 #include "logging.h"         // for BCLog and LogPrint
 #include <primitives/block.h>
@@ -223,8 +224,8 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     arith_uint256 bnTarget;
     
     LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d returning powLimit %s\n", nHeight,
-        (nHeight >= params.yespowerForkHeight) ?
-        "Yespower" : "SHA256");
+        (nHeight >= params.kawpowForkHeight) ?
+            "KAWPOW" : (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
     arith_uint256 work = UintToArith256(hash);
     if (work > bnTarget) {
@@ -263,7 +264,10 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         }
     }
 
-    if (nHeight >= params.yespowerForkHeight) {
+    if (nHeight >= params.kawpowForkHeight) {
+        LogPrintf("⚡ Using KAWPOW at height %d\n", nHeight);
+        return CheckKawpow(block, bnTarget, nHeight);
+    } else if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
         return CheckYespower(block, bnTarget, nHeight);
     } else {
@@ -281,7 +285,7 @@ bool CheckProofOfWork(uint256 hash, const CBlockHeader& blockHeader, unsigned in
         LogPrintf("🧱 Skipping PoW check for genesis block\n");
         return true;
     }
-    if(nHeight >= params.yespowerForkHeight) {
+    if(nHeight >= params.kawpowForkHeight || nHeight >= params.yespowerForkHeight) {
         return CheckProofOfWorkWithHeight(hash, blockHeader, nBits, params, nHeight);
     } else {
         bool fNegative;
