@@ -947,6 +947,9 @@ public:
     SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const;
     SigningResult SignMessageHash(const uint256& hash, const PKHash& pkhash, std::string& strSig) const;
     SigningResult SignMessageHash(const uint256& hash, const WitnessV0KeyHash& wpkh, std::string& strSig) const;
+    SigningResult SignMessage(const std::string& message, const CTxDestination& dest, std::string& str_sig) const
+    SigningResult SignMessage(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const
+
     std::vector<CTxDestination> GetAllDestinations() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /**
      * Fills out a PSBT with information from the wallet. Fills in UTXOs if we have
