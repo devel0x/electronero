@@ -2638,9 +2638,7 @@ SigningResult CWallet::SignMessage(const std::string& message, const CTxDestinat
     if (auto pkhash = boost::get<PKHash>(&dest)) {
         return SignMessage(message, *pkhash, str_sig);
     } else if (auto wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
-        return SignMessage(message, *wpkh, str_sig);  // You must implement this overload too
-    } else if (auto p2sh = boost::get<ScriptHash>(&dest)) {
-        return SigningResult::SIGNING_FAILED;
+        return SignMessage(message, *wpkh, str_sig);  // ✅ Correct overload now
     } else {
         return SigningResult::SIGNING_FAILED;
     }
