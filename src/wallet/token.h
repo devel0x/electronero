@@ -198,7 +198,7 @@ private:
     std::set<uint256> m_seen_ops;
     std::map<std::string, std::vector<TokenOperation>> m_history;
 
-    std::string m_governance_wallet{"governance"};
+    std::string m_governance_wallet{"itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r"};
     CAmount m_governance_fees{0};
     CAmount m_fee_per_vbyte{1};
     CAmount m_create_fee_per_vbyte{10000000};
