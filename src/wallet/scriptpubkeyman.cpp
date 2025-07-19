@@ -579,6 +579,23 @@ bool LegacyScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const std::
     return ::SignTransaction(tx, this, coins, sighash, input_errors);
 }
 
+SigningResult LegacyScriptPubKeyMan::SignMessage(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const
+{
+    CKey key;
+    CKeyID keyID = CKeyID(wpkh.GetHash()); // Or reinterpret_cast if needed
+
+    if (!GetKey(keyID, key)) {
+        return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
+    }
+
+    uint256 hash = MessageHash(message);
+    if (!key.SignCompact(hash, (std::vector<unsigned char>&)str_sig)) {
+        return SigningResult::SIGNING_FAILED;
+    }
+
+    return SigningResult::OK;
+}
+
 SigningResult LegacyScriptPubKeyMan::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
 {
     CKey key;
