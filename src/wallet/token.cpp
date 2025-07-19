@@ -360,11 +360,11 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
     return true;
 }
 
-inline bool IsWitnessDestination(const CTxDestination& dest) {
+static bool IsWitnessDestination(const CTxDestination& dest) {
     return boost::get<WitnessV0KeyHash>(&dest) != nullptr;
 }
 
-inline bool IsLegacyDestination(const CTxDestination& dest) {
+static bool IsLegacyDestination(const CTxDestination& dest) {
     return boost::get<PKHash>(&dest) != nullptr;
 }
 
