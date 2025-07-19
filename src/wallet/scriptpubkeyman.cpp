@@ -2077,15 +2077,16 @@ bool DescriptorScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const s
     return ::SignTransaction(tx, keys.get(), coins, sighash, input_errors);
 }
 
-SigningResult DescriptorScriptPubKeyMan::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
+SigningResult DescriptorScriptPubKeyMan::SignMessage(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const
 {
-    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(GetScriptForDestination(pkhash), true);
+    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(GetScriptForDestination(wpkh), true);
     if (!keys) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
     }
 
+    // WitnessV0KeyHash is the same as CKeyID under the hood
     CKey key;
-    if (!keys->GetKey(ToKeyID(pkhash), key)) {
+    if (!keys->GetKey(CKeyID(uint160(wpkh)), key)) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
     }
 
