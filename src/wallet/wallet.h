@@ -944,11 +944,11 @@ public:
     bool SignTransaction(CMutableTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     // Sign the tx given the input coins and sighash.
     bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, std::string>& input_errors) const;
-    SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const;
     SigningResult SignMessageHash(const uint256& hash, const PKHash& pkhash, std::string& strSig) const;
     SigningResult SignMessageHash(const uint256& hash, const WitnessV0KeyHash& wpkh, std::string& strSig) const;
+    SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const;
     SigningResult SignMessage(const std::string& message, const CTxDestination& dest, std::string& str_sig) const;
-    SigningResult SignMessageWitness(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const;
+    SigningResult SignMessage(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const;
 
     std::vector<CTxDestination> GetAllDestinations() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /**
