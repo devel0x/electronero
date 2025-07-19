@@ -360,6 +360,14 @@ bool TokenLedger::SignTokenOperation(TokenOperation& op, CWallet& wallet, const 
     return true;
 }
 
+inline bool IsWitnessDestination(const CTxDestination& dest) {
+    return boost::get<WitnessV0KeyHash>(&dest) != nullptr;
+}
+
+inline bool IsLegacyDestination(const CTxDestination& dest) {
+    return boost::get<PKHash>(&dest) != nullptr;
+}
+
 std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w, bool witness)
 {
     LOCK(m_mutex);
@@ -391,14 +399,6 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
 
     LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
     return "";
-}
-
-inline bool IsWitnessDestination(const CTxDestination& dest) {
-    return boost::get<WitnessV0KeyHash>(&dest) != nullptr;
-}
-
-inline bool IsLegacyDestination(const CTxDestination& dest) {
-    return boost::get<PKHash>(&dest) != nullptr;
 }
 
 std::string BuildTokenMsg(const TokenOperation& op) {
