@@ -4786,7 +4786,7 @@ static RPCHelpMan gettokenbalance()
             LOCK(pwallet->cs_wallet);
 
             std::string token_id = request.params[0].get_str();            
-            std::string has_witness_str = request.params[4].get_str();
+            std::string has_witness_str = request.params[1].get_str();
             if (has_witness_str != "true" && has_witness_str != "false") {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
             }
@@ -4989,7 +4989,7 @@ static RPCHelpMan tokentransfer()
             {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
-            {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
+            {"memo", RPCArg::Type::STR, RPCArg::Optional::NO, "Optional memo string"},
             {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
@@ -5010,8 +5010,7 @@ static RPCHelpMan tokentransfer()
             std::string to = request.params[0].get_str();
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
-            std::string memo;
-            if (request.params.size() > 3) memo = request.params[3].get_str();
+            std::string memo = request.params[3].get_str();
             std::string has_witness_str = request.params[4].get_str();
             if (has_witness_str != "true" && has_witness_str != "false") {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
@@ -5073,7 +5072,7 @@ static RPCHelpMan tokentransferfrom()
             {"to", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
-            {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
+            {"memo", RPCArg::Type::STR, RPCArg::Optional::NO, "Optional memo string"},
             {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
@@ -5095,8 +5094,7 @@ static RPCHelpMan tokentransferfrom()
             std::string to = request.params[1].get_str();
             std::string token_id = request.params[2].get_str();
             std::string amountStr = request.params[3].get_str();
-            std::string memo;
-            if (request.params.size() > 4) memo = request.params[4].get_str();
+            std::string memo = request.params[4].get_str();
             std::string has_witness_str = request.params[5].get_str();
             if (has_witness_str != "true" && has_witness_str != "false") {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
