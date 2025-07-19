@@ -18,7 +18,7 @@
 #include <primitives/block.h>
 #include <cstdint>
 
-static const uint32_t TOKEN_DB_VERSION = 2;
+static const uint32_t TOKEN_DB_VERSION = 3;
 
 enum class TokenOp : uint8_t {
     CREATE = 0,
@@ -125,6 +125,16 @@ std::string BuildTokenMsg(const TokenOperation& op);
 bool IsValidTokenId(const std::string& token);
 std::string GenerateTokenId(const std::string& creator, const std::string& name);
 
+struct WalletSigners {
+    std::string legacy;
+    std::string witness;
+
+    SERIALIZE_METHODS(WalletSigners, obj)
+    {
+        READWRITE(obj.legacy, obj.witness);
+    }
+};
+
 struct TokenLedgerState {
     std::map<std::pair<std::string, std::string>, CAmount> balances;
     std::map<AllowanceKey, CAmount> allowances;
@@ -134,7 +144,7 @@ struct TokenLedgerState {
     CAmount governance_fees{0};
     CAmount fee_per_vbyte{1};
     CAmount create_fee_per_vbyte{10000000};
-    std::map<std::string, std::string> wallet_signers;
+    std::map<std::string, WalletSigners> wallet_signers;
     int64_t tip_height{0};
     uint32_t version{TOKEN_DB_VERSION};
 
@@ -202,7 +212,7 @@ private:
     CAmount m_governance_fees{0};
     CAmount m_fee_per_vbyte{1};
     CAmount m_create_fee_per_vbyte{10000000};
-    std::map<std::string, std::string> m_wallet_signers;
+    std::map<std::string, WalletSigners> m_wallet_signers;
     int64_t m_tip_height{0};
 };
 

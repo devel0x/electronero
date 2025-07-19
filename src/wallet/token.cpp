@@ -373,7 +373,10 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
     LOCK(m_mutex);
 
     auto it = m_wallet_signers.find(wallet);
-    if (it != m_wallet_signers.end()) return it->second;
+    if (it != m_wallet_signers.end()) {
+        if (witness && !it->second.witness.empty()) return it->second.witness;
+        if (!witness && !it->second.legacy.empty()) return it->second.legacy;
+    }
 
     const std::string dummy_msg = "signer_check";
 
@@ -387,7 +390,11 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
         if (witness && addr.substr(0, 4) != "itc1") continue; // native SegWit address check (like bc1 or itc1)
         if (!witness && addr.substr(0, 1) != "1") continue;   // legacy P2PKH check (optional)
 
-        m_wallet_signers[wallet] = addr;
+        if (witness) {
+            m_wallet_signers[wallet].witness = addr;
+        } else {
+            m_wallet_signers[wallet].legacy = addr;
+        }
         Flush();
         LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
         return addr;
@@ -698,10 +705,50 @@ bool TokenLedger::Load()
     uint32_t version = 0;
     g_token_db->Read('v', version);
     TokenLedgerState state;
-    if (!g_token_db->Read('s', state)) return false;
+    if (version >= 3) {
+        if (!g_token_db->Read('s', state)) return false;
+    } else {
+        struct TokenLedgerStateV2 {
+            std::map<std::pair<std::string, std::string>, CAmount> balances;
+            std::map<AllowanceKey, CAmount> allowances;
+            std::map<std::string, CAmount> totalSupply;
+            std::map<std::string, TokenMeta> token_meta;
+            std::map<std::string, std::vector<TokenOperation>> history;
+            CAmount governance_fees{0};
+            CAmount fee_per_vbyte{1};
+            CAmount create_fee_per_vbyte{10000000};
+            std::map<std::string, std::string> wallet_signers;
+            int64_t tip_height{0};
+            uint32_t version{TOKEN_DB_VERSION};
+
+            SERIALIZE_METHODS(TokenLedgerStateV2, obj) {
+                READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history,
+                          obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
+                          obj.wallet_signers, obj.tip_height, obj.version);
+            }
+        } state_v2;
+        if (!g_token_db->Read('s', state_v2)) return false;
+        state.balances = state_v2.balances;
+        state.allowances = state_v2.allowances;
+        state.totalSupply = state_v2.totalSupply;
+        state.token_meta = state_v2.token_meta;
+        state.history = state_v2.history;
+        state.governance_fees = state_v2.governance_fees;
+        state.fee_per_vbyte = state_v2.fee_per_vbyte;
+        state.create_fee_per_vbyte = state_v2.create_fee_per_vbyte;
+        for (const auto& kv : state_v2.wallet_signers) {
+            WalletSigners ws;
+            if (kv.second.rfind("itc1", 0) == 0) {
+                ws.witness = kv.second;
+            } else {
+                ws.legacy = kv.second;
+            }
+            state.wallet_signers[kv.first] = ws;
+        }
+        state.tip_height = state_v2.tip_height;
+    }
     if (version > TOKEN_DB_VERSION) return false;
     if (version < TOKEN_DB_VERSION) {
-        // future migrations could be handled here
         state.version = TOKEN_DB_VERSION;
         g_token_db->Write('v', TOKEN_DB_VERSION);
         g_token_db->Write('s', state);
