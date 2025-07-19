@@ -130,3 +130,69 @@ As a result, replaying a `TOKENTX` received over the network does not lead to a
 second on-chain transaction. If the wallet specified in `wallet_name` does not
 exist locally (which is common when just relaying peer messages), the node simply
 applies the operation to its ledger and moves on.
+
+## Preventing duplicate operations
+
+Token operations are broadcast exactly once by the node that creates them.
+Peers that receive the `TOKENTX` message invoke `ApplyOperation` with
+`broadcast` set to `false` so the operation is processed locally without being
+rebroadcast or recorded again:
+
+```cpp
+if (msg_type == NetMsgType::TOKENTX) {
+    TokenOperation op;
+    vRecv >> op;
+    if (!g_token_ledger.ApplyOperation(op, op.wallet_name, /*broadcast=*/false)) {
+        Misbehaving(pfrom.GetId(), 10, "invalid token operation");
+    }
+    return;
+}
+```
+
+During blockchain synchronization, operations contained in blocks are replayed
+with `ReplayOperation`. This helper explicitly avoids broadcasting and only
+updates the in-memory ledger:
+
+```cpp
+bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height) {
+    if (!VerifySignature(op)) return false;
+    uint256 hash = TokenOperationHash(op);
+    if (!m_seen_ops.insert(hash).second) return false;
+    // execute the operation without side effects such as fees or broadcast
+    ...
+    if (ok) m_history[op.token].push_back(op);
+    return ok;
+}
+```
+
+The wallet also rejects any operation whose hash has already been processed:
+
+```cpp
+if (!m_seen_ops.insert(hash).second) {
+    LogPrintf("⚠️ Token operation already seen: %s\n", hash.GetHex());
+    return false;
+}
+```
+
+When `ApplyOperation` is called with broadcasting enabled, the originating
+wallet records the operation on-chain and then distributes it to peers:
+
+```cpp
+if (broadcast && !wallet_name.empty()) RecordOperationOnChain(wallet_name, op);
+...
+if (broadcast && ok) BroadcastTokenOp(op);
+```
+
+Nodes that do not have the originating wallet simply apply the operation locally
+because they cannot create the governance fee transaction:
+
+```cpp
+std::shared_ptr<CWallet> from = GetWallet(wallet);
+if (!from) {
+    LogPrintf("❌ Source wallet not found: %s\n", wallet);
+    return false; // no fee transaction attempted
+}
+```
+
+Together these rules ensure that a token operation is never duplicated on-chain
+even when it is replayed from blocks or relayed across the network.
