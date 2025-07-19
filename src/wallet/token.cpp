@@ -369,28 +369,19 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
 
     const std::string dummy_msg = "signer_check";
 
-    for (const auto& scriptPubKey : w.GetAllDestinations()) {
+    for (const auto& dest : w.GetAllDestinations()) {
         std::string sig;
         SigningResult err;
-        switch (witness) {
-        case true:
-            if (const WitnessV0KeyHash* wpkh = boost::get<WitnessV0KeyHash>(&scriptPubKey)) {
-                err = w.SignMessage(dummy_msg, PKHash(uint160(*wpkh)), sig);
-            } else {
-                continue;
-            }
-            break;
-        case false:
-            if (const PKHash* pkhash = boost::get<PKHash>(&scriptPubKey)) {
-                err = w.SignMessage(dummy_msg, *pkhash, sig);
-            } else {
-                continue;
-            }
-            break;
+
+        if (witness) {
+            if (!IsWitnessDestination(dest)) continue;
+        } else {
+            if (!IsLegacyDestination(dest)) continue;
         }
 
+        err = w.SignMessage(dummy_msg, dest, sig);
         if (err == SigningResult::OK) {
-            std::string addr = EncodeDestination(scriptPubKey);
+            std::string addr = EncodeDestination(dest);
             m_wallet_signers[wallet] = addr;
             Flush();
             LogPrintf("👤 Valid signer found for wallet '%s' -> %s\n", wallet, addr);
@@ -400,6 +391,14 @@ std::string TokenLedger::GetSignerAddress(const std::string& wallet, CWallet& w,
 
     LogPrintf("❌ No valid signer address found for wallet '%s'\n", wallet);
     return "";
+}
+
+inline bool IsWitnessDestination(const CTxDestination& dest) {
+    return boost::get<WitnessV0KeyHash>(&dest) != nullptr;
+}
+
+inline bool IsLegacyDestination(const CTxDestination& dest) {
+    return boost::get<PKHash>(&dest) != nullptr;
 }
 
 std::string BuildTokenMsg(const TokenOperation& op) {
