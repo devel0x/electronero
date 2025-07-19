@@ -188,7 +188,7 @@ class CTestNetParams : public CChainParams {
 public:
     CTestNetParams() {
         strNetworkID = CBaseChainParams::TESTNET;
-        strGovernanceWallet = "governance";
+        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
         nTokenActivationHeight = 1;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
@@ -279,7 +279,7 @@ public:
 class SigNetParams : public CChainParams {
 public:
     explicit SigNetParams(const ArgsManager& args) {
-        strGovernanceWallet = "governance";
+        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
         std::vector<uint8_t> bin;
         vSeeds.clear();
 
@@ -388,7 +388,7 @@ class CRegTestParams : public CChainParams {
 public:
     explicit CRegTestParams(const ArgsManager& args) {
         strNetworkID =  CBaseChainParams::REGTEST;
-        strGovernanceWallet = "governance";
+        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
         nTokenActivationHeight = 1;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
