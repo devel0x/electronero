@@ -584,13 +584,32 @@ static bool DecodeTokenOp(const CScript& script, TokenOperation& op)
     if (!script.GetOp(it, opcode, data)) return false;
     if (data.empty()) return false;
     if (opcode > OP_PUSHDATA4) return false;
+
+    // Try decoding using the current format which includes a memo flag
     try {
         CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
         ss >> op;
+        return true;
     } catch (...) {
-        return false;
     }
-    return true;
+
+    // Fallback to legacy format without the memo flag
+    try {
+        CDataStream ss(data, SER_NETWORK, PROTOCOL_VERSION);
+        uint8_t op_val;
+        ss >> op_val;
+        op.op = static_cast<TokenOp>(op_val);
+        ss >> op.from >> op.to >> op.spender >> op.token >> op.amount >> op.name
+           >> op.symbol >> op.decimals >> op.timestamp >> op.signer >> op.signature;
+        if (!ss.empty()) {
+            ss >> op.memo;
+        } else {
+            op.memo.clear();
+        }
+        return true;
+    } catch (...) {
+    }
+    return false;
 }
 
 bool TokenLedger::ReplayOperation(const TokenOperation& op, int64_t height)
