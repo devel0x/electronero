@@ -582,7 +582,7 @@ bool LegacyScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const std::
 SigningResult LegacyScriptPubKeyMan::SignMessage(const std::string& message, const WitnessV0KeyHash& wpkh, std::string& str_sig) const
 {
     CKey key;
-    CKeyID keyID = CKeyID(wpkh.GetHash()); // Or reinterpret_cast if needed
+    CKeyID keyID = CKeyID(wpkh); // Or reinterpret_cast if needed
 
     if (!GetKey(keyID, key)) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
