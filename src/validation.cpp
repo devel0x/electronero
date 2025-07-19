@@ -2231,7 +2231,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     }
 
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
-    if (pindex->nHeight >= 8999 && IsValidDestination(govDest)) {
+    if (pindex->nHeight >= 10000 && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
         CAmount expectedGov = blockReward / 10;
         bool foundGov = false;
