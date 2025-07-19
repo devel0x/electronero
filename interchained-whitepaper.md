@@ -49,7 +49,7 @@ struct TokenLedgerState {
     std::map<std::string, TokenMeta> token_meta;
     std::map<std::string, std::vector<TokenOperation>> history;
     CAmount governance_fees{0};
-    CAmount fee_per_vbyte{1};
+    CAmount fee_per_vbyte{10000};
     CAmount create_fee_per_vbyte{10000000};
     std::map<std::string, std::string> wallet_signers;
     int64_t tip_height{0};

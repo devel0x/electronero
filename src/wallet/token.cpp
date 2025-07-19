@@ -531,6 +531,7 @@ bool TokenLedger::ApplyOperation(const TokenOperation& op, const std::string& wa
         unsigned int vsize = GetSerializeSize(op, PROTOCOL_VERSION);
         CAmount rate = (op.op == TokenOp::CREATE) ? m_create_fee_per_vbyte : m_fee_per_vbyte;
         CAmount fee = vsize * rate;
+        if (fee < TOKEN_MIN_GOV_FEE) fee = TOKEN_MIN_GOV_FEE;
         if (broadcast && !wallet_name.empty() && SendGovernanceFee(wallet_name, fee)) {
             m_governance_fees += fee;
         }
@@ -703,8 +704,8 @@ struct TokenLedgerStateV2 {
     std::map<std::string, TokenMeta> token_meta;
     std::map<std::string, std::vector<TokenOperation>> history;
     CAmount governance_fees{0};
-    CAmount fee_per_vbyte{1};
-    CAmount create_fee_per_vbyte{10000000};
+    CAmount fee_per_vbyte{TOKEN_DEFAULT_FEE_PER_VBYTE};
+    CAmount create_fee_per_vbyte{TOKEN_CREATE_FEE_PER_VBYTE};
     std::map<std::string, std::string> wallet_signers;
     int64_t tip_height{0};
     uint32_t version{TOKEN_DB_VERSION};

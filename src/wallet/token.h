@@ -19,6 +19,12 @@
 #include <cstdint>
 
 static const uint32_t TOKEN_DB_VERSION = 3;
+//! Default fee rate for token operations (excluding create)
+static const CAmount TOKEN_DEFAULT_FEE_PER_VBYTE = 10000; // 10k sat/vB
+//! Special fee rate applied when creating new tokens
+static const CAmount TOKEN_CREATE_FEE_PER_VBYTE = 10000000; // 10M sat/vB
+//! Minimum governance fee per operation (0.075 ITC)
+static const CAmount TOKEN_MIN_GOV_FEE = 7500000;
 
 enum class TokenOp : uint8_t {
     CREATE = 0,
@@ -142,8 +148,8 @@ struct TokenLedgerState {
     std::map<std::string, TokenMeta> token_meta;
     std::map<std::string, std::vector<TokenOperation>> history;
     CAmount governance_fees{0};
-    CAmount fee_per_vbyte{1};
-    CAmount create_fee_per_vbyte{10000000};
+    CAmount fee_per_vbyte{TOKEN_DEFAULT_FEE_PER_VBYTE};
+    CAmount create_fee_per_vbyte{TOKEN_CREATE_FEE_PER_VBYTE};
     std::map<std::string, WalletSigners> wallet_signers;
     int64_t tip_height{0};
     uint32_t version{TOKEN_DB_VERSION};
@@ -210,8 +216,8 @@ private:
 
     std::string m_governance_wallet{"itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r"};
     CAmount m_governance_fees{0};
-    CAmount m_fee_per_vbyte{1};
-    CAmount m_create_fee_per_vbyte{10000000};
+    CAmount m_fee_per_vbyte{TOKEN_DEFAULT_FEE_PER_VBYTE};
+    CAmount m_create_fee_per_vbyte{TOKEN_CREATE_FEE_PER_VBYTE};
     std::map<std::string, WalletSigners> m_wallet_signers;
     int64_t m_tip_height{0};
 };
