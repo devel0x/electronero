@@ -209,7 +209,7 @@ $ interchained-cli token_meta "tokenidtok"
 List your tokens with positive balances:
 
 ```
-$ interchained-cli my_tokens
+$ interchained-cli my_tokens false
 ```
 
 List all known tokens:

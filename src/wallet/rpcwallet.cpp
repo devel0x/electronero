@@ -5651,7 +5651,9 @@ static RPCHelpMan my_tokens()
     return RPCHelpMan{
         "my_tokens",
         "\nList tokens with positive balance in this wallet.\n",
-        {},
+        {
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
+        },
         RPCResult{
             RPCResult::Type::ARR,
             "",
@@ -5671,7 +5673,7 @@ static RPCHelpMan my_tokens()
             }
         },
         RPCExamples{
-            HelpExampleCli("my_tokens", "")
+            HelpExampleCli("my_tokens", "false")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -5680,7 +5682,13 @@ static RPCHelpMan my_tokens()
             const CWallet* const pwallet = wallet.get();
             LOCK(pwallet->cs_wallet);
 
-            std::string signer = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet, /*witness=*/false);
+            std::string has_witness_str = request.params[0].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
+
+            std::string signer = g_token_ledger.GetSignerAddress(pwallet->GetName(), *wallet, witness);
             auto list = g_token_ledger.ListWalletTokens(signer);
             UniValue arr(UniValue::VARR);
 
@@ -6008,7 +6016,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "tokentransferownership",           &tokentransferownership,        {"token","new_owner","witness"} },
     { "wallet",             "tokentotalsupply",                 &tokentotalsupply,              {"token"} },
     { "wallet",             "getgovernancebalance",             &getgovernancebalance,          {} },
-    { "wallet",             "my_tokens",                        &my_tokens,                     {} },
+    { "wallet",             "my_tokens",                        &my_tokens,                     {"witness"} },
     { "wallet",             "all_tokens",                       &all_tokens,                    {} },
     { "wallet",             "token_history",                    &token_history,                 {"token","filter"} },
     { "wallet",             "token_meta",                       &token_meta,                    {"token"} },
