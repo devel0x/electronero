@@ -10,7 +10,7 @@ uint256 GetKAWPOWSeed(int height)
     seed.SetNull(); // start with 0x000...
 
     for (int i = 0; i < epoch; ++i) {
-        seed = Hash(seed.begin(), seed.end());
+        seed = Hash(seed);
     }
 
     return seed;

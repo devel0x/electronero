@@ -9,6 +9,8 @@
 #include <uint256.h>
 #include <limits>
 
+static const int32_t VERSIONBITS_KAWPOW = 0x20000038;
+
 namespace Consensus {
 
 enum DeploymentPos

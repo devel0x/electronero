@@ -9,6 +9,7 @@
 #include <primitives/transaction.h>
 #include <serialize.h>
 #include <uint256.h>
+#include "consensus/params.h"
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
@@ -38,18 +39,24 @@ public:
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) {
-        READWRITE(obj.nVersion);
-        READWRITE(obj.hashPrevBlock);
-        READWRITE(obj.hashMerkleRoot);
-        READWRITE(obj.nTime);
-        READWRITE(obj.nBits);
-        READWRITE(obj.nNonce);
-        READWRITE(obj.nNonce64);
-        READWRITE(obj.mixHash);
-        READWRITE(obj.hashKawpowSeed);
-    }
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(nVersion);
+        READWRITE(hashPrevBlock);
+        READWRITE(hashMerkleRoot);
+        READWRITE(nTime);
+        READWRITE(nBits);
 
+        if ((nVersion & 0xFFFFFFF0) == VERSIONBITS_KAWPOW) {
+            READWRITE(nNonce64);
+            READWRITE(mixHash);
+            READWRITE(hashKawpowSeed);
+        } else {
+            READWRITE(nNonce);
+        }
+    }
+    
+    SERIALIZE_METHODS(CBlockHeader, obj);
 
     void SetNull()
     {

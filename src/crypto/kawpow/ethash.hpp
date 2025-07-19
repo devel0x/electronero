@@ -1,6 +1,8 @@
 #ifndef BITCOIN_CRYPTO_ETHASH_HPP
 #define BITCOIN_CRYPTO_ETHASH_HPP
 
+#include "uint256.h"
+#include "arith_uint256.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,9 +63,9 @@ inline bool ethash_light_search(ethash_light_cache* light,
         uint64_t nonce = start_nonce + i;
         ethash_return_value rv = ethash_light_compute(light, header, nonce);
 
-        arith_uint256 h;
-        memcpy(h.begin(), rv.result, 32);
-        if (h <= target) {
+        uint256 h;
+        memcpy(h.begin(), rv.result, 32); // uint256 supports begin()
+        if (UintToArith256(h) <= target) {
             found_nonce = nonce;
             memcpy(out_mix, rv.mix_hash, 32);
             memcpy(out_hash, rv.result, 32);

@@ -1,5 +1,6 @@
 #include "keccak.hpp"
 #include <cstring>
+#include <algorithm>
 
 static constexpr size_t KECCAKF_ROUNDS = 22;
 static constexpr uint64_t keccakf_rndc[KECCAKF_ROUNDS] = {

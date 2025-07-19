@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "uint256.h"
+#include <primitives/block.h>
 
 namespace kawpow {
 
@@ -14,5 +15,7 @@ bool verify(const uint256& headerHash,
             const uint256& seedHash);
 
 } // namespace kawpow
+
+uint256 GetKAWPOWHash(const CBlock& block, int height);
 
 #endif // BITCOIN_CRYPTO_KAWPOW_H

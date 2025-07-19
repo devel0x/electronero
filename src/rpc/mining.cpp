@@ -130,7 +130,14 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     const Consensus::Params& consensusParams = chainparams.GetConsensus();
     
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
-        uint256 powHash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
+        uint256 powHash;
+        if (height >= consensusParams.kawpowForkHeight) {
+            powHash = GetKAWPOWHash(block, height);
+        } else if (height >= consensusParams.yespowerForkHeight) {
+            powHash = YespowerHash(block, height);
+        } else {
+            powHash = block.GetHash();
+        }
         if (CheckProofOfWorkWithHeight(powHash, block, block.nBits, consensusParams, height)) {
             break;
         }
@@ -148,7 +155,15 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     if (!chainman.ProcessNewBlock(chainparams, shared_pblock, true, nullptr)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
-    block_hash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
+
+    if (height >= consensusParams.kawpowForkHeight) {
+        block_hash = GetKAWPOWHash(block, height);
+    } else if (height >= consensusParams.yespowerForkHeight) {
+        block_hash = YespowerHash(block, height);
+    } else {
+        block_hash = block.GetHash();
+    }
+
     return true;
 }
 
@@ -688,10 +703,17 @@ static RPCHelpMan getblocktemplate()
             if (!DecodeHexBlk(block, dataval.get_str()))
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
 
+            uint256 hash;
             int nHeight = ::ChainActive().Height() + 1;
-            uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
-                ? YespowerHash(block, nHeight)
-                : block.GetHash();
+            const auto& consensus = Params().GetConsensus();
+
+            if (nHeight >= consensus.kawpowForkHeight) {
+                hash = GetKAWPOWHash(block, nHeight);
+            } else if (nHeight >= consensus.yespowerForkHeight) {
+                hash = YespowerHash(block, nHeight);
+            } else {
+                hash = block.GetHash();
+            }
             const CBlockIndex* pindex = LookupBlockIndex(hash);
             if (pindex) {
                 if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
@@ -948,10 +970,10 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
     // KAWPOW-specific fields
-    if (::chainActive.Height() + 1 >= consensusParams.kawpowForkHeight) {
+    if (::ChainActive().Height() + 1 >= consensusParams.kawpowForkHeight) {
         result.pushKV("kawpow_nonce64", (uint64_t)pblock->nNonce64);
         result.pushKV("kawpow_mixhash", pblock->mixHash.GetHex());
-        result.pushKV("kawpow_seed", GetKAWPOWSeed(::chainActive.Height() + 1).GetHex());
+        result.pushKV("kawpow_seed", GetKAWPOWSeed(::ChainActive().Height() + 1).GetHex());
     }
     result.pushKV("mintime", (int64_t)pindexPrev->GetMedianTimePast()+1);
     result.pushKV("mutable", aMutable);
@@ -989,14 +1011,25 @@ public:
     bool found;
     BlockValidationState state;
 
-    explicit submitblock_StateCatcher(const uint256 &hashIn) : hash(hashIn), found(false), state() {}
+    explicit submitblock_StateCatcher(const uint256& hashIn) : hash(hashIn), found(false), state() {}
 
 protected:
     void BlockChecked(const CBlock& block, const BlockValidationState& stateIn) override {
         int nHeight = ::ChainActive().Height() + 1;
-        uint256 block_expected_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+        const Consensus::Params& consensus = Params().GetConsensus();
+
+        uint256 block_expected_hash;
+        if (nHeight >= consensus.kawpowForkHeight) {
+            // Validate using KAWPOW hash (GetKAWPOWHash() should be defined in your codebase)
+            block_expected_hash = GetKAWPOWHash(block, nHeight);
+        } else if (nHeight >= consensus.yespowerForkHeight) {
+            block_expected_hash = YespowerHash(block, nHeight);
+        } else {
+            block_expected_hash = block.GetHash();
+        }
         if (block_expected_hash != hash)
             return;
+
         found = true;
         state = stateIn;
     }
@@ -1028,8 +1061,18 @@ static RPCHelpMan submitblock()
     if (block.vtx.empty() || !block.vtx[0]->IsCoinBase()) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not start with a coinbase");
     }
+
     int nHeight = ::ChainActive().Height() + 1;
-    uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+    const Consensus::Params& consensus = Params().GetConsensus();
+    uint256 hash;
+    if (nHeight >= consensus.kawpowForkHeight) {
+        hash = GetKAWPOWHash(block, nHeight);
+    } else if (nHeight >= consensus.yespowerForkHeight) {
+        hash = YespowerHash(block, nHeight);
+    } else {
+        hash = block.GetHash();
+    }
+
     {
         LOCK(cs_main);
         const CBlockIndex* pindex = LookupBlockIndex(hash);

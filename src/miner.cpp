@@ -19,6 +19,8 @@
 #include <consensus/validation.h>
 
 #include "crypto/kawpow/kawpow.h"
+#include "crypto/kawpow/progpow.hpp"
+#include "crypto/kawpow/kawpow.h"
 #include "pow_kawpow.h"
 #include "primitives/block.h"
 
@@ -50,6 +52,8 @@
 #include <pubkey.h>
 #include <algorithm>
 #include <utility>
+
+using progpow::hash256;
 
 CTxMemPool& EnsureMemPool(NodeContext& node);
 
@@ -144,7 +148,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             std::array<uint8_t, 32> headerArray;
                             std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
 
-                            hash256 result, mix;
+                            progpow::hash256 mix, result;
                             uint64_t found_nonce = 0;
                             bool success = progpow::search(nHeight / 7500, headerArray, nonce, &found_nonce, mix, result, bnTarget);
 
@@ -152,8 +156,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                                 continue;
 
                             block.nNonce64 = found_nonce;
-                            block.mixHash = uint256(mix.bytes.data());
-                            hash = uint256(result.bytes.data());
+                            memcpy(block.mixHash.begin(), mix.bytes.data(), 32);
+                            memcpy(hash.begin(), result.bytes.data(), 32);
                         } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
                             hash = YespowerHash(block, &shared, nHeight);
                         } else {
@@ -438,10 +442,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CBlockIndex* pindexPrev = ::ChainActive().Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
+    int32_t kawpowVersion = VERSIONBITS_KAWPOW;
+    int32_t defaultVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
 
-    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    pblock->nVersion = (nHeight >= Params().GetConsensus().kawpowForkHeight) ? kawpowVersion : defaultVersion;
 
-    // Force SEGWIT bit if active
+    // Append SEGWIT bit if active (optional but recommended if your chain uses SegWit)
     if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {
         pblock->nVersion |= VersionBitsMask(chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
     }

@@ -404,6 +404,9 @@ libinterchained_wallet_a_SOURCES = \
   index/base.cpp \
   signet.cpp \
   pow.cpp \
+  crypto/kawpow/kawpow.cpp \
+  crypto/kawpow/progpow.cpp \
+  pow_kawpow.cpp \
   banman.cpp \
   consensus/tx_verify.cpp \
   shutdown.cpp \
