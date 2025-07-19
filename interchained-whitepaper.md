@@ -286,7 +286,7 @@ $ interchained-cli gettokenbalance 0xtokenid false
 $ interchained-cli tokenallowance alice bob 0xtokenid
 $ interchained-cli tokentotalsupply 0xtokenid
 $ interchained-cli token_meta 0xtokenid
-$ interchained-cli my_tokens
+$ interchained-cli my_tokens false
 $ interchained-cli all_tokens
 $ interchained-cli token_history 0xtokenid
 $ interchained-cli rescan_tokentx 3000
