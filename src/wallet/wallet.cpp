@@ -34,6 +34,7 @@
 #include <wallet/fees.h>
 
 #include <univalue.h>
+#include <outputtype.h>
 
 #include <algorithm>
 #include <assert.h>
@@ -2589,8 +2590,18 @@ std::vector<CTxDestination> CWallet::GetAllDestinations() const {
     std::map<CKeyID, int64_t> keyBirthMap;
     GetKeyBirthTimes(keyBirthMap);
 
+    LegacyScriptPubKeyMan* spk_man = GetLegacyScriptPubKeyMan();
+    if (!spk_man) return result;
+
     for (const auto& entry : keyBirthMap) {
-        result.push_back(PKHash(entry.first));
+        CPubKey pubkey;
+        if (spk_man->GetPubKey(entry.first, pubkey)) {
+            for (const auto& dest : GetAllDestinationsForKey(pubkey)) {
+                result.push_back(dest);
+            }
+        } else {
+            result.push_back(PKHash(entry.first));
+        }
     }
 
     return result;
