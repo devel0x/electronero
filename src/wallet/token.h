@@ -16,9 +16,10 @@
 #include <serialize.h>
 #include <wallet/wallet.h>
 #include <primitives/block.h>
+#include <uint256.h>
 #include <cstdint>
 
-static const uint32_t TOKEN_DB_VERSION = 3;
+static const uint32_t TOKEN_DB_VERSION = 4;
 
 enum class TokenOp : uint8_t {
     CREATE = 0,
@@ -141,6 +142,7 @@ struct TokenLedgerState {
     std::map<std::string, CAmount> totalSupply;
     std::map<std::string, TokenMeta> token_meta;
     std::map<std::string, std::vector<TokenOperation>> history;
+    std::map<std::pair<std::string, uint256>, std::string> tx_memos;
     CAmount governance_fees{0};
     CAmount fee_per_vbyte{1};
     CAmount create_fee_per_vbyte{10000000};
@@ -150,7 +152,7 @@ struct TokenLedgerState {
 
     SERIALIZE_METHODS(TokenLedgerState, obj) {
         READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history,
-                  obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
+                  obj.tx_memos, obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
                   obj.wallet_signers, obj.tip_height, obj.version);
     }
 };
@@ -207,6 +209,7 @@ private:
     std::map<std::string, TokenMeta> m_token_meta;
     std::set<uint256> m_seen_ops;
     std::map<std::string, std::vector<TokenOperation>> m_history;
+    std::map<std::pair<std::string, uint256>, std::string> m_tx_memos;
 
     std::string m_governance_wallet{"itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r"};
     CAmount m_governance_fees{0};
