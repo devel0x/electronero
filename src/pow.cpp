@@ -11,6 +11,8 @@
 #include "logging.h"         // for BCLog and LogPrint
 #include <primitives/block.h>
 #include <uint256.h>
+#include "crypto/kawpow/kawpow.h"
+#include "pow_kawpow.h"
 
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
@@ -221,11 +223,48 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
     bool fNegative;
     bool fOverflow;
     arith_uint256 bnTarget;
-    
-    LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d returning powLimit %s\n", nHeight,
-        (nHeight >= params.yespowerForkHeight) ?
-        "Yespower" : "SHA256");
+
+    LogPrintf("💡 CheckProofOfWorkWithHeight: nHeight=%d\n", nHeight);
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
+
+    if (nHeight == 0 || hash == params.hashGenesisBlock) {
+        LogPrintf("🧱 Skipping PoW check for genesis block\n");
+        return true;
+    }
+
+    if (nHeight >= 5880) {
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
+            return false;
+        }
+    } else {
+        if (fNegative || fOverflow || bnTarget == 0) {
+            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
+            return false;
+        }
+    }
+
+    if (nHeight >= params.kawpowForkHeight) {
+        LogPrintf("🔥 Using KAWPOW at height %d\n", nHeight);
+        const uint256 headerHash = block.GetKAWPOWHeaderHash();
+        const uint256 seed = GetKAWPOWSeed(nHeight);
+
+        if (!kawpow::verify(headerHash, block.mixHash, block.nNonce64, nHeight, seed)) {
+            LogPrintf("❌ KAWPOW verification failed\n");
+            return false;
+        }
+
+        arith_uint256 finalHash = UintToArith256(headerHash);
+        if (finalHash > bnTarget) {
+            LogPrintf("❌ KAWPOW hash too high\n");
+            return false;
+        }
+
+        LogPrintf("✅ KAWPOW passed at height %d\n", nHeight);
+        return true;
+    }
+
+    // Yespower/SHA256 logic
     arith_uint256 work = UintToArith256(hash);
     if (work > bnTarget) {
         LogPrintf("💥 Block failed PoW at height=%d\n", nHeight);
@@ -233,42 +272,13 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
         LogPrintf("  target = %s\n", bnTarget.ToString());
         return false;
     }
-    uint256 powLimit = (nHeight >= params.yespowerForkHeight)
-                   ? params.powLimitYespower
-                   : params.powLimit;
-    // Check range
-    LogPrintf("🔎 CheckPoW at height=%d\n", nHeight);
-    LogPrintf("    Block hash : %s\n", hash.ToString());
-    LogPrintf("    Result: %s\n", (UintToArith256(hash) <= bnTarget ? "✅ PASS" : "❌ FAIL"));
-    // Skip PoW check for genesis block
-    if (nHeight == 0 || hash == params.hashGenesisBlock) {
-        LogPrintf("🧱 Skipping PoW check for genesis block\n");
-        return true;
-    }
-    if (nHeight >= 5880) {
-        if (fNegative || fOverflow || bnTarget == 0) {
-            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
-            return false;
-        }
-        // // Allow rising difficulty: only reject if too hard
-        // if (bnTarget < UintToArith256(powLimit)) {
-        //     LogPrintf("❌ Difficulty too hard (bnTarget < powLimit)\n");
-        //     return false;
-        // }
-    } else {
-        // Pre-fork logic (older rules)
-        if (fNegative || fOverflow || bnTarget == 0) {
-            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
-            return false;
-        }
-    }
 
     if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
         return CheckYespower(block, bnTarget, nHeight);
     } else {
-        uint256 b_hash = block.GetHash(); // SHA256
-        return UintToArith256(b_hash) <= bnTarget;
+        LogPrintf("🔒 Using SHA256 at height %d\n", nHeight);
+        return true;
     }
 }
 
