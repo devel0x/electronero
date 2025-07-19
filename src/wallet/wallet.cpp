@@ -2640,9 +2640,9 @@ SigningResult CWallet::SignMessage(const std::string& message, const CTxDestinat
     } else if (auto wpkh = boost::get<WitnessV0KeyHash>(&dest)) {
         return SignMessage(message, *wpkh, str_sig);  // You must implement this overload too
     } else if (auto p2sh = boost::get<ScriptHash>(&dest)) {
-        return SigningResult::UNSUPPORTED_ADDRESS;
+        return SigningResult::SIGNING_FAILED;
     } else {
-        return SigningResult::INVALID_ADDRESS;
+        return SigningResult::SIGNING_FAILED;
     }
 }
 
@@ -2652,7 +2652,7 @@ SigningResult CWallet::SignMessage(const std::string& message, const WitnessV0Ke
     CScript script_pub_key = GetScriptForDestination(wpkh);
     for (const auto& spk_man_pair : m_spk_managers) {
         if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
-            return spk_man_pair.second->SignMessage(message, wpkh, str_sig);
+            return spk_man_pair.second->SignMessage(message, CTxDestination(wpkh), str_sig);
         }
     }
     return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
