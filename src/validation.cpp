@@ -50,6 +50,8 @@
 #include <util/translation.h>
 #include <validationinterface.h>
 #include <warnings.h>
+#include <script/standard.h>
+#include <key_io.h>
 
 #include <string>
 
@@ -2229,7 +2231,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     }
 
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
-    if (IsValidDestination(govDest)) {
+    if (pindex->nHeight >= 8999 && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
         CAmount expectedGov = blockReward / 10;
         bool foundGov = false;
