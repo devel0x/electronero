@@ -9,6 +9,17 @@
 #include <tinyformat.h>
 #include "pow/yespower.h"
 
+uint256 CBlockHeader::GetKAWPOWHeaderHash() const
+{
+    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+    ss << nVersion;
+    ss << hashPrevBlock;
+    ss << hashMerkleRoot;
+    ss << nTime;
+    ss << nBits;
+    ss << hashKawpowSeed; // optional, but ensures consistent replay protection
+    return ss.GetHash();
+}
 
 uint256 CBlockHeader::YespowerHash(int height) const {
     return ::YespowerHash(*this, height);

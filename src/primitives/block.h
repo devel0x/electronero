@@ -27,13 +27,29 @@ public:
     uint32_t nTime;
     uint32_t nBits;
     uint32_t nNonce;
+    
+    // KAWPOW additions
+    uint64_t nNonce64{0};
+    uint256 mixHash;
+    uint256 hashKawpowSeed; // optionally precomputed in block template
 
     CBlockHeader()
     {
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) { READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce); }
+    SERIALIZE_METHODS(CBlockHeader, obj) {
+        READWRITE(obj.nVersion);
+        READWRITE(obj.hashPrevBlock);
+        READWRITE(obj.hashMerkleRoot);
+        READWRITE(obj.nTime);
+        READWRITE(obj.nBits);
+        READWRITE(obj.nNonce);
+        READWRITE(obj.nNonce64);
+        READWRITE(obj.mixHash);
+        READWRITE(obj.hashKawpowSeed);
+    }
+
 
     void SetNull()
     {
@@ -43,6 +59,9 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
+        nNonce64 = 0;
+        mixHash.SetNull();
+        hashKawpowSeed.SetNull();
     }
 
     bool IsNull() const
@@ -53,6 +72,8 @@ public:
     uint256 GetHash() const;
 
     uint256 YespowerHash(int height) const;
+
+    uint256 GetKAWPOWHeaderHash() const;
 
     int64_t GetBlockTime() const
     {
