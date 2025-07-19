@@ -287,6 +287,10 @@ libinterchained_server_a_SOURCES = \
   addrman.cpp \
   banman.cpp \
   pow/yespower.cpp \
+  crypto/kawpow/kawpow.cpp \
+  crypto/kawpow/progpow.cpp \
+  crypto/kawpow/keccak.cpp \
+  pow_kawpow.cpp \
   blockencodings.cpp \
   blockfilter.cpp \
   chain.cpp \
