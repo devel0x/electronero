@@ -4669,7 +4669,7 @@ static RPCHelpMan createtoken()
             {"name", RPCArg::Type::STR, RPCArg::Optional::NO, "Token name"},
             {"symbol", RPCArg::Type::STR, RPCArg::Optional::NO, "Token symbol"},
             {"decimals", RPCArg::Type::STR, RPCArg::Optional::NO, "Number of decimals (0-16)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
@@ -4694,8 +4694,11 @@ static RPCHelpMan createtoken()
             std::string name = request.params[1].get_str();
             std::string symbol = request.params[2].get_str();
             std::string decimalsStr = request.params[3].get_str();
-            bool witness = false;
-            if (request.params.size() > 4) witness = request.params[4].get_bool();
+            std::string has_witness_str = request.params[4].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             int decimalsInt;
             try {
@@ -4765,7 +4768,7 @@ static RPCHelpMan gettokenbalance()
         "\nGet the token balance of this wallet.\n",
         {
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::STR,
@@ -4782,9 +4785,12 @@ static RPCHelpMan gettokenbalance()
             const CWallet* const pwallet = wallet.get();
             LOCK(pwallet->cs_wallet);
 
-            std::string token_id = request.params[0].get_str();
-            bool witness = false;
-            if (request.params.size() > 1) witness = request.params[1].get_bool();
+            std::string token_id = request.params[0].get_str();            
+            std::string has_witness_str = request.params[4].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "invalid token id");
             }
@@ -4866,7 +4872,7 @@ static RPCHelpMan tokenapprove()
             {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to approve (string to preserve decimal precision)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL, "", "true if successful"
@@ -4886,8 +4892,11 @@ static RPCHelpMan tokenapprove()
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
           
-            bool witness = false;
-            if (request.params.size() > 3) witness = request.params[3].get_bool();
+            std::string has_witness_str = request.params[3].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -4981,7 +4990,7 @@ static RPCHelpMan tokentransfer()
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
             {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5003,8 +5012,11 @@ static RPCHelpMan tokentransfer()
             std::string amountStr = request.params[2].get_str();
             std::string memo;
             if (request.params.size() > 3) memo = request.params[3].get_str();
-            bool witness = false;
-            if (request.params.size() > 4) witness = request.params[4].get_bool();
+            std::string has_witness_str = request.params[4].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5062,7 +5074,7 @@ static RPCHelpMan tokentransferfrom()
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to transfer (string to preserve decimal precision)"},
             {"memo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional memo string"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5085,8 +5097,11 @@ static RPCHelpMan tokentransferfrom()
             std::string amountStr = request.params[3].get_str();
             std::string memo;
             if (request.params.size() > 4) memo = request.params[4].get_str();
-            bool witness = false;
-            if (request.params.size() > 5) witness = request.params[5].get_bool();
+            std::string has_witness_str = request.params[5].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5143,7 +5158,7 @@ static RPCHelpMan tokenincreaseallowance()
             {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to increase (string to preserve decimal precision)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5163,8 +5178,11 @@ static RPCHelpMan tokenincreaseallowance()
             std::string spender = request.params[0].get_str();
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
-            bool witness = false;
-            if (request.params.size() > 3) witness = request.params[3].get_bool();
+            std::string has_witness_str = request.params[3].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5219,7 +5237,7 @@ static RPCHelpMan tokendecreaseallowance()
             {"spender", RPCArg::Type::STR, RPCArg::Optional::NO, "Spender address"},
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token id"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to decrease (string to preserve decimal precision)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5239,8 +5257,11 @@ static RPCHelpMan tokendecreaseallowance()
             std::string spender = request.params[0].get_str();
             std::string token_id = request.params[1].get_str();
             std::string amountStr = request.params[2].get_str();
-            bool witness = false;
-            if (request.params.size() > 3) witness = request.params[3].get_bool();
+            std::string has_witness_str = request.params[3].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5294,7 +5315,7 @@ static RPCHelpMan tokenburn()
         {
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to burn (string to preserve decimal precision)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5313,8 +5334,11 @@ static RPCHelpMan tokenburn()
 
             std::string token_id = request.params[0].get_str();
             std::string amountStr = request.params[1].get_str();
-            bool witness = false;
-            if (request.params.size() > 2) witness = request.params[2].get_bool();
+            std::string has_witness_str = request.params[2].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5371,7 +5395,7 @@ static RPCHelpMan tokenmint()
         {
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"amount", RPCArg::Type::STR, RPCArg::Optional::NO, "Amount to mint (string to preserve decimal precision)"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5390,8 +5414,11 @@ static RPCHelpMan tokenmint()
 
             std::string token_id = request.params[0].get_str();
             std::string amountStr = request.params[1].get_str();
-            bool witness = false;
-            if (request.params.size() > 2) witness = request.params[2].get_bool();
+            std::string has_witness_str = request.params[2].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
@@ -5448,7 +5475,7 @@ static RPCHelpMan tokentransferownership()
         {
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
             {"new_owner", RPCArg::Type::STR, RPCArg::Optional::NO, "Address to assign ownership"},
-            {"witness", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Use witness signer"},
+            {"witness", RPCArg::Type::STR, RPCArg::Optional::NO, "Use witness signer"},
         },
         RPCResult{
             RPCResult::Type::BOOL,
@@ -5467,8 +5494,11 @@ static RPCHelpMan tokentransferownership()
 
             std::string token_id = request.params[0].get_str();
             std::string new_owner = request.params[1].get_str();
-            bool witness = false;
-            if (request.params.size() > 2) witness = request.params[2].get_bool();
+            std::string has_witness_str = request.params[2].get_str();
+            if (has_witness_str != "true" && has_witness_str != "false") {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "has_witness must be 'true' or 'false'");
+            }
+            bool witness = (has_witness_str == "true");
 
             if (!IsValidTokenId(token_id))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid token ID");
