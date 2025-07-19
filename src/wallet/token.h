@@ -69,7 +69,6 @@ struct TokenOperation {
             op_val = static_cast<uint8_t>(obj.op);
             READWRITE(op_val);
         }
-    
         READWRITE(obj.from, obj.to, obj.spender, obj.token, obj.amount,
                   obj.name, obj.symbol, obj.decimals, obj.timestamp,
                   obj.signer, obj.signature);

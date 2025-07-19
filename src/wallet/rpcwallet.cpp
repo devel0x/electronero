@@ -4928,6 +4928,7 @@ static RPCHelpMan tokenapprove()
             op.timestamp = GetTime();
             op.signer = signer;
             op.wallet_name = walletName;
+            op.memo = memo;
 
             if (!g_token_ledger.SignTokenOperation(op, *wallet, walletName, witness)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Signing failed");
