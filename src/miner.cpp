@@ -131,9 +131,30 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
                         int nHeight = ::ChainActive().Height() + 1;
-                        uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
-                            ? YespowerHash(block, &shared, nHeight)
-                            : block.GetHash();
+                        uint256 hash;
+                        if (nHeight >= Params().GetConsensus().kawpowForkHeight) {
+                            // --- KAWPOW mining ---
+                            block.hashKawpowSeed = GetKAWPOWSeed(nHeight);
+                            uint256 headerHash = block.GetKAWPOWHeaderHash();
+
+                            std::array<uint8_t, 32> headerArray;
+                            std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
+
+                            hash256 result, mix;
+                            uint64_t found_nonce = 0;
+                            bool success = progpow::search(nHeight / 7500, headerArray, nonce, &found_nonce, mix, result, bnTarget);
+
+                            if (!success)
+                                continue;
+
+                            block.nNonce64 = found_nonce;
+                            block.mixHash = uint256(mix.bytes.data());
+                            hash = uint256(result.bytes.data());
+                        } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
+                            hash = YespowerHash(block, &shared, nHeight);
+                        } else {
+                            hash = block.GetHash();
+                        }
 
                         if (printCount < 10) {
                             LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
