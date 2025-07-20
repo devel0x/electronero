@@ -148,64 +148,8 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash;
                         if (nHeight >= Params().GetConsensus().sha256ForkHeight) {
-                            const uint256 seed = GetKAWPOWSeed(nHeight);
-                            block.hashKawpowSeed = seed;
-
-                            // Derive headerHash *excluding* mixHash and nNonce64
-                            uint256 headerHash = block.GetKAWPOWHeaderHash(seed);
-                            std::array<uint8_t, 32> headerArray;
-                            std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
-
-                            progpow::hash256 mix, result;
-                            uint64_t found_nonce = 0;
-                            const arith_uint256& target = bnTarget;
-
-                            bool success = progpow::search(
-                                nHeight / 7500,
-                                headerArray,
-                                nonce,               // starting nonce
-                                &found_nonce,
-                                mix,
-                                result,
-                                target
-                            );
-
-                            if (!success) {
-                                LogPrintf("❌ KAWPOW search failed to find valid nonce\n");
-                                if (hashesDone % 1000 == 0) {
-                                    int64_t elapsed = GetTimeMillis() - hashStart;
-                                    if (elapsed >= 5000) {
-                                        double rate = (double)hashesDone / (elapsed / 1000.0);
-                                        LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
-                                        totalHashes += hashesDone;
-                                        hashesDone = 0;
-                                        hashStart = GetTimeMillis();
-                                    }
-                                }
-                                continue;
-                            }
-
-                            // Reconstruct final PoW hash from result
-                            uint256 finalHash;
-                            std::copy(std::begin(result.bytes), std::end(result.bytes), finalHash.begin());
-
-                            if (UintToArith256(finalHash) > target) {
-                                LogPrintf("❌ Rejected KAWPOW result: hash too high\n");
-                                continue;
-                            }
-
-                            // ✅ Set valid result into block
-                            block.nNonce64 = found_nonce;
-                            std::copy(std::begin(mix.bytes), std::end(mix.bytes), block.mixHash.begin());
-                            hash = finalHash;
-                            uint256 mixHash;
-                            std::copy(std::begin(mix.bytes), std::end(mix.bytes), mixHash.begin());
-                            LogPrintf("✅ KAWPOW valid block! Nonce=%llu Mix=%s Hash=%s\n",
-                                found_nonce,
-                                mixHash.ToString(),
-                                finalHash.ToString());
-                        }
-                        else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
+                            hash = block.GetHash();
+                        } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
                             hash = YespowerHash(block, &shared, nHeight);
                         } else {
                             hash = block.GetHash();
@@ -494,12 +438,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CBlockIndex* pindexPrev = ::ChainActive().Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
-    int32_t kawpowVersion = VERSIONBITS_KAWPOW;
+    // int32_t kawpowVersion = VERSIONBITS_KAWPOW;
     int32_t defaultVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
 
-    pblock->nVersion = (nHeight >= Params().GetConsensus().sha256ForkHeight) ? kawpowVersion : defaultVersion;
+    pblock->nVersion = defaultVersion;
 
-    // Append SEGWIT bit if active (optional but recommended if your chain uses SegWit)
+    // Append SEGWIT bit if active 
     if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {
         pblock->nVersion |= VersionBitsMask(chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
     }
