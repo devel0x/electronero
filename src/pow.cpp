@@ -11,9 +11,6 @@
 #include "logging.h"         // for BCLog and LogPrint
 #include <primitives/block.h>
 #include <uint256.h>
-#include "crypto/kawpow/kawpow.h"
-#include "pow_kawpow.h"
-#include "crypto/kawpow/progpow.hpp"
 
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
@@ -278,7 +275,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
 bool CheckProofOfWork(uint256 hash, const CBlockHeader& blockHeader, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
-        (nHeight >= params.sha256ForkHeight) ? "KAWPOW" :
+        (nHeight >= params.sha256ForkHeight) ? "SHA256" :
         (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     if (nHeight == 0) {
         LogPrintf("🧱 Skipping PoW check for genesis block\n");

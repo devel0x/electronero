@@ -177,9 +177,22 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             foundBlock.store(true);
                             int64_t finalElapsed = GetTimeMillis() - hashStart;
                             if (finalElapsed > 0 && hashesDone > 0) {
-                                double finalRate = (double)hashesDone / (finalElapsed / 1000.0);
-                                LogPrintf("⚡ [thread %d] Final Hashrate: %.2f H/s\n", threadId, finalRate);
+                                double finalRate = static_cast<double>(hashesDone) / (finalElapsed / 1000.0);
+                                double displayRate = finalRate;
+                                std::string unit = "H/s";
+                                if (finalRate >= 1e9) {
+                                    displayRate /= 1e9;
+                                    unit = "GH/s";
+                                } else if (finalRate >= 1e6) {
+                                    displayRate /= 1e6;
+                                    unit = "MH/s";
+                                } else if (finalRate >= 1e3) {
+                                    displayRate /= 1e3;
+                                    unit = "kH/s";
+                                }
+                                LogPrintf("⚡ [thread %d] Final Hashrate: %.2f %s\n", threadId, displayRate, unit.c_str());
                             }
+
                             return;
                         }
 
@@ -187,7 +200,18 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             int64_t elapsed = GetTimeMillis() - hashStart;
                             if (elapsed >= 5000) {
                                 double rate = (double)hashesDone / (elapsed / 1000.0);
-                                LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
+                                std::string unit = "H/s";
+                                if (rate >= 1e9) {
+                                    rate /= 1e9;
+                                    unit = "GH/s";
+                                } else if (rate >= 1e6) {
+                                    rate /= 1e6;
+                                    unit = "MH/s";
+                                } else if (rate >= 1e3) {
+                                    rate /= 1e3;
+                                    unit = "kH/s";
+                                }
+                                LogPrintf("⚡ [thread %d] Hashrate: %.2f %s\n", threadId, rate, unit);
                                 totalHashes += hashesDone;
                                 hashesDone = 0;
                                 hashStart = GetTimeMillis();
