@@ -1003,7 +1003,7 @@ public:
     bool found;
     BlockValidationState state;
 
-    explicit submitblock_StateCatcher(const uint256& hashIn) : hash(hashIn), found(false), state() {}
+    explicit submitblock_StateCatcher(const uint256 &hashIn) : hash(hashIn), found(false), state() {}
 
 protected:
     void BlockChecked(const CBlock& block, const BlockValidationState& stateIn) override {

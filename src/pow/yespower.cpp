@@ -60,7 +60,7 @@ uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int he
     const yespower_params_t* algo = (height >= 1) ? &yespower_interchained : &yespower_default;
 
     // 🪙 Hash exactly as originally mined (80 bytes)
-    int result = yespower(shared, (const uint8_t*)&block, sizeof(block), algo, (yespower_binary_t*)&hash);
+    int result = yespower(shared, (const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash);
     // LogPrintf("✅ Legacy yespower result=%d at height=%d\n", result, height);
     if (result != 0) abort();
 
@@ -77,7 +77,7 @@ bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int
 
     const Consensus::Params& params = Params().GetConsensus();
 
-    if (yespower_tls((const uint8_t*)&block, sizeof(block), algo, (yespower_binary_t*)&hash) != 0)
+    if (yespower_tls((const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash) != 0)
         return false;
 
     return UintToArith256(hash) <= bnTarget;

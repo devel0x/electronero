@@ -268,7 +268,8 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
         return CheckYespower(block, bnTarget, nHeight);
     } else {
         LogPrintf("🔒 Using SHA256 at height %d\n", nHeight);
-        return true;
+        uint256 b_hash = block.GetHash(); // SHA256
+        return UintToArith256(b_hash) <= bnTarget;
     }
 }
 
