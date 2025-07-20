@@ -171,6 +171,16 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                             if (!success) {
                                 LogPrintf("❌ KAWPOW search failed to find valid nonce\n");
+                                if (hashesDone % 1000 == 0) {
+                                    int64_t elapsed = GetTimeMillis() - hashStart;
+                                    if (elapsed >= 5000) {
+                                        double rate = (double)hashesDone / (elapsed / 1000.0);
+                                        LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
+                                        totalHashes += hashesDone;
+                                        hashesDone = 0;
+                                        hashStart = GetTimeMillis();
+                                    }
+                                }
                                 continue;
                             }
 
@@ -220,6 +230,11 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             }
 
                             foundBlock.store(true);
+                            int64_t finalElapsed = GetTimeMillis() - hashStart;
+                            if (finalElapsed > 0 && hashesDone > 0) {
+                                double finalRate = (double)hashesDone / (finalElapsed / 1000.0);
+                                LogPrintf("⚡ [thread %d] Final Hashrate: %.2f H/s\n", threadId, finalRate);
+                            }
                             return;
                         }
 

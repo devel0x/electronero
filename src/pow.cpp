@@ -219,7 +219,7 @@ unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& param
     return nextTarget.GetCompact();
 }
 
-bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigned int nBits, const Consensus::Params& params, int nHeight)
+bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     bool fNegative;
     bool fOverflow;
@@ -247,7 +247,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
 
     if (nHeight >= params.kawpowForkHeight) {
         LogPrintf("🔥 Using KAWPOW at height %d\n", nHeight);
-
+        block.hashKawpowSeed = GetKAWPOWSeed(nHeight);
         // Call verify first
         if (!kawpow::verify(block.GetKAWPOWHeaderHash(), block.mixHash, block.nNonce64, nHeight)) {
             LogPrintf("❌ KAWPOW verify failed\n");
