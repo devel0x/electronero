@@ -5,6 +5,7 @@
 #include "arith_uint256.h"
 #include <primitives/block.h>  // for CBlock
 #include <cstring>             // for std::memcpy
+#include "pow_kawpow.h"
 
 // Epoch length — same as Ravencoin (7500 blocks)
 static constexpr uint32_t EPOCH_LENGTH = 7500;
@@ -48,11 +49,15 @@ bool verify(const uint256& headerHash,
 
 uint256 GetKAWPOWHash(const CBlock& block, int height)
 {
-    std::array<unsigned char, 32> headerHash;
-    std::memcpy(headerHash.data(), ((CBlockHeader)block).GetHash().begin(), 32);
+    const uint32_t epoch = height / 7500;
+    uint256 seed = GetKAWPOWSeed(height);
+    uint256 headerHash = block.GetKAWPOWHeaderHash(seed); // correct hash input
+
+    std::array<uint8_t, 32> header;
+    std::copy(headerHash.begin(), headerHash.end(), header.begin());
 
     progpow::hash256 mix, result;
-    progpow::progpow_hash(height / 7500, headerHash, block.nNonce64, mix, result);
+    progpow::progpow_hash(epoch, header, block.nNonce64, result, mix);
 
     return uint256(std::vector<unsigned char>(result.bytes.begin(), result.bytes.end()));
 }

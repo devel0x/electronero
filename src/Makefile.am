@@ -517,6 +517,10 @@ libinterchained_consensus_a_SOURCES = \
   hash.cpp \
   hash.h \
   pow/yespower.cpp \
+  pow_kawpow.cpp \
+  crypto/kawpow/keccak.cpp \
+  crypto/kawpow/progpow.cpp \
+  crypto/kawpow/kawpow.cpp \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \

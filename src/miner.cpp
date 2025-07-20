@@ -148,10 +148,11 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash;
                         if (nHeight >= Params().GetConsensus().kawpowForkHeight) {
-                            block.hashKawpowSeed = GetKAWPOWSeed(nHeight);
+                            const uint256 seed = GetKAWPOWSeed(nHeight);
+                            block.hashKawpowSeed = seed;
 
                             // Derive headerHash *excluding* mixHash and nNonce64
-                            uint256 headerHash = block.GetKAWPOWHeaderHash();
+                            uint256 headerHash = block.GetKAWPOWHeaderHash(seed);
                             std::array<uint8_t, 32> headerArray;
                             std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
 

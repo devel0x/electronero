@@ -108,7 +108,9 @@ public:
 
     uint256 YespowerHash(int height) const;
 
-    uint256 GetKAWPOWHeaderHash() const;
+    uint256 GetKAWPOWHash(int height) const;
+
+    uint256 GetKAWPOWHeaderHash(const uint256& kawpowSeed) const;
 
     int64_t GetBlockTime() const
     {

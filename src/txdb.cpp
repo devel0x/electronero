@@ -270,6 +270,8 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nNonce         = diskindex.nNonce;
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
+                pindexNew->nNonce64       = diskindex.nNonce64;
+                pindexNew->mixHash        = diskindex.mixHash;
                 
                 CBlockHeader dummyHeader;
                 dummyHeader.nBits = pindexNew->nBits;
@@ -278,8 +280,13 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 dummyHeader.hashMerkleRoot = pindexNew->hashMerkleRoot;
                 dummyHeader.nVersion = pindexNew->nVersion;
                 dummyHeader.nNonce = pindexNew->nNonce;
+                                
                 uint256 powHash;
-                if (pindexNew->nHeight >= consensusParams.yespowerForkHeight) {
+                if (pindexNew->nHeight >= consensusParams.kawpowForkHeight) {
+                    dummyHeader.nNonce64 = pindexNew->nNonce64; // ✅ Required
+                    dummyHeader.mixHash = pindexNew->mixHash;   // ✅ Required
+                    powHash = dummyHeader.GetKAWPOWHash(pindexNew->nHeight); 
+                } else if (pindexNew->nHeight >= consensusParams.yespowerForkHeight) {
                     powHash = dummyHeader.YespowerHash(pindexNew->nHeight);
                 } else {
                     powHash = pindexNew->GetBlockHash();
