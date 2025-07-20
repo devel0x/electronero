@@ -29,11 +29,6 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
     
-    // KAWPOW additions
-    uint64_t nNonce64{0};
-    uint256 mixHash;
-    uint256 hashKawpowSeed; // optionally precomputed in block template
-
     CBlockHeader()
     {
         SetNull();
@@ -46,14 +41,7 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-
-        if ((nVersion & 0xFFFFFFF0) == VERSIONBITS_KAWPOW) {
-            READWRITE(nNonce64);
-            READWRITE(mixHash);
-            READWRITE(hashKawpowSeed);
-        } else {
-            READWRITE(nNonce);
-        }
+        READWRITE(nNonce);
     }
     
     SERIALIZE_METHODS(CBlockHeader, obj);
@@ -75,15 +63,7 @@ public:
         s << hashMerkleRoot;
         s << nTime;
         s << nBits;
-
-        if ((nVersion & 0xFFFFFFF0) == VERSIONBITS_KAWPOW) {
-            // This is a KAWPOW-style block — serialize extended fields
-            s << nNonce64;
-            s << mixHash;
-            s << hashKawpowSeed;
-        } else {
-            s << nNonce;
-        }
+        s << nNonce;
     }
 
     void SetNull()
@@ -94,9 +74,6 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
-        nNonce64 = 0;
-        mixHash.SetNull();
-        hashKawpowSeed.SetNull();
     }
 
     bool IsNull() const
@@ -107,10 +84,6 @@ public:
     uint256 GetHash() const;
 
     uint256 YespowerHash(int height) const;
-
-    uint256 GetKAWPOWHash(int height) const;
-
-    uint256 GetKAWPOWHeaderHash(const uint256& kawpowSeed) const;
 
     int64_t GetBlockTime() const
     {

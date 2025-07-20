@@ -17,11 +17,6 @@
 #include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
-
-#include "crypto/kawpow/kawpow.h"
-#include "crypto/kawpow/progpow.hpp"
-#include "crypto/kawpow/kawpow.h"
-#include "pow_kawpow.h"
 #include "primitives/block.h"
 
 #include <policy/feerate.h>
@@ -53,7 +48,7 @@
 #include <algorithm>
 #include <utility>
 
-using progpow::hash256;
+// using progpow::hash256;
 
 CTxMemPool& EnsureMemPool(NodeContext& node);
 

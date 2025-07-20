@@ -179,8 +179,6 @@ public:
     uint32_t nTime{0};
     uint32_t nBits{0};
     uint32_t nNonce{0};
-    uint64_t nNonce64{0};
-    uint256 mixHash;
 
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     int32_t nSequenceId{0};
@@ -351,8 +349,6 @@ public:
         READWRITE(obj.nTime);
         READWRITE(obj.nBits);
         READWRITE(obj.nNonce);
-        READWRITE(obj.nNonce64);
-        READWRITE(obj.mixHash);
     }
 
     uint256 GetBlockHash() const

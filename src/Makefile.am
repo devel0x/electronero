@@ -287,10 +287,6 @@ libinterchained_server_a_SOURCES = \
   addrman.cpp \
   banman.cpp \
   pow/yespower.cpp \
-  crypto/kawpow/kawpow.cpp \
-  crypto/kawpow/progpow.cpp \
-  crypto/kawpow/keccak.cpp \
-  pow_kawpow.cpp \
   blockencodings.cpp \
   blockfilter.cpp \
   chain.cpp \
@@ -404,9 +400,6 @@ libinterchained_wallet_a_SOURCES = \
   index/base.cpp \
   signet.cpp \
   pow.cpp \
-  crypto/kawpow/kawpow.cpp \
-  crypto/kawpow/progpow.cpp \
-  pow_kawpow.cpp \
   banman.cpp \
   consensus/tx_verify.cpp \
   shutdown.cpp \
@@ -517,10 +510,6 @@ libinterchained_consensus_a_SOURCES = \
   hash.cpp \
   hash.h \
   pow/yespower.cpp \
-  pow_kawpow.cpp \
-  crypto/kawpow/keccak.cpp \
-  crypto/kawpow/progpow.cpp \
-  crypto/kawpow/kawpow.cpp \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \

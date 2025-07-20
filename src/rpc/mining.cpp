@@ -39,9 +39,6 @@
 #include <warnings.h>
 #include <script/standard.h>
 #include <key_io.h>
-
-#include "crypto/kawpow/kawpow.h"
-#include "pow_kawpow.h"
 #include "primitives/block.h"
 
 #include <memory>
@@ -969,12 +966,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
-    // KAWPOW-specific fields
-    if (::ChainActive().Height() + 1 >= consensusParams.sha256ForkHeight) {
-        result.pushKV("kawpow_nonce64", (uint64_t)pblock->nNonce64);
-        result.pushKV("kawpow_mixhash", pblock->mixHash.GetHex());
-        result.pushKV("kawpow_seed", GetKAWPOWSeed(::ChainActive().Height() + 1).GetHex());
-    }
+
     result.pushKV("mintime", (int64_t)pindexPrev->GetMedianTimePast()+1);
     result.pushKV("mutable", aMutable);
     result.pushKV("noncerange", "00000000ffffffff");

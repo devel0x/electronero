@@ -258,13 +258,13 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
         LogPrintf("✅ SHA256 passed at height %d\n", nHeight);
         return true;
     } else if (nHeight >= params.yespowerForkHeight) {
+        if(nHeight == 1) {
+            return true; 
+        }
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
         LogPrintf("🧮 Computed hash: %s\n", hash.ToString());
         LogPrintf("🎯 Target:        %s\n", bnTarget.ToString());
         LogPrintf("📏 Comparison:    hash <= target ? %s\n", (UintToArith256(hash) <= bnTarget) ? "✅ YES" : "❌ NO");
-        if(nHeight == 1) {
-            return true; 
-        }
         return CheckYespower(block, bnTarget, nHeight);
     } else {
         LogPrintf("🔒 Using SHA256 at height %d\n", nHeight);
