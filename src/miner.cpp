@@ -141,24 +141,53 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash;
                         if (nHeight >= Params().GetConsensus().kawpowForkHeight) {
-                            // --- KAWPOW mining ---
                             block.hashKawpowSeed = GetKAWPOWSeed(nHeight);
-                            uint256 headerHash = block.GetKAWPOWHeaderHash();
 
+                            // Derive headerHash *excluding* mixHash and nNonce64
+                            uint256 headerHash = block.GetKAWPOWHeaderHash();
                             std::array<uint8_t, 32> headerArray;
                             std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
 
                             progpow::hash256 mix, result;
                             uint64_t found_nonce = 0;
-                            bool success = progpow::search(nHeight / 7500, headerArray, nonce, &found_nonce, mix, result, bnTarget);
+                            const arith_uint256& target = bnTarget;
 
-                            if (!success)
+                            bool success = progpow::search(
+                                nHeight / 7500,
+                                headerArray,
+                                nonce,               // starting nonce
+                                &found_nonce,
+                                mix,
+                                result,
+                                target
+                            );
+
+                            if (!success) {
+                                LogPrintf("❌ KAWPOW search failed to find valid nonce\n");
                                 continue;
+                            }
 
+                            // Reconstruct final PoW hash from result
+                            uint256 finalHash;
+                            std::copy(std::begin(result.bytes), std::end(result.bytes), finalHash.begin());
+
+                            if (UintToArith256(finalHash) > target) {
+                                LogPrintf("❌ Rejected KAWPOW result: hash too high\n");
+                                continue;
+                            }
+
+                            // ✅ Set valid result into block
                             block.nNonce64 = found_nonce;
-                            memcpy(block.mixHash.begin(), mix.bytes.data(), 32);
-                            memcpy(hash.begin(), result.bytes.data(), 32);
-                        } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
+                            std::copy(std::begin(mix.bytes), std::end(mix.bytes), block.mixHash.begin());
+                            hash = finalHash;
+                            uint256 mixHash;
+                            std::copy(std::begin(mix.bytes), std::end(mix.bytes), mixHash.begin());
+                            LogPrintf("✅ KAWPOW valid block! Nonce=%llu Mix=%s Hash=%s\n",
+                                found_nonce,
+                                mixHash.ToString(),
+                                finalHash.ToString());
+                        }
+                        else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
                             hash = YespowerHash(block, &shared, nHeight);
                         } else {
                             hash = block.GetHash();
@@ -173,7 +202,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
                             LogPrintf("🧩 Merkle Root: %s\n", block.hashMerkleRoot.ToString());
                             LogPrintf("🎯 Coinbase TXID: %s\n", block.vtx[0]->GetHash().ToString());
-
+                            LogPrintf("🧱 Mining block with hashPrevBlock = %s | Expected = %s\n", block.hashPrevBlock.ToString(), ::ChainActive().Tip()->GetBlockHash().ToString());
                             std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(block);
                             bool fNewBlock = false;
                             if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {

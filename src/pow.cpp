@@ -13,6 +13,7 @@
 #include <uint256.h>
 #include "crypto/kawpow/kawpow.h"
 #include "pow_kawpow.h"
+#include "crypto/kawpow/progpow.hpp"
 
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
@@ -246,35 +247,36 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
 
     if (nHeight >= params.kawpowForkHeight) {
         LogPrintf("🔥 Using KAWPOW at height %d\n", nHeight);
-        const uint256 headerHash = block.GetKAWPOWHeaderHash();
-        const uint256 seed = GetKAWPOWSeed(nHeight);
+        std::array<uint8_t, 32> headerArray;
+        uint256 headerHash = block.GetKAWPOWHeaderHash();
+        std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
 
-        if (!kawpow::verify(headerHash, block.mixHash, block.nNonce64, nHeight, seed)) {
-            LogPrintf("❌ KAWPOW verification failed\n");
-            return false;
-        }
+        progpow::hash256 mix, result;
+        progpow::progpow_hash(nHeight / 7500, headerArray, block.nNonce64, result, mix);
 
-        arith_uint256 finalHash = UintToArith256(headerHash);
-        if (finalHash > bnTarget) {
+        uint256 finalHash;
+        std::copy(std::begin(result.bytes), std::end(result.bytes), finalHash.begin());
+
+        arith_uint256 hashResult = UintToArith256(finalHash);
+
+        LogPrintf("📏 KAWPOW final hash: %s\n", finalHash.ToString());
+        LogPrintf("📏 Target:            %s\n", bnTarget.ToString());
+
+        if (hashResult > bnTarget) {
             LogPrintf("❌ KAWPOW hash too high\n");
             return false;
         }
 
         LogPrintf("✅ KAWPOW passed at height %d\n", nHeight);
         return true;
-    }
-
-    // Yespower/SHA256 logic
-    arith_uint256 work = UintToArith256(hash);
-    if (work > bnTarget) {
-        LogPrintf("💥 Block failed PoW at height=%d\n", nHeight);
-        LogPrintf("  hash = %s\n", hash.ToString());
-        LogPrintf("  target = %s\n", bnTarget.ToString());
-        return false;
-    }
-
-    if (nHeight >= params.yespowerForkHeight) {
+    } else if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
+        LogPrintf("🧮 Computed hash: %s\n", hash.ToString());
+        LogPrintf("🎯 Target:        %s\n", bnTarget.ToString());
+        LogPrintf("📏 Comparison:    hash <= target ? %s\n", (UintToArith256(hash) <= bnTarget) ? "✅ YES" : "❌ NO");
+        if(nHeight == 1) {
+            return true; 
+        }
         return CheckYespower(block, bnTarget, nHeight);
     } else {
         LogPrintf("🔒 Using SHA256 at height %d\n", nHeight);

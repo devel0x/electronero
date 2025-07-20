@@ -58,6 +58,34 @@ public:
     
     SERIALIZE_METHODS(CBlockHeader, obj);
 
+    template<typename Stream, typename Operation>
+    static inline void SerializationOps(CBlockHeader& obj, Stream& s, Operation ser_action) {
+        obj.SerializationOp(s, ser_action);
+    }
+
+    template<typename Stream, typename Operation>
+    static inline void SerializationOps(const CBlockHeader& obj, Stream& s, Operation ser_action) {
+        const_cast<CBlockHeader&>(obj).SerializationOp(s, ser_action);
+    }
+
+    template <typename Stream>
+    void SerializeForHash(Stream& s, int height) const {
+        s << nVersion;
+        s << hashPrevBlock;
+        s << hashMerkleRoot;
+        s << nTime;
+        s << nBits;
+
+        if ((nVersion & 0xFFFFFFF0) == VERSIONBITS_KAWPOW) {
+            // This is a KAWPOW-style block — serialize extended fields
+            s << nNonce64;
+            s << mixHash;
+            s << hashKawpowSeed;
+        } else {
+            s << nNonce;
+        }
+    }
+
     void SetNull()
     {
         nVersion = 0;

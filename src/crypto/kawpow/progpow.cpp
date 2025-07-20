@@ -41,23 +41,34 @@ void progpow_hash(uint32_t epoch,
     std::copy(rv.result, rv.result + 32, result.bytes.begin());
 }
 
-bool search(uint32_t epoch,
-            const std::array<uint8_t, 32>& header_hash,
-            uint64_t start_nonce,
-            uint64_t* found_nonce,
-            hash256& mix,
-            hash256& result,
-            const arith_uint256& target) {
+bool search(
+    uint32_t epoch,
+    const std::array<uint8_t, 32>& header_hash,
+    uint64_t start_nonce,
+    uint64_t* found_nonce,
+    hash256& mix,
+    hash256& result,
+    const arith_uint256& target)
+{
     initialize_cache(epoch);
-    return ethash_light_search(
+
+    uint64_t local_nonce = 0;
+
+    bool success = ethash_light_search(
         &ctx->cache,
         header_hash.data(),
         start_nonce,
-        *found_nonce,
-        mix.bytes.data(),
-        result.bytes.data(),
-        target
+        local_nonce,                   // 4th param is found_nonce (as reference)
+        mix.bytes.data(),             // 5th: mix hash
+        result.bytes.data(),          // 6th: result hash
+        target                        // 7th: target
     );
+
+    if (success && found_nonce) {
+        *found_nonce = local_nonce;
+    }
+
+    return success;
 }
 
 } // namespace progpow

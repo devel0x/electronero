@@ -71,7 +71,7 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.kawpowForkHeight = 11610;
+        consensus.kawpowForkHeight = 11788;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
