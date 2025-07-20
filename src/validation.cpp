@@ -1168,8 +1168,8 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= consensusParams.kawpowForkHeight) {
-        hash = GetKAWPOWHash(block, nHeight);
+    } else if (nHeight >= consensusParams.sha256ForkHeight) {
+        hash = block.GetHash(); // Legacy SHA256
     } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {
@@ -3384,8 +3384,8 @@ static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& st
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= consensusParams.kawpowForkHeight) {
-        hash = GetKAWPOWHash(block, nHeight);
+    } else if (nHeight >= consensusParams.sha256ForkHeight) {
+        hash = block.GetHash(); // force legacy SHA256
     } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {

@@ -147,7 +147,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash;
-                        if (nHeight >= Params().GetConsensus().kawpowForkHeight) {
+                        if (nHeight >= Params().GetConsensus().sha256ForkHeight) {
                             const uint256 seed = GetKAWPOWSeed(nHeight);
                             block.hashKawpowSeed = seed;
 
@@ -497,7 +497,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     int32_t kawpowVersion = VERSIONBITS_KAWPOW;
     int32_t defaultVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
 
-    pblock->nVersion = (nHeight >= Params().GetConsensus().kawpowForkHeight) ? kawpowVersion : defaultVersion;
+    pblock->nVersion = (nHeight >= Params().GetConsensus().sha256ForkHeight) ? kawpowVersion : defaultVersion;
 
     // Append SEGWIT bit if active (optional but recommended if your chain uses SegWit)
     if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {

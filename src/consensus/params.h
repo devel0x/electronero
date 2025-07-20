@@ -53,7 +53,7 @@ struct Params {
     int nDGW3Height;
     uint256 powLimitYespower;
     int yespowerForkHeight;
-    int kawpowForkHeight;
+    int sha256ForkHeight;
     int difficultyForkHeight;
     int nextDifficultyForkHeight;
     int nextDifficultyFork2Height;

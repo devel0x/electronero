@@ -245,29 +245,20 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
         }
     }
 
-    if (nHeight >= params.kawpowForkHeight) {
-        LogPrintf("🔥 Using KAWPOW at height %d\n", nHeight);
+    if (nHeight >= params.sha256ForkHeight) {
+        LogPrintf("🔥 Using SHA256 at height %d\n", nHeight);
         
-        // Just check mixHash is valid
-        const uint256 seed = GetKAWPOWSeed(nHeight);
-        const uint256 headerHash = block.GetKAWPOWHeaderHash(seed);
-
-        if (!kawpow::verify(headerHash, block.mixHash, block.nNonce64, nHeight)) {
-            LogPrintf("❌ KAWPOW verify failed (mixHash mismatch)\n");
-            // return false;
-        }
-
         // DO NOT RECOMPUTE THE RESULT
         arith_uint256 bnHash = UintToArith256(hash);
-        LogPrintf("📏 KAWPOW PoW hash: %s\n", hash.ToString());
+        LogPrintf("📏 SHA256 PoW hash: %s\n", hash.ToString());
         LogPrintf("🎯 Target:         %s\n", bnTarget.ToString());
 
         if (bnHash > bnTarget) {
-            LogPrintf("❌ KAWPOW hash too high\n");
+            LogPrintf("❌ hash too high\n");
             return false;
         }
 
-        LogPrintf("✅ KAWPOW passed at height %d\n", nHeight);
+        LogPrintf("✅ SHA256 passed at height %d\n", nHeight);
         return true;
     } else if (nHeight >= params.yespowerForkHeight) {
         LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
@@ -287,7 +278,7 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
 bool CheckProofOfWork(uint256 hash, const CBlockHeader& blockHeader, unsigned int nBits, const Consensus::Params& params, int nHeight)
 {
     LogPrintf("🚧 CheckPoW height=%d, using: %s\n", nHeight,
-        (nHeight >= params.kawpowForkHeight) ? "KAWPOW" :
+        (nHeight >= params.sha256ForkHeight) ? "KAWPOW" :
         (nHeight >= params.yespowerForkHeight) ? "Yespower" : "SHA256");
     if (nHeight == 0) {
         LogPrintf("🧱 Skipping PoW check for genesis block\n");
