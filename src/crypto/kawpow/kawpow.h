@@ -11,8 +11,7 @@ namespace kawpow {
 bool verify(const uint256& headerHash,
             const uint256& mixHash,
             uint64_t nonce,
-            int height,
-            const uint256& seedHash);
+            int height);
 
 } // namespace kawpow
 

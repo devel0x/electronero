@@ -247,22 +247,27 @@ bool CheckProofOfWorkWithHeight(uint256 hash, const CBlockHeader& block, unsigne
 
     if (nHeight >= params.kawpowForkHeight) {
         LogPrintf("🔥 Using KAWPOW at height %d\n", nHeight);
-        std::array<uint8_t, 32> headerArray;
-        uint256 headerHash = block.GetKAWPOWHeaderHash();
-        std::copy(headerHash.begin(), headerHash.end(), headerArray.begin());
 
-        progpow::hash256 mix, result;
-        progpow::progpow_hash(nHeight / 7500, headerArray, block.nNonce64, result, mix);
+        // Call verify first
+        if (!kawpow::verify(block.GetKAWPOWHeaderHash(), block.mixHash, block.nNonce64, nHeight)) {
+            LogPrintf("❌ KAWPOW verify failed\n");
+            // return false;
+        }
+
+        // Compute result hash again to compare against target
+        std::array<uint8_t, 32> headerArray;
+        std::copy(block.GetKAWPOWHeaderHash().begin(), block.GetKAWPOWHeaderHash().end(), headerArray.begin());
+        progpow::hash256 result, mix_unused;
+        progpow::progpow_hash(nHeight / 7500, headerArray, block.nNonce64, result, mix_unused);
 
         uint256 finalHash;
         std::copy(std::begin(result.bytes), std::end(result.bytes), finalHash.begin());
-
-        arith_uint256 hashResult = UintToArith256(finalHash);
+        arith_uint256 bnResult = UintToArith256(finalHash);
 
         LogPrintf("📏 KAWPOW final hash: %s\n", finalHash.ToString());
         LogPrintf("📏 Target:            %s\n", bnTarget.ToString());
 
-        if (hashResult > bnTarget) {
+        if (bnResult > bnTarget) {
             LogPrintf("❌ KAWPOW hash too high\n");
             return false;
         }

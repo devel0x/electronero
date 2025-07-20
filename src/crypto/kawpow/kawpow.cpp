@@ -14,8 +14,7 @@ namespace kawpow {
 bool verify(const uint256& headerHash,
             const uint256& mixHash,
             uint64_t nonce,
-            int height,
-            const uint256& seedHash)
+            int height)
 {
     // Convert hash to bytes
     std::array<uint8_t, 32> header;

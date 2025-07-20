@@ -111,14 +111,21 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     CBlock block = originalBlock;
                     block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
-                    CMutableTransaction coinbaseTx(*block.vtx[0]);
-                    coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
-                    if (block.vtx[0]->vin[0].scriptWitness.stack.size() == 1 &&
-                        block.vtx[0]->vin[0].scriptWitness.stack[0].size() == 32) {
-                        coinbaseTx.vin[0].scriptWitness.stack = block.vtx[0]->vin[0].scriptWitness.stack;
+                    // Save the original witness stack before mutation
+                    const auto witnessStack = originalBlock.vtx[0]->vin[0].scriptWitness.stack;
+
+                    // This modifies block.vtx[0] by rebuilding the coinbase
+                    static thread_local unsigned int nExtraNonce = 0;
+                    IncrementExtraNonce(&block, ::ChainActive().Tip(), nExtraNonce);
+
+                    // Now restore the original witness stack
+                    if (witnessStack.size() == 1 && witnessStack[0].size() == 32) {
+                        CMutableTransaction coinbaseTx(*block.vtx[0]);
+                        coinbaseTx.vin[0].scriptWitness.stack = witnessStack;
+                        block.vtx[0] = MakeTransactionRef(coinbaseTx);
                     }
-                    block.vtx[0] = MakeTransactionRef(coinbaseTx);
-                    block.hashMerkleRoot = BlockMerkleRoot(block);
+                    // block.vtx[0] = MakeTransactionRef(coinbaseTx);
+                    // block.hashMerkleRoot = BlockMerkleRoot(block);
                     block.vchWitness = {GenerateCoinbaseCommitment(block, ::ChainActive().Tip(), Params().GetConsensus())};
                     // uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
                     arith_uint256 bnTarget;
