@@ -68,34 +68,25 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
-    const int nPastBlocks = 24;
-    int nextHeight = (pindexLast ? pindexLast->nHeight + 1 : 0);
-    
-    LogPrintf("💡 DGW3: nHeight=%d returning powLimit %s\n", nextHeight,
-        (nextHeight >= params.yespowerForkHeight) ?
-        "Yespower" : "SHA256");
-    arith_uint256 limit = UintToArith256((nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
-    LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
+    int nextHeight = pindexLast->nHeight + 1;
+    const int nPastBlocks = (nextHeight >= params.nextDifficultyFork3Height) ? 12 : 24;
+
+    arith_uint256 limit = UintToArith256(
+        (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
+    );
+    LogPrintf("💡 DGW3.5: powLimit used = %s\n", limit.ToString());
+
     if (nextHeight < nPastBlocks)
-        return UintToArith256(
-            (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
-            ? params.powLimitYespower
-            : params.powLimit
-        ).GetCompact();
+        return limit.GetCompact();
 
     const CBlockIndex* pindex = pindexLast;
-    arith_uint256 pastDifficultyAverage;
-    arith_uint256 pastDifficultyAveragePrev;
-
-    int64_t actualTimespan = 0;
-    int64_t lastBlockTime = 0;
+    arith_uint256 pastDifficultyAverage, pastDifficultyAveragePrev;
+    int64_t actualTimespan = 0, lastBlockTime = 0;
 
     for (int i = 0; i < nPastBlocks; ++i) {
-        if (!pindex)
-            break;
+        if (!pindex) break;
 
         arith_uint256 currentDifficulty = arith_uint256().SetCompact(pindex->nBits);
-
         if (i == 0)
             pastDifficultyAverage = currentDifficulty;
         else
@@ -111,29 +102,75 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
     }
 
     const int64_t targetTimespan = nPastBlocks * params.nPowTargetSpacing;
+    const bool v6 = nextHeight >= 12818;
 
-    if (actualTimespan < targetTimespan / 3)
-        actualTimespan = targetTimespan / 3;
-    if (actualTimespan > targetTimespan * 3)
-        actualTimespan = targetTimespan * 3;
+    // Define clamping bounds
+    int64_t minTimespanClamp = v6 ? (targetTimespan / 3) : (nextHeight >= params.nextDifficultyFork3Height) ? (targetTimespan / 4) : (targetTimespan / 3);
+    int64_t maxTimespanClamp = v6 ? (targetTimespan * 3) : (nextHeight >= params.nextDifficultyFork3Height) ? (targetTimespan * 4) : (targetTimespan * 3);
 
-    arith_uint256 newDifficulty = pastDifficultyAverage * actualTimespan / targetTimespan;
+    int64_t emergencyClamp = v6 ? (targetTimespan / 3) : (nextHeight >= params.nextDifficultyFork5Height) ? (targetTimespan / 4) : (targetTimespan / 6);
+    int64_t minSolveClamp = v6 ? (targetTimespan / 4) : (nextHeight >= params.nextDifficultyFork5Height) ? (targetTimespan / 6) : (targetTimespan / 8);
+
+    const int64_t minSolveTime = 5;
+    int64_t actualSolveTime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
+    int64_t unclampedActualTimespan = actualTimespan;  // Save raw timespan
+
+    // Trigger emergency logic BEFORE clamping
+    bool triggered = v6
+        ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 5)
+        : (actualSolveTime < minSolveTime || unclampedActualTimespan < targetTimespan / 6);
+
+    if (triggered && nextHeight >= params.nextDifficultyFork3Height) {
+        LogPrintf("🚨 [Fork%s] Emergency/min solve triggered. Solve=%ds Timespan=%ds\n",
+                v6 ? "6" : "", actualSolveTime, unclampedActualTimespan);
+        actualTimespan = std::min(actualTimespan, std::min(emergencyClamp, minSolveClamp));
+    }
+
+    // Clamp normally after emergency trigger check
+    if (actualTimespan < minTimespanClamp) actualTimespan = minTimespanClamp;
+    if (actualTimespan > maxTimespanClamp) actualTimespan = maxTimespanClamp;
+
+    // Graceful decay logic
+    double decayFactor = 1.0;
+
+    if (nextHeight >= 12818 && actualSolveTime > params.nPowTargetSpacing) {
+        double multiplier = std::min(6.0, double(actualSolveTime) / params.nPowTargetSpacing);
+        decayFactor = std::pow(multiplier, 0.6);
+        decayFactor = std::min(decayFactor, 4.0);
+        LogPrintf("📉 DGW-NOVA graceful decay (v6) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
+    } else if (nextHeight >= params.nextDifficultyFork5Height && actualSolveTime > params.nPowTargetSpacing) {
+        double multiplier = std::min(3.0, double(actualSolveTime) / params.nPowTargetSpacing);
+        decayFactor = std::pow(multiplier, 0.4);
+        decayFactor = std::min(decayFactor, 4.0);
+        LogPrintf("📉 DGW3.5 graceful decay (v5) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
+    } else if (nextHeight >= params.nextDifficultyFork4Height && actualSolveTime > params.nPowTargetSpacing) {
+        double multiplier = std::min(3.0, double(actualSolveTime) / params.nPowTargetSpacing);
+        decayFactor = 1.0 + std::log2(multiplier);
+        decayFactor = std::min(decayFactor, 4.0);
+        LogPrintf("📉 DGW3.5 graceful decay (v4) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
+    }
+
+    // Final difficulty calculation
+    arith_uint256 baseline = pastDifficultyAverage * actualTimespan / targetTimespan;
+    arith_uint256 newDifficulty = baseline;
+
+    if (nextHeight >= 12575 && decayFactor > 1.0) {
+        arith_uint256 diffToPrevious = baseline - pastDifficultyAverage;
+        newDifficulty = baseline - (diffToPrevious / decayFactor);
+        LogPrintf("🪂 DGW3.5 decay-from-baseline: newDifficulty=%.8f\n", newDifficulty.getdouble());
+    } else {
+        newDifficulty = pastDifficultyAverage * actualTimespan * decayFactor / targetTimespan;
+    }
 
     arith_uint256 bnPowLimit = UintToArith256(
-        (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
-        ? params.powLimitYespower
-        : params.powLimit
+        (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
     );
 
-    if (pindexLast->nHeight + 1 < 5880 && newDifficulty > bnPowLimit) {
+    if (nextHeight < 5880 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
-    } 
-    // if (pindexLast->nHeight + 1 >= 5880 && newDifficulty < bnPowLimit) {
-    //     newDifficulty = bnPowLimit;
-    // } 
-    
-    LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
+    }
 
+    LogPrintf("⛏️ Retargeting at height=%d with DGW3.5\n", pindexLast->nHeight);
     return newDifficulty.GetCompact();
 }
 

@@ -75,6 +75,9 @@ public:
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
+        consensus.nextDifficultyFork3Height = 12245;
+        consensus.nextDifficultyFork4Height = 12500;
+        consensus.nextDifficultyFork5Height = 12528;
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();

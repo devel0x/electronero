@@ -57,6 +57,9 @@ struct Params {
     int difficultyForkHeight;
     int nextDifficultyForkHeight;
     int nextDifficultyFork2Height;
+    int nextDifficultyFork3Height;
+    int nextDifficultyFork4Height;
+    int nextDifficultyFork5Height;
     uint256 powLimitEasyBlocks;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
