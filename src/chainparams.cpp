@@ -75,9 +75,9 @@ public:
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
-        consensus.nextDifficultyFork3Height = 12245;
-        consensus.nextDifficultyFork4Height = 12500;
-        consensus.nextDifficultyFork5Height = 12528;
+        consensus.nextDifficultyFork3Height = 12245; // todo
+        consensus.nextDifficultyFork4Height = 12500; // todo
+        consensus.nextDifficultyFork5Height = 12528; // todo
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
@@ -530,16 +530,20 @@ const CChainParams &Params() {
 
 std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, const std::string& chain)
 {
+    std::unique_ptr<CChainParams> params;
     if (chain == CBaseChainParams::MAIN) {
-        return std::unique_ptr<CChainParams>(new CMainParams());
+        params = std::unique_ptr<CChainParams>(new CMainParams());
     } else if (chain == CBaseChainParams::TESTNET) {
-        return std::unique_ptr<CChainParams>(new CTestNetParams());
+        params = std::unique_ptr<CChainParams>(new CTestNetParams());
     } else if (chain == CBaseChainParams::SIGNET) {
-        return std::unique_ptr<CChainParams>(new SigNetParams(args));
+        params = std::unique_ptr<CChainParams>(new SigNetParams(args));
     } else if (chain == CBaseChainParams::REGTEST) {
-        return std::unique_ptr<CChainParams>(new CRegTestParams(args));
+        params = std::unique_ptr<CChainParams>(new CRegTestParams(args));
+    } else {
+        throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
     }
-    throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
+    params->strNodeOperatorWallet = args.GetArg("-nodeoperatorwallet", "");
+    return params;
 }
 
 void SelectParams(const std::string& network)
