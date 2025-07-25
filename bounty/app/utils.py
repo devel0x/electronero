@@ -6,6 +6,25 @@ from sqlalchemy.orm import Session
 from . import crud
 
 
+def resolve_username(username: str) -> int | None:
+    """Return a numeric Telegram user id for the given handle.
+
+    The provided username may include or omit the leading ``@`` sign.
+    """
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token or not username:
+        return None
+    base_url = f"https://api.telegram.org/bot{token}/"
+    try:
+        handle = username.lstrip("@")
+        resp = httpx.get(base_url + "getChat", params={"chat_id": handle}, timeout=5)
+        if resp.status_code == 200 and resp.json().get("ok"):
+            return resp.json()["result"].get("id")
+    except Exception:
+        return None
+    return None
+
+
 def verify_captcha(token: str) -> bool:
     """Check captcha token using Google reCAPTCHA."""
     if os.getenv("NOCAPTCHA", "false").lower() == "true":
@@ -32,18 +51,12 @@ def verify_telegram(username: str) -> bool:
     if not token or not group or not username:
         return False
 
-    base_url = f"https://api.telegram.org/bot{token}/"
-    # Telegram's getChatMember requires a numeric user id. Attempt to resolve the
-    # username first so users only need to provide their handle.
-    try:
-        handle = username.lstrip("@")
-        resp = httpx.get(base_url + "getChat", params={"chat_id": handle}, timeout=5)
-        if resp.status_code != 200 or not resp.json().get("ok"):
-            return False
-        user_id = resp.json()["result"].get("id")
-        if not user_id:
-            return False
+    user_id = resolve_username(username)
+    if not user_id:
+        return False
 
+    base_url = f"https://api.telegram.org/bot{token}/"
+    try:
         resp = httpx.get(
             base_url + "getChatMember",
             params={"chat_id": group, "user_id": user_id},
