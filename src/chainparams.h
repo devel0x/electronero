@@ -92,6 +92,7 @@ public:
     const CCheckpointData& Checkpoints() const { return checkpointData; }
     const ChainTxData& TxData() const { return chainTxData; }
     const std::string& GovernanceWallet() const { return strGovernanceWallet; }
+    const std::string& NodeOperatorWallet() const { return strNodeOperatorWallet; }
     int TokenActivationHeight() const { return nTokenActivationHeight; }
 protected:
     CChainParams() {}
@@ -115,6 +116,7 @@ protected:
     CCheckpointData checkpointData;
     ChainTxData chainTxData;
     std::string strGovernanceWallet;
+    std::string strNodeOperatorWallet;
     int nTokenActivationHeight{2500};
 };
 

@@ -8,17 +8,23 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    ```bash
    pip install -r requirements.txt
    ```
-2. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
+2. Create the MySQL database referenced by `DATABASE_URL` (for example `referral_db`). The tables themselves are created automatically when the server starts.
+3. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
    Additionally provide the links that users should follow via environment variables:
    `TELEGRAM_URL`, `X_PROFILE_URL`, `DISCORD_URL`, `WEB_WALLET_URL`,
     `MOBILE_WALLET_URL`, `NEWSLETTER_URL`, `REDDIT_URL`, `TWEET_URL`,
    `REFERRAL_BASE_URL`, `ITC_PER_POINT`, `INTERCHAINED_CLI`,
-    `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET` and `ADMIN_PASSWORD`.
-3. Run the application
+    `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET`, `ADMIN_PASSWORD`,
+    `TELEGRAM_BOT_TOKEN` and `TELEGRAM_GROUP_ID`.
+   The `CAPTCHA_SECRET` value comes from the Google reCAPTCHA admin
+   console. Create a site at <https://www.google.com/recaptcha/admin>,
+   then copy the generated **secret key** here.
+   Set `NOCAPTCHA=true` to disable CAPTCHA checks during testing.
+4. Run the application
    ```bash
-   uvicorn main:app --reload
+   uvicorn main:app --reload --port ${SERVER_PORT:-8000}
    ```
-4. Open `http://localhost:8000` in a browser to use the built‑in frontend.
+5. Open `http://localhost:${SERVER_PORT:-8000}` in a browser to use the built‑in frontend.
 
 ## API Endpoints
 
@@ -55,22 +61,29 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
 
 ```
-TELEGRAM_URL      # Link to your Telegram group or channel
-X_PROFILE_URL     # Link to your X/Twitter profile to follow
-DISCORD_URL       # Discord invite link
-WEB_WALLET_URL    # Registration page for the web wallet
-MOBILE_WALLET_URL # Registration page for the mobile wallet
-NEWSLETTER_URL    # Sign‑up page for the newsletter
-REDDIT_URL        # Subreddit or profile to follow
-TWEET_URL         # URL of the tweet users should share
-REFERRAL_BASE_URL # Base URL used when displaying the referral link
-REWARD_THRESHOLD  # Minimum points needed to claim rewards
-ITC_PER_POINT     # Amount of ITC paid out per point when claiming
-INTERCHAINED_CLI  # Path to the `interchained-cli` executable used for payouts
-DEFAULT_LANGUAGE  # Default language code for the interface (e.g. 'en')
-CAPTCHA_SECRET    # Secret token for verifying CAPTCHA responses
-ADMIN_PASSWORD    # Password required to access the /admin dashboard
+TELEGRAM_URL       # Link to your Telegram group or channel
+X_PROFILE_URL      # Link to your X/Twitter profile to follow
+DISCORD_URL        # Discord invite link
+WEB_WALLET_URL     # Registration page for the web wallet
+MOBILE_WALLET_URL  # Registration page for the mobile wallet
+NEWSLETTER_URL     # Sign‑up page for the newsletter
+REDDIT_URL         # Subreddit or profile to follow
+TWEET_URL          # URL of the tweet users should share
+REFERRAL_BASE_URL  # Base URL used when displaying the referral link
+REWARD_THRESHOLD   # Minimum points needed to claim rewards
+ITC_PER_POINT      # Amount of ITC paid out per point when claiming
+INTERCHAINED_CLI   # Path to the `interchained-cli` executable used for payouts
+DEFAULT_LANGUAGE   # Default language code for the interface (e.g. 'en')
+CAPTCHA_SECRET     # Secret token for verifying CAPTCHA responses
+ADMIN_PASSWORD     # Password required to access the /admin dashboard
+SERVER_PORT        # Port the FastAPI server runs on
+NOCAPTCHA          # Set to 'true' to bypass CAPTCHA verification
+TELEGRAM_BOT_TOKEN # Token for the bot used to check Telegram membership
+TELEGRAM_GROUP_ID  # Numeric ID of the Telegram group to verify
 ```
+To obtain your Telegram group ID, invite the `@userinfobot` (or a similar bot)
+to your group and send `/start`. The bot will reply with the numeric
+`chat_id`, which is the value to use for `TELEGRAM_GROUP_ID`.
 
 ### Example Environment Setup
 

@@ -516,9 +516,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin[0].prevout.SetNull();
     CAmount blockReward = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
     CAmount governanceReward = blockReward / 10; // 10% goes to governance
-    coinbaseTx.vout.resize(2);
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    bool hasOpDest = IsValidDestination(opDest);
+    CAmount operatorReward = hasOpDest ? blockReward / 20 : 0; // 5%
+    coinbaseTx.vout.resize(hasOpDest ? 3 : 2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
-    coinbaseTx.vout[0].nValue = blockReward - governanceReward;
+    coinbaseTx.vout[0].nValue = blockReward - governanceReward - operatorReward;
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
     if (IsValidDestination(govDest)) {
         coinbaseTx.vout[1].scriptPubKey = GetScriptForDestination(govDest);
@@ -527,6 +530,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         // Fallback: pay entire reward to miner if governance address invalid
         coinbaseTx.vout.resize(1);
         coinbaseTx.vout[0].nValue = blockReward;
+    }
+    if (hasOpDest) {
+        coinbaseTx.vout[2].scriptPubKey = GetScriptForDestination(opDest);
+        coinbaseTx.vout[2].nValue = operatorReward;
     }
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     // Add witness nonce to scriptWitness
