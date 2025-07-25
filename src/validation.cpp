@@ -11,6 +11,7 @@
 #include <checkqueue.h>
 #include <memory>
 #include "pow/yespower.h"
+#include "pow/kawpow.h"
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/tx_check.h>
@@ -1165,7 +1166,9 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
     uint256 hash;
-    if (nHeight >= consensusParams.yespowerForkHeight) {
+    if (nHeight >= consensusParams.kawpowForkHeight) {
+        hash = KawpowHash(block, nHeight);
+    } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // Legacy SHA256
@@ -3377,7 +3380,9 @@ static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, int nHeight, bool fCheckPOW = true)
 {
     uint256 hash;
-    if (nHeight >= consensusParams.yespowerForkHeight) {
+    if (nHeight >= consensusParams.kawpowForkHeight) {
+        hash = KawpowHash(block, nHeight);
+    } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // SHA256
