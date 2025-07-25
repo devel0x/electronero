@@ -72,8 +72,9 @@ MOBILE_WALLET_URL  # Registration page for the mobile wallet
 NEWSLETTER_URL     # Sign‑up page for the newsletter
 REDDIT_URL         # Subreddit or profile to follow
 TWEET_URL          # URL of the tweet users should share
-REFERRAL_BASE_URL  # Base URL used when displaying the referral link. Do not
-                   # include the `?ref=` query string.
+WEBSITE_URL        # Main project website
+WHITEPAPER_URL     # Link to the whitepaper
+REFERRAL_BASE_URL  # Base URL used when displaying the referral link
 REWARD_THRESHOLD   # Minimum points needed to claim rewards
 ITC_PER_POINT      # Amount of ITC paid out per point when claiming
 INTERCHAINED_CLI   # Path to the `interchained-cli` executable used for payouts
@@ -99,7 +100,6 @@ Configure the following variables before running the server:
 
 ```bash
 export DATABASE_URL="mysql+pymysql://user:password@localhost:3306/referral_db"
-
 export TELEGRAM_URL="https://t.me/examplegroup"
 export X_PROFILE_URL="https://twitter.com/example"
 export DISCORD_URL="https://discord.gg/example"
@@ -108,15 +108,15 @@ export MOBILE_WALLET_URL="https://mwallet.example.com/signup"
 export NEWSLETTER_URL="https://example.com/newsletter"
 export REDDIT_URL="https://reddit.com/r/example"
 export TWEET_URL="https://twitter.com/example/status/1"
+export WEBSITE_URL="https://example.com"
+export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
 export REFERRAL_BASE_URL="https://bounty.example.com/"
-
 export REWARD_THRESHOLD="100"
 export ITC_PER_POINT="0.01"
 export INTERCHAINED_CLI="/usr/local/bin/interchained-cli"
 export DEFAULT_LANGUAGE="en"
 export CAPTCHA_SECRET="recaptcha-secret"
 export ADMIN_PASSWORD="changeme"
-
 export TELEGRAM_BOT_TOKEN="123456:ABCDEF"
 export TELEGRAM_GROUP_ID="-1009876543210"
 export X_BEARER_TOKEN="x-api-bearer"

@@ -54,7 +54,9 @@ def index(request: Request, lang: str | None = None):
         "newsletter": os.getenv("NEWSLETTER_URL", "#"),
         "reddit": os.getenv("REDDIT_URL", "#"),
         "tweet": os.getenv("TWEET_URL", "#"),
-        "referral_base": os.getenv("REFERRAL_BASE_URL", "")
+        "referral_base": os.getenv("REFERRAL_BASE_URL", ""),
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
     }
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
@@ -75,7 +77,13 @@ def register_page(request: Request, lang: str | None = None):
     server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("register.html", {"request": request, "t": strings, "server_port": SERVER_PORT})
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "t": strings, "server_port": SERVER_PORT, "links": links}
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -83,7 +91,13 @@ def login_page(request: Request, lang: str | None = None):
     server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("login.html", {"request": request, "t": strings, "server_port": SERVER_PORT})
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "t": strings, "server_port": SERVER_PORT, "links": links}
+    )
 
 
 @app.post("/login")
