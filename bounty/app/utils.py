@@ -26,14 +26,33 @@ def verify_captcha(token: str) -> bool:
 
 
 def verify_telegram(username: str) -> bool:
+    """Check if the user has joined the configured Telegram group."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     group = os.getenv("TELEGRAM_GROUP_ID")
-    if not token or not group:
+    if not token or not group or not username:
         return False
-    url = f"https://api.telegram.org/bot{token}/getChatMember"
-    resp = httpx.get(url, params={"chat_id": group, "user_id": username})
-    return resp.status_code == 200 and resp.json().get("ok", False)
 
+    base_url = f"https://api.telegram.org/bot{token}/"
+    # Telegram's getChatMember requires a numeric user id. Attempt to resolve the
+    # username first so users only need to provide their handle.
+    try:
+        handle = username.lstrip("@")
+        resp = httpx.get(base_url + "getChat", params={"chat_id": handle}, timeout=5)
+        if resp.status_code != 200 or not resp.json().get("ok"):
+            return False
+        user_id = resp.json()["result"].get("id")
+        if not user_id:
+            return False
+
+        resp = httpx.get(
+            base_url + "getChatMember",
+            params={"chat_id": group, "user_id": user_id},
+            timeout=5,
+        )
+        data = resp.json()
+        return resp.status_code == 200 and data.get("ok", False)
+    except Exception:
+        return False
 
 def verify_x_handle(handle: str) -> bool:
     bearer = os.getenv("X_BEARER_TOKEN")

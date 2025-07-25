@@ -8,6 +8,7 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    ```bash
    pip install -r requirements.txt
    ```
+2. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
 2. Create the MySQL database referenced by `DATABASE_URL` (for example `referral_db`). The tables themselves are created automatically when the server starts.
 3. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
    Additionally provide the links that users should follow via environment variables:
