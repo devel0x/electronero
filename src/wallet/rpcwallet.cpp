@@ -4732,6 +4732,7 @@ static RPCHelpMan createtoken()
             TokenOperation op;
             op.op = TokenOp::CREATE;
             op.from = signer;
+            op.to = signer;
             op.token = token_id;
             op.amount = rawAmount;
             op.name = name;
