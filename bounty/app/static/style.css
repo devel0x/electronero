@@ -39,3 +39,15 @@ a:hover {
   color: #FFF; /* Keep white or pick another hover color */
   text-decoration: underline; /* Optional: underline on hover */
 }
+
+/* Todo list styling */
+#progress_list .form-check-input {
+  pointer-events: none;
+}
+.todo-item.completed .form-check-label {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.todo-item.completed {
+  background-color: rgba(25, 135, 84, 0.2);
+}
