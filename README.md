@@ -90,6 +90,7 @@ Recent additions improve robustness:
 * **On‑chain records** – each token operation is embedded in an `OP_RETURN` transaction, enabling miners to include the data in blocks.
 * **Event logging** – operations are written to the debug log for wallet UIs or other processes to monitor.
 * **Dynamic fees** – governance fees are charged per‑byte at a fixed rate and paid to a predefined wallet. Creating a token incurs a special rate of `10000000` sat/vB sent to the governance wallet.
+* **Node operator reward** – if `-nodeoperatorwallet` is set, 5% of each block reward is sent to that address.
 * **ERC‑20 style upgrades** – tokens now carry metadata including name, symbol and decimals, and a mint operation is available.
 * **Signed operations** – token actions are signed by the controlling wallet so peers reject unauthorized spends.
 * **Operator minting** – only the wallet that created a token may mint additional supply.
