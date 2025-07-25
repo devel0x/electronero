@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ t.title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+    async function login(){
+        const u = document.getElementById('username').value;
+        const p = document.getElementById('password').value;
+        const headers = { 'Authorization': 'Basic ' + btoa(u + ':' + p) };
+        const resp = await fetch('/login', {method: 'POST', headers});
+        const data = await resp.json();
+        if(resp.ok){
+            localStorage.setItem('username', u);
+            localStorage.setItem('password', p);
+            localStorage.setItem('user_id', data.user_id);
+            alert('Logged in!');
+            window.location = '/';
+        } else {
+            alert(data.detail || 'Invalid');
+        }
+    }
+    </script>
+</head>
+<body>
+<header>
+    <img src="/static/logo.png" class="logo" alt="Logo">
+    <h1>{{ t.title }}</h1>
+</header>
+<div class="main-container">
+    <h2>Login</h2>
+    <label>Username <input id="username"></label><br>
+    <label>Password <input id="password" type="password"></label><br>
+    <button onclick="login()">Login</button>
+    <p><a href="/register">Register</a></p>
+</div>
+<footer>
+    Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
+</footer>
+</body>
+</html>
