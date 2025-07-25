@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     twitter_handle: str
     discord_handle: str
     reddit_username: str
+    wallet_address: str
     referral_code: Optional[str] = None
     referred_by_id: Optional[int] = None
 
