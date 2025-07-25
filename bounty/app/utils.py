@@ -8,6 +8,8 @@ from . import crud
 
 def verify_captcha(token: str) -> bool:
     """Check captcha token using Google reCAPTCHA."""
+    if os.getenv("NOCAPTCHA", "false").lower() == "true":
+        return True
     secret = os.getenv("CAPTCHA_SECRET")
     if not secret or not token:
         return False
@@ -51,7 +53,6 @@ def verify_telegram(username: str) -> bool:
         return resp.status_code == 200 and data.get("ok", False)
     except Exception:
         return False
-
 
 def verify_x_handle(handle: str) -> bool:
     bearer = os.getenv("X_BEARER_TOKEN")
