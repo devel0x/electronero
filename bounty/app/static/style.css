@@ -27,3 +27,13 @@ footer {
 .main-container {
     padding: 20px;
 }
+
+.done {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+.not-done {
+    color: #ff4444;
+    font-weight: bold;
+}

@@ -16,7 +16,9 @@ translations = {
         "referral_link": "Referral link:",
         "progress_heading": "Your Progress",
         "points_label": "Points",
-        "completed_tasks": "Completed Tasks"
+        "completed_tasks": "Completed Tasks",
+        "register_heading": "Create Account",
+        "register_button": "Register"
     },
     "es": {
         "title": "Recompensas por Referidos",
@@ -35,7 +37,9 @@ translations = {
         "referral_link": "Enlace de referido:",
         "progress_heading": "Tu Progreso",
         "points_label": "Puntos",
-        "completed_tasks": "Tareas Completadas"
+        "completed_tasks": "Tareas Completadas",
+        "register_heading": "Crear Cuenta",
+        "register_button": "Registrarse"
     },
     "fr": {
         "title": "Prime de Parrainage",
@@ -54,6 +58,8 @@ translations = {
         "referral_link": "Lien de parrainage :",
         "progress_heading": "Votre progression",
         "points_label": "Points",
-        "completed_tasks": "Tâches terminées"
+        "completed_tasks": "Tâches terminées",
+        "register_heading": "Créer un compte",
+        "register_button": "S'inscrire"
     }
 }
