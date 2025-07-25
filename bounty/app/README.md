@@ -70,6 +70,8 @@ MOBILE_WALLET_URL  # Registration page for the mobile wallet
 NEWSLETTER_URL     # Sign‑up page for the newsletter
 REDDIT_URL         # Subreddit or profile to follow
 TWEET_URL          # URL of the tweet users should share
+WEBSITE_URL        # Main project website
+WHITEPAPER_URL     # Link to the whitepaper
 REFERRAL_BASE_URL  # Base URL used when displaying the referral link
 REWARD_THRESHOLD   # Minimum points needed to claim rewards
 ITC_PER_POINT      # Amount of ITC paid out per point when claiming
@@ -105,6 +107,8 @@ export MOBILE_WALLET_URL="https://mwallet.example.com/signup"
 export NEWSLETTER_URL="https://example.com/newsletter"
 export REDDIT_URL="https://reddit.com/r/example"
 export TWEET_URL="https://twitter.com/example/status/1"
+export WEBSITE_URL="https://example.com"
+export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
 export REFERRAL_BASE_URL="https://bounty.example.com/?ref="
 
 export REWARD_THRESHOLD="100"

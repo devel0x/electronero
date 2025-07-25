@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ t.title }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -90,52 +91,76 @@
 
     window.addEventListener('DOMContentLoaded', () => {
         updateReferral();
+        const userLinks = document.querySelector('.user-links');
+        const authLinks = document.querySelector('.auth-links');
+        if(localStorage.getItem('user_id')){
+            userLinks.classList.remove('d-none');
+            authLinks.classList.add('d-none');
+        }
     });
     </script>
 </head>
 <body>
-    <header class="d-flex align-items-center p-3">
-        <img src="/static/logo.png" class="logo" alt="Logo">
-        <h1>{{ t.title }}</h1>
-    </header>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <img src="/static/logo.png" class="logo me-2" alt="Logo">
+                {{ t.title }}
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto auth-links">
+                    <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">Register</a></li>
+                </ul>
+                <ul class="navbar-nav ms-auto user-links d-none">
+                    <li class="nav-item"><a class="nav-link" href="{{ links.website }}" target="_blank">Website</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ links.whitepaper }}" target="_blank">Whitepaper</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
     <div class="main-container container my-4">
     <h2>{{ t.intro_heading }}</h2>
     <p>{{ t.intro_text }}</p>
     <p>{{ t.instructions }}</p>
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
+    <p id="conversion">{{ t.conversion_rate.format(itc=itc_per_point) }}</p>
     <ul id="progress_list" class="list-group mb-3"></ul>
     <ul class="list-group mb-3">
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.telegram }}" target="_blank">Telegram</a>
+            <a href="{{ links.telegram }}" target="_blank">{{ t.join_telegram_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('telegram')">{{ t.join_telegram }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.x_profile }}" target="_blank">X Profile</a>
+            <a href="{{ links.x_profile }}" target="_blank">{{ t.follow_x_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('x')">{{ t.follow_x }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.discord }}" target="_blank">Discord</a>
+            <a href="{{ links.discord }}" target="_blank">{{ t.join_discord_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('discord')">{{ t.join_discord }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.web_wallet }}" target="_blank">Web Wallet</a>
+            <a href="{{ links.web_wallet }}" target="_blank">{{ t.register_web_wallet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('web_wallet')">{{ t.register_web_wallet }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.mobile_wallet }}" target="_blank">Mobile Wallet</a>
+            <a href="{{ links.mobile_wallet }}" target="_blank">{{ t.register_mobile_wallet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('mobile_wallet')">{{ t.register_mobile_wallet }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.newsletter }}" target="_blank">Newsletter</a>
+            <a href="{{ links.newsletter }}" target="_blank">{{ t.subscribe_newsletter_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('newsletter')">{{ t.subscribe_newsletter }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.reddit }}" target="_blank">Reddit</a>
+            <a href="{{ links.reddit }}" target="_blank">{{ t.follow_reddit_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('reddit')">{{ t.follow_reddit }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.tweet }}" target="_blank">Tweet</a>
+            <a href="{{ links.tweet }}" target="_blank">{{ t.share_tweet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
         </li>
     </ul>
@@ -144,7 +169,6 @@
         {{ t.referral_link }}
         <span id="referral_link"></span>
     </p>
-    <p><a href="/login">Login</a> | <a href="/register">Register</a></p>
     </div>
     <footer>
         Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
