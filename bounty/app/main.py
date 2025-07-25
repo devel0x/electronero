@@ -19,6 +19,7 @@ templates = Jinja2Templates(directory="templates")
 REWARD_THRESHOLD = int(os.getenv("REWARD_THRESHOLD", "100"))
 ITC_PER_POINT = float(os.getenv("ITC_PER_POINT", "0.01"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+SERVER_PORT = os.getenv("SERVER_PORT", "8000")
 security = HTTPBasic()
 user_security = HTTPBasic()
 
@@ -43,6 +44,7 @@ def get_current_user(
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, lang: str | None = None):
+    server_port = SERVER_PORT
     links = {
         "telegram": os.getenv("TELEGRAM_URL", "#"),
         "x_profile": os.getenv("X_PROFILE_URL", "#"),
@@ -57,7 +59,7 @@ def index(request: Request, lang: str | None = None):
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse(
-        "index.html", {"request": request, "links": links, "t": strings}
+        "index.html", {"request": request, "links": links, "t": strings, "server_port": server_port}
     )
 
 @app.post("/users", response_model=schemas.UserResponse)
