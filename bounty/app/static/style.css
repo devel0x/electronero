@@ -3,7 +3,7 @@ body {
     margin: 0;
     padding: 0;
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    color: #fff;
+    color: #fff !important;
 }
 
 header {
@@ -26,4 +26,16 @@ footer {
 }
 .main-container {
     padding: 20px;
+    color: #fff !important;
+}
+/* Style all links */
+a {
+  color: #FFF;
+  text-decoration: none; /* Optional: remove underline */
+}
+
+/* Optionally change hover color */
+a:hover {
+  color: #FFF; /* Keep white or pick another hover color */
+  text-decoration: underline; /* Optional: underline on hover */
 }

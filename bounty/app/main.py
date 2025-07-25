@@ -65,6 +65,7 @@ def index(request: Request, lang: str | None = None):
 
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request, lang: str | None = None):
+    server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse("register.html", {"request": request, "t": strings, "server_port": server_port})
@@ -72,6 +73,7 @@ def register_page(request: Request, lang: str | None = None):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, lang: str | None = None):
+    server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse("login.html", {"request": request, "t": strings, "server_port": server_port})
@@ -79,6 +81,7 @@ def login_page(request: Request, lang: str | None = None):
 
 @app.post("/login")
 def login(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
+    server_port = SERVER_PORT
     user = crud.authenticate_user(db, credentials.username, credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
