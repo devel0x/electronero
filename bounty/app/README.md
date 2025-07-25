@@ -8,17 +8,18 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    ```bash
    pip install -r requirements.txt
    ```
-2. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
+2. Create the MySQL database referenced by `DATABASE_URL` (for example `referral_db`). The tables themselves are created automatically when the server starts.
+3. Configure `DATABASE_URL` in `database.py` and set any API tokens (Telegram, X, Discord, Reddit) as environment variables.
    Additionally provide the links that users should follow via environment variables:
    `TELEGRAM_URL`, `X_PROFILE_URL`, `DISCORD_URL`, `WEB_WALLET_URL`,
     `MOBILE_WALLET_URL`, `NEWSLETTER_URL`, `REDDIT_URL`, `TWEET_URL`,
    `REFERRAL_BASE_URL`, `ITC_PER_POINT`, `INTERCHAINED_CLI`,
     `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET` and `ADMIN_PASSWORD`.
-3. Run the application
+4. Run the application
    ```bash
-   uvicorn main:app --reload
+   uvicorn main:app --reload --port ${SERVER_PORT:-8000}
    ```
-4. Open `http://localhost:8000` in a browser to use the built‑in frontend.
+5. Open `http://localhost:${SERVER_PORT:-8000}` in a browser to use the built‑in frontend.
 
 ## API Endpoints
 
