@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     twitter_handle: str
     discord_handle: str
     reddit_username: str
+    wallet_address: str
     referral_code: Optional[str] = None
     referred_by_id: Optional[int] = None
 
@@ -42,6 +43,7 @@ class UserResponse(BaseModel):
     twitter_handle: Optional[str] = None
     discord_handle: Optional[str] = None
     reddit_username: Optional[str] = None
+    wallet_address: Optional[str] = None
     points: int
     class Config:
         orm_mode = True
