@@ -59,7 +59,14 @@ def index(request: Request, lang: str | None = None):
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse(
-        "index.html", {"request": request, "links": links, "t": strings, "server_port": SERVER_PORT}
+        "index.html",
+        {
+            "request": request,
+            "links": links,
+            "t": strings,
+            "server_port": SERVER_PORT,
+            "itc_per_point": ITC_PER_POINT,
+        },
     )
 
 
