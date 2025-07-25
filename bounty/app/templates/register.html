@@ -5,6 +5,10 @@
     <title>{{ t.title }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <script>
+    const SERVER_PORT = '{{ server_port }}';
+    function apiUrl(path){
+        return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
+    }
     async function registerUser(){
         const body = {
             username: document.getElementById('username').value,
@@ -17,7 +21,7 @@
             reddit_username: document.getElementById('reddit').value,
             referral_code: document.getElementById('referral').value || null
         };
-        const resp = await fetch('/users', {
+        const resp = await fetch(apiUrl('/users'), {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body)

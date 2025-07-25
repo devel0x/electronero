@@ -44,7 +44,6 @@ def get_current_user(
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, lang: str | None = None):
-    server_port = SERVER_PORT
     links = {
         "telegram": os.getenv("TELEGRAM_URL", "#"),
         "x_profile": os.getenv("X_PROFILE_URL", "#"),
@@ -59,7 +58,8 @@ def index(request: Request, lang: str | None = None):
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse(
-        "index.html", {"request": request, "links": links, "t": strings, "server_port": server_port}
+        "index.html",
+        {"request": request, "links": links, "t": strings, "server_port": SERVER_PORT},
     )
 
 
@@ -67,14 +67,20 @@ def index(request: Request, lang: str | None = None):
 def register_page(request: Request, lang: str | None = None):
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("register.html", {"request": request, "t": strings, "server_port": server_port})
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request, "t": strings, "server_port": SERVER_PORT},
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, lang: str | None = None):
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("login.html", {"request": request, "t": strings, "server_port": server_port})
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "t": strings, "server_port": SERVER_PORT},
+    )
 
 
 @app.post("/login")
@@ -82,7 +88,7 @@ def login(credentials: HTTPBasicCredentials = Depends(security), db: Session = D
     user = crud.authenticate_user(db, credentials.username, credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"user_id": user.id, "server_port": server_port}
+    return {"user_id": user.id, "server_port": SERVER_PORT}
 
 @app.post("/users", response_model=schemas.UserResponse)
 def create_user(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):

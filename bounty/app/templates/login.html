@@ -5,11 +5,15 @@
     <title>{{ t.title }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <script>
+    const SERVER_PORT = '{{ server_port }}';
+    function apiUrl(path){
+        return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
+    }
     async function login(){
         const u = document.getElementById('username').value;
         const p = document.getElementById('password').value;
         const headers = { 'Authorization': 'Basic ' + btoa(u + ':' + p) };
-        const resp = await fetch('/login', {method: 'POST', headers});
+        const resp = await fetch(apiUrl('/login'), {method: 'POST', headers});
         const data = await resp.json();
         if(resp.ok){
             localStorage.setItem('username', u);
