@@ -15,6 +15,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
     `MOBILE_WALLET_URL`, `NEWSLETTER_URL`, `REDDIT_URL`, `TWEET_URL`,
    `REFERRAL_BASE_URL`, `ITC_PER_POINT`, `INTERCHAINED_CLI`,
     `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET` and `ADMIN_PASSWORD`.
+   The `CAPTCHA_SECRET` value comes from the Google reCAPTCHA admin
+   console. Create a site at <https://www.google.com/recaptcha/admin>,
+   then copy the generated **secret key** here.
 4. Run the application
    ```bash
    uvicorn main:app --reload --port ${SERVER_PORT:-8000}
@@ -69,6 +72,7 @@ REWARD_THRESHOLD  # Minimum points needed to claim rewards
 ITC_PER_POINT     # Amount of ITC paid out per point when claiming
 INTERCHAINED_CLI  # Path to the `interchained-cli` executable used for payouts
 DEFAULT_LANGUAGE  # Default language code for the interface (e.g. 'en')
+SERVER_PORT       # Port the FastAPI server runs on
 CAPTCHA_SECRET    # Secret token for verifying CAPTCHA responses
 ADMIN_PASSWORD    # Password required to access the /admin dashboard
 ```
