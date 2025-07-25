@@ -12,7 +12,17 @@
         modal.show();
     }
 
+    let refFromUrl = null;
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        if(params.has('ref')){
+            refFromUrl = params.get('ref');
+            document.getElementById('referral').value = refFromUrl;
+        }
+    });
+
     async function registerUser(){
+        const referred = refFromUrl || document.getElementById('referral').value || null;
         const body = {
             username: document.getElementById('username').value,
             email: document.getElementById('email').value,
@@ -23,7 +33,8 @@
             discord_handle: document.getElementById('discord').value,
             reddit_username: document.getElementById('reddit').value,
             wallet_address: document.getElementById('wallet').value,
-            referral_code: document.getElementById('referral').value || null
+            referral_code: null,
+            referred_by_id: referred ? parseInt(referred) : null
         };
         const resp = await fetch('/users', {
             method: 'POST',

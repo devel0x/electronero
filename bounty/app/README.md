@@ -43,7 +43,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 1. Create an account from the `/register` page or by calling `/users` directly. Provide a unique
    `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
    Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
-   `referral_code`. Each IP may register only once and duplicate emails are rejected.
+   `referral_code`. If you arrive at `/register?ref=123` the `123` value is used as the referrer
+   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Each IP may
+   register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.
 3. Tasks correspond to actions such as following social profiles or registering a wallet. Each successful verification grants points.
 4. Points can be exchanged for rewards once the configured threshold is met. The logic for rewards can be customised in `main.py`.
