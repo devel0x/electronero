@@ -4,26 +4,21 @@ import os
 import httpx
 from sqlalchemy.orm import Session
 from . import crud
+import logging
+from app.models import TelegramUser
+from app.database import SessionLocal
 
+# Configure logging (you can adjust level and format)
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-def resolve_username(username: str) -> int | None:
-    """Return a numeric Telegram user id for the given handle.
-
-    The provided username may include or omit the leading ``@`` sign.
-    """
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not token or not username:
+def resolve_username(username: str, session: Session) -> int | None:
+    if not username:
         return None
-    base_url = f"https://api.telegram.org/bot{token}/"
-    try:
-        handle = username.lstrip("@")
-        resp = httpx.get(base_url + "getChat", params={"chat_id": handle}, timeout=5)
-        if resp.status_code == 200 and resp.json().get("ok"):
-            return resp.json()["result"].get("id")
-    except Exception:
-        return None
-    return None
-
+    handle = username.lstrip("@")
+    user = session.query(TelegramUser).filter(
+        TelegramUser.username.ilike(handle)
+    ).first()
+    return user.user_id if user else None
 
 def verify_captcha(token: str) -> bool:
     """Check captcha token using Google reCAPTCHA."""
@@ -43,17 +38,28 @@ def verify_captcha(token: str) -> bool:
     except Exception:
         return False
 
-
 def verify_telegram(username: str) -> bool:
     """Check if the user has joined the configured Telegram group."""
+    logging.info("Verifying Telegram user: %s", username)
+
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     group = os.getenv("TELEGRAM_GROUP_ID")
+    logging.debug("TELEGRAM_BOT_TOKEN: %s", "SET" if token else "NOT SET")
+    logging.debug("TELEGRAM_GROUP_ID: %s", group)
+
     if not token or not group or not username:
+        logging.warning("Missing required values: token, group, or username.")
         return False
 
-    user_id = resolve_username(username)
-    if not user_id:
-        return False
+    session = SessionLocal()
+    try:
+        user_id = resolve_username(username, session)
+        logging.info("Resolved username '%s' to user_id: %s", username, user_id)
+        if not user_id:
+            logging.error("Failed to resolve Telegram username '%s'", username)
+            return False
+    finally:
+        session.close()
 
     base_url = f"https://api.telegram.org/bot{token}/"
     try:
@@ -63,8 +69,12 @@ def verify_telegram(username: str) -> bool:
             timeout=5,
         )
         data = resp.json()
-        return resp.status_code == 200 and data.get("ok", False)
-    except Exception:
+        logging.info("Telegram API Response: %s", data)
+        success = resp.status_code == 200 and data.get("ok", False)
+        logging.info("Membership check result: %s", success)
+        return success
+    except Exception as e:
+        logging.exception("Error while contacting Telegram API: %s", e)
         return False
 
 def verify_x_handle(handle: str) -> bool:

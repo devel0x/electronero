@@ -64,3 +64,10 @@ class RewardClaim(Base):
     txid = Column(String(100), nullable=True)
     claimed_at = Column(DateTime, default=datetime.utcnow)
 
+class TelegramUser(Base):
+    __tablename__ = "telegram_users"
+    user_id = Column(Integer, primary_key=True, autoincrement=False)
+    username = Column(String(100), unique=True, index=True)
+    first_name = Column(String(100), nullable=True)
+    last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
