@@ -77,6 +77,41 @@ CAPTCHA_SECRET    # Secret token for verifying CAPTCHA responses
 ADMIN_PASSWORD    # Password required to access the /admin dashboard
 ```
 
+### Example Environment Setup
+
+Configure the following variables before running the server:
+
+```bash
+export DATABASE_URL="mysql+pymysql://user:password@localhost:3306/referral_db"
+
+export TELEGRAM_URL="https://t.me/examplegroup"
+export X_PROFILE_URL="https://twitter.com/example"
+export DISCORD_URL="https://discord.gg/example"
+export WEB_WALLET_URL="https://wallet.example.com/register"
+export MOBILE_WALLET_URL="https://mwallet.example.com/signup"
+export NEWSLETTER_URL="https://example.com/newsletter"
+export REDDIT_URL="https://reddit.com/r/example"
+export TWEET_URL="https://twitter.com/example/status/1"
+export REFERRAL_BASE_URL="https://bounty.example.com/?ref="
+
+export REWARD_THRESHOLD="100"
+export ITC_PER_POINT="0.01"
+export INTERCHAINED_CLI="/usr/local/bin/interchained-cli"
+export DEFAULT_LANGUAGE="en"
+export CAPTCHA_SECRET="recaptcha-secret"
+export ADMIN_PASSWORD="changeme"
+
+export TELEGRAM_BOT_TOKEN="123456:ABCDEF"
+export TELEGRAM_GROUP_ID="-1009876543210"
+export X_BEARER_TOKEN="x-api-bearer"
+export X_ACCOUNT_ID="123456789"
+export DISCORD_BOT_TOKEN="discord-bot-token"
+export DISCORD_GUILD_ID="123456789012345678"
+export REDDIT_TOKEN="reddit-token"
+export REDDIT_SUBREDDIT="example"
+export X_HASHTAG="ExampleTag"
+```
+
 ## Claiming Rewards
 
 Users accumulate points for completing tasks. Once a user reaches
