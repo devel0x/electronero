@@ -1165,7 +1165,11 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
     uint256 hash;
-    if (nHeight >= consensusParams.yespowerForkHeight) {
+    if (nHeight == 0) {
+        hash = block.GetHash(); // force legacy SHA256
+    } else if (nHeight >= consensusParams.sha256ForkHeight) {
+        hash = block.GetHash(); // Legacy SHA256
+    } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // Legacy SHA256
@@ -2231,7 +2235,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     }
 
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
-    if (pindex->nHeight >= 10000 && IsValidDestination(govDest)) {
+    if (pindex->nHeight >= 12000 && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
         CAmount expectedGov = blockReward / 10;
         bool foundGov = false;
@@ -2248,6 +2252,25 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         if (!foundGov) {
             LogPrintf("ERROR: ConnectBlock(): missing governance output\n");
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "missing-governance");
+        }
+    }
+
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    if (pindex->nHeight >= 12000 && IsValidDestination(opDest)) {
+        CScript opScript = GetScriptForDestination(opDest);
+        CAmount expectedOp = blockReward / 20;
+        bool foundOp = false;
+        for (const auto& out : block.vtx[0]->vout) {
+            if (out.scriptPubKey == opScript) {
+                if (out.nValue < expectedOp) {
+                    LogPrintf("WARNING: ConnectBlock(): node operator output pays %d vs expected %d\n", out.nValue, expectedOp);
+                }
+                foundOp = true;
+                break;
+            }
+        }
+        if (!foundOp) {
+            LogPrintf("WARNING: ConnectBlock(): node operator output missing\n");
         }
     }
 
@@ -3377,11 +3400,16 @@ static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, int nHeight, bool fCheckPOW = true)
 {
     uint256 hash;
-    if (nHeight >= consensusParams.yespowerForkHeight) {
+    if (nHeight == 0) {
+        hash = block.GetHash(); // force legacy SHA256
+    } else if (nHeight >= consensusParams.sha256ForkHeight) {
+        hash = block.GetHash(); // force legacy SHA256
+    } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // SHA256
     }
+
     // Check proof of work matches claimed amount
     if (fCheckPOW && !CheckProofOfWork(hash, block, block.nBits, consensusParams, nHeight))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");

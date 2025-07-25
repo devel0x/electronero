@@ -8,7 +8,6 @@
 #include <chrono>
 #include "arith_uint256.h"
 
-
 #include <amount.h>
 #include <chain.h>
 #include <chainparams.h>
@@ -18,6 +17,8 @@
 #include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include "primitives/block.h"
+
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
@@ -46,6 +47,8 @@
 #include <pubkey.h>
 #include <algorithm>
 #include <utility>
+
+// using progpow::hash256;
 
 CTxMemPool& EnsureMemPool(NodeContext& node);
 
@@ -103,14 +106,21 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                     CBlock block = originalBlock;
                     block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
-                    CMutableTransaction coinbaseTx(*block.vtx[0]);
-                    coinbaseTx.vin[0].scriptSig = CScript() << block.nTime << threadId;
-                    if (block.vtx[0]->vin[0].scriptWitness.stack.size() == 1 &&
-                        block.vtx[0]->vin[0].scriptWitness.stack[0].size() == 32) {
-                        coinbaseTx.vin[0].scriptWitness.stack = block.vtx[0]->vin[0].scriptWitness.stack;
+                    // Save the original witness stack before mutation
+                    const auto witnessStack = originalBlock.vtx[0]->vin[0].scriptWitness.stack;
+
+                    // This modifies block.vtx[0] by rebuilding the coinbase
+                    static thread_local unsigned int nExtraNonce = 0;
+                    IncrementExtraNonce(&block, ::ChainActive().Tip(), nExtraNonce);
+
+                    // Now restore the original witness stack
+                    if (witnessStack.size() == 1 && witnessStack[0].size() == 32) {
+                        CMutableTransaction coinbaseTx(*block.vtx[0]);
+                        coinbaseTx.vin[0].scriptWitness.stack = witnessStack;
+                        block.vtx[0] = MakeTransactionRef(coinbaseTx);
                     }
-                    block.vtx[0] = MakeTransactionRef(coinbaseTx);
-                    block.hashMerkleRoot = BlockMerkleRoot(block);
+                    // block.vtx[0] = MakeTransactionRef(coinbaseTx);
+                    // block.hashMerkleRoot = BlockMerkleRoot(block);
                     block.vchWitness = {GenerateCoinbaseCommitment(block, ::ChainActive().Tip(), Params().GetConsensus())};
                     // uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(block.nBits));
                     arith_uint256 bnTarget;
@@ -131,9 +141,14 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                         block.nTime = std::max(GetAdjustedTime(), ::ChainActive().Tip()->GetMedianTimePast() + 1);
 
                         int nHeight = ::ChainActive().Height() + 1;
-                        uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
-                            ? YespowerHash(block, &shared, nHeight)
-                            : block.GetHash();
+                        uint256 hash;
+                        if (nHeight >= Params().GetConsensus().sha256ForkHeight) {
+                            hash = block.GetHash();
+                        } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
+                            hash = YespowerHash(block, &shared, nHeight);
+                        } else {
+                            hash = block.GetHash();
+                        }
 
                         if (printCount < 10) {
                             LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
@@ -144,7 +159,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
                             LogPrintf("🧩 Merkle Root: %s\n", block.hashMerkleRoot.ToString());
                             LogPrintf("🎯 Coinbase TXID: %s\n", block.vtx[0]->GetHash().ToString());
-
+                            LogPrintf("🧱 Mining block with hashPrevBlock = %s | Expected = %s\n", block.hashPrevBlock.ToString(), ::ChainActive().Tip()->GetBlockHash().ToString());
                             std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(block);
                             bool fNewBlock = false;
                             if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
@@ -155,6 +170,24 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             }
 
                             foundBlock.store(true);
+                            int64_t finalElapsed = GetTimeMillis() - hashStart;
+                            if (finalElapsed > 0 && hashesDone > 0) {
+                                double finalRate = static_cast<double>(hashesDone) / (finalElapsed / 1000.0);
+                                double displayRate = finalRate;
+                                std::string unit = "H/s";
+                                if (finalRate >= 1e9) {
+                                    displayRate /= 1e9;
+                                    unit = "GH/s";
+                                } else if (finalRate >= 1e6) {
+                                    displayRate /= 1e6;
+                                    unit = "MH/s";
+                                } else if (finalRate >= 1e3) {
+                                    displayRate /= 1e3;
+                                    unit = "kH/s";
+                                }
+                                LogPrintf("⚡ [thread %d] Final Hashrate: %.2f %s\n", threadId, displayRate, unit.c_str());
+                            }
+
                             return;
                         }
 
@@ -162,7 +195,18 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
                             int64_t elapsed = GetTimeMillis() - hashStart;
                             if (elapsed >= 5000) {
                                 double rate = (double)hashesDone / (elapsed / 1000.0);
-                                LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
+                                std::string unit = "H/s";
+                                if (rate >= 1e9) {
+                                    rate /= 1e9;
+                                    unit = "GH/s";
+                                } else if (rate >= 1e6) {
+                                    rate /= 1e6;
+                                    unit = "MH/s";
+                                } else if (rate >= 1e3) {
+                                    rate /= 1e3;
+                                    unit = "kH/s";
+                                }
+                                LogPrintf("⚡ [thread %d] Hashrate: %.2f %s\n", threadId, rate, unit);
                                 totalHashes += hashesDone;
                                 hashesDone = 0;
                                 hashStart = GetTimeMillis();
@@ -413,10 +457,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CBlockIndex* pindexPrev = ::ChainActive().Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
+    // int32_t kawpowVersion = VERSIONBITS_KAWPOW;
+    int32_t defaultVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
 
-    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    pblock->nVersion = defaultVersion;
 
-    // Force SEGWIT bit if active
+    // Append SEGWIT bit if active 
     if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {
         pblock->nVersion |= VersionBitsMask(chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
     }
@@ -470,9 +516,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin[0].prevout.SetNull();
     CAmount blockReward = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
     CAmount governanceReward = blockReward / 10; // 10% goes to governance
-    coinbaseTx.vout.resize(2);
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    bool hasOpDest = IsValidDestination(opDest);
+    CAmount operatorReward = hasOpDest ? blockReward / 20 : 0; // 5%
+    coinbaseTx.vout.resize(hasOpDest ? 3 : 2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
-    coinbaseTx.vout[0].nValue = blockReward - governanceReward;
+    coinbaseTx.vout[0].nValue = blockReward - governanceReward - operatorReward;
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
     if (IsValidDestination(govDest)) {
         coinbaseTx.vout[1].scriptPubKey = GetScriptForDestination(govDest);
@@ -481,6 +530,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         // Fallback: pay entire reward to miner if governance address invalid
         coinbaseTx.vout.resize(1);
         coinbaseTx.vout[0].nValue = blockReward;
+    }
+    if (hasOpDest) {
+        coinbaseTx.vout[2].scriptPubKey = GetScriptForDestination(opDest);
+        coinbaseTx.vout[2].nValue = operatorReward;
     }
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     // Add witness nonce to scriptWitness

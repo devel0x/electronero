@@ -9,6 +9,8 @@
 #include <uint256.h>
 #include <limits>
 
+static const int32_t VERSIONBITS_KAWPOW = 0x20000038;
+
 namespace Consensus {
 
 enum DeploymentPos
@@ -51,10 +53,13 @@ struct Params {
     int nDGW3Height;
     uint256 powLimitYespower;
     int yespowerForkHeight;
-    int kawpowForkHeight;
+    int sha256ForkHeight;
     int difficultyForkHeight;
     int nextDifficultyForkHeight;
     int nextDifficultyFork2Height;
+    int nextDifficultyFork3Height;
+    int nextDifficultyFork4Height;
+    int nextDifficultyFork5Height;
     uint256 powLimitEasyBlocks;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;

@@ -9,6 +9,7 @@
 #include <primitives/transaction.h>
 #include <serialize.h>
 #include <uint256.h>
+#include "consensus/params.h"
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
@@ -27,13 +28,43 @@ public:
     uint32_t nTime;
     uint32_t nBits;
     uint32_t nNonce;
-
+    
     CBlockHeader()
     {
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) { READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce); }
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(nVersion);
+        READWRITE(hashPrevBlock);
+        READWRITE(hashMerkleRoot);
+        READWRITE(nTime);
+        READWRITE(nBits);
+        READWRITE(nNonce);
+    }
+    
+    SERIALIZE_METHODS(CBlockHeader, obj);
+
+    template<typename Stream, typename Operation>
+    static inline void SerializationOps(CBlockHeader& obj, Stream& s, Operation ser_action) {
+        obj.SerializationOp(s, ser_action);
+    }
+
+    template<typename Stream, typename Operation>
+    static inline void SerializationOps(const CBlockHeader& obj, Stream& s, Operation ser_action) {
+        const_cast<CBlockHeader&>(obj).SerializationOp(s, ser_action);
+    }
+
+    template <typename Stream>
+    void SerializeForHash(Stream& s, int height) const {
+        s << nVersion;
+        s << hashPrevBlock;
+        s << hashMerkleRoot;
+        s << nTime;
+        s << nBits;
+        s << nNonce;
+    }
 
     void SetNull()
     {

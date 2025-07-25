@@ -39,6 +39,7 @@
 #include <warnings.h>
 #include <script/standard.h>
 #include <key_io.h>
+#include "primitives/block.h"
 
 #include <memory>
 #include <stdint.h>
@@ -126,7 +127,14 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     const Consensus::Params& consensusParams = chainparams.GetConsensus();
     
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
-        uint256 powHash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
+        uint256 powHash;
+        if (height >= consensusParams.sha256ForkHeight) {
+            powHash = block.GetHash();
+        } else if (height >= consensusParams.yespowerForkHeight) {
+            powHash = YespowerHash(block, height);
+        } else {
+            powHash = block.GetHash();
+        }
         if (CheckProofOfWorkWithHeight(powHash, block, block.nBits, consensusParams, height)) {
             break;
         }
@@ -144,7 +152,15 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     if (!chainman.ProcessNewBlock(chainparams, shared_pblock, true, nullptr)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
-    block_hash = (height >= consensusParams.yespowerForkHeight) ? YespowerHash(block, height) : block.GetHash();
+
+    if (height >= consensusParams.sha256ForkHeight) {
+        block_hash = block.GetHash();
+    } else if (height >= consensusParams.yespowerForkHeight) {
+        block_hash = YespowerHash(block, height);
+    } else {
+        block_hash = block.GetHash();
+    }
+
     return true;
 }
 
@@ -684,10 +700,17 @@ static RPCHelpMan getblocktemplate()
             if (!DecodeHexBlk(block, dataval.get_str()))
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
 
+            uint256 hash;
             int nHeight = ::ChainActive().Height() + 1;
-            uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight)
-                ? YespowerHash(block, nHeight)
-                : block.GetHash();
+            const auto& consensus = Params().GetConsensus();
+
+            if (nHeight >= consensus.sha256ForkHeight) {
+                hash = block.GetHash();
+            } else if (nHeight >= consensus.yespowerForkHeight) {
+                hash = YespowerHash(block, nHeight);
+            } else {
+                hash = block.GetHash();
+            }
             const CBlockIndex* pindex = LookupBlockIndex(hash);
             if (pindex) {
                 if (pindex->IsValid(BLOCK_VALID_SCRIPTS))
@@ -943,6 +966,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
+
     result.pushKV("mintime", (int64_t)pindexPrev->GetMedianTimePast()+1);
     result.pushKV("mutable", aMutable);
     result.pushKV("noncerange", "00000000ffffffff");
@@ -984,9 +1008,19 @@ public:
 protected:
     void BlockChecked(const CBlock& block, const BlockValidationState& stateIn) override {
         int nHeight = ::ChainActive().Height() + 1;
-        uint256 block_expected_hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+        const Consensus::Params& consensus = Params().GetConsensus();
+
+        uint256 block_expected_hash;
+        if (nHeight >= consensus.sha256ForkHeight) {
+            block_expected_hash = block.GetHash();
+        } else if (nHeight >= consensus.yespowerForkHeight) {
+            block_expected_hash = YespowerHash(block, nHeight);
+        } else {
+            block_expected_hash = block.GetHash();
+        }
         if (block_expected_hash != hash)
             return;
+
         found = true;
         state = stateIn;
     }
@@ -1018,8 +1052,18 @@ static RPCHelpMan submitblock()
     if (block.vtx.empty() || !block.vtx[0]->IsCoinBase()) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not start with a coinbase");
     }
+
     int nHeight = ::ChainActive().Height() + 1;
-    uint256 hash = (nHeight >= Params().GetConsensus().yespowerForkHeight) ? YespowerHash(block, nHeight) : block.GetHash();
+    const Consensus::Params& consensus = Params().GetConsensus();
+    uint256 hash;
+    if (nHeight >= consensus.sha256ForkHeight) {
+        hash = block.GetHash();
+    } else if (nHeight >= consensus.yespowerForkHeight) {
+        hash = YespowerHash(block, nHeight);
+    } else {
+        hash = block.GetHash();
+    }
+
     {
         LOCK(cs_main);
         const CBlockIndex* pindex = LookupBlockIndex(hash);

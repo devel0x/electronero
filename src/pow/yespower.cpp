@@ -7,6 +7,18 @@
 #include "pow/yespower.h"
 #include "hash.h"
 #include "chainparams.h" // Needed for Params()
+#include <serialize.h>       // For SER_NETWORK, etc.
+#include <streams.h>         // ✅ Required for CVectorWriter
+#include <logging.h>
+
+struct CBlockHeader_Original {
+    int32_t nVersion;
+    uint256 hashPrevBlock;
+    uint256 hashMerkleRoot;
+    uint32_t nTime;
+    uint32_t nBits;
+    uint32_t nNonce;
+};
 
 // Legacy default (SHA256 height)
 static const yespower_params_t yespower_default = {
@@ -45,29 +57,28 @@ uint256 YespowerHash(const CBlockHeader& block, yespower_local_t* shared, int he
 {
     uint256 hash;
     const Consensus::Params& params = Params().GetConsensus();
-    const yespower_params_t* algo = (height >= 1)
-        ? &yespower_interchained
-        : &yespower_default;
+    const yespower_params_t* algo = (height >= 1) ? &yespower_interchained : &yespower_default;
 
-    if (yespower(shared, (const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash) != 0)
-        abort();
+    // 🪙 Hash exactly as originally mined (80 bytes)
+    int result = yespower(shared, (const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash);
+    // LogPrintf("✅ Legacy yespower result=%d at height=%d\n", result, height);
+    if (result != 0) abort();
 
     return hash;
 }
-
 
 // Used in CheckProofOfWork() (slow path)
 bool CheckYespower(const CBlockHeader& block, const arith_uint256& bnTarget, int height)
 {
     uint256 hash;
-    const Consensus::Params& params = Params().GetConsensus();
     const yespower_params_t* algo = (height >= 1)
         ? &yespower_interchained
         : &yespower_default;
+
+    const Consensus::Params& params = Params().GetConsensus();
 
     if (yespower_tls((const uint8_t*)&block, sizeof(CBlockHeader), algo, (yespower_binary_t*)&hash) != 0)
         return false;
 
     return UintToArith256(hash) <= bnTarget;
 }
-

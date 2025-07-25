@@ -8,7 +8,23 @@
 #include <hash.h>
 #include <tinyformat.h>
 #include "pow/yespower.h"
+// #include "crypto/kawpow/kawpow.h"
 
+// uint256 CBlockHeader::GetKAWPOWHeaderHash(const uint256& kawpowSeed) const
+// {
+//     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+//     ss << nVersion;
+//     ss << hashPrevBlock;
+//     ss << hashMerkleRoot;
+//     ss << nTime;
+//     ss << nBits;
+//     ss << kawpowSeed; 
+//     return ss.GetHash();
+// }
+
+// uint256 CBlockHeader::GetKAWPOWHash(int height) const {
+//     return ::GetKAWPOWHash(*this, height);
+// }
 
 uint256 CBlockHeader::YespowerHash(int height) const {
     return ::YespowerHash(*this, height);

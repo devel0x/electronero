@@ -11,6 +11,9 @@ const struct VBDeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION_B
         /*.name =*/ "testdummy",
         /*.gbt_force =*/ true,
     },
+    {  /* SEGWIT */ "segwit", 
+        /*.gbt_force =*/ false 
+    },
     {
         /*.name =*/ "taproot",
         /*.gbt_force =*/ true,

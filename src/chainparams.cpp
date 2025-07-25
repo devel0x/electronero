@@ -71,10 +71,13 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.kawpowForkHeight = std::numeric_limits<int>::max();
+        consensus.sha256ForkHeight = 11788;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
+        consensus.nextDifficultyFork3Height = 12245;
+        consensus.nextDifficultyFork4Height = 12500;
+        consensus.nextDifficultyFork5Height = 12528;
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
@@ -102,7 +105,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1230767999; // December 31, 2008
         
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].bit = 1;
-        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 1753036925;
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].min_activation_height = 1476;
         
@@ -527,16 +530,20 @@ const CChainParams &Params() {
 
 std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, const std::string& chain)
 {
+    std::unique_ptr<CChainParams> params;
     if (chain == CBaseChainParams::MAIN) {
-        return std::unique_ptr<CChainParams>(new CMainParams());
+        params = std::unique_ptr<CChainParams>(new CMainParams());
     } else if (chain == CBaseChainParams::TESTNET) {
-        return std::unique_ptr<CChainParams>(new CTestNetParams());
+        params = std::unique_ptr<CChainParams>(new CTestNetParams());
     } else if (chain == CBaseChainParams::SIGNET) {
-        return std::unique_ptr<CChainParams>(new SigNetParams(args));
+        params = std::unique_ptr<CChainParams>(new SigNetParams(args));
     } else if (chain == CBaseChainParams::REGTEST) {
-        return std::unique_ptr<CChainParams>(new CRegTestParams(args));
+        params = std::unique_ptr<CChainParams>(new CRegTestParams(args));
+    } else {
+        throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
     }
-    throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
+    params->strNodeOperatorWallet = args.GetArg("-nodeoperatorwallet", "");
+    return params;
 }
 
 void SelectParams(const std::string& network)
