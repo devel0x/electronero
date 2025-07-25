@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+</head>
+<body>
+    <h1>Admin Dashboard</h1>
+    <h2>User Progress</h2>
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Points</th>
+            <th>Wallet</th>
+            <th>IP</th>
+            <th>Referrals</th>
+            <th>Completed Tasks</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.points }}</td>
+            <td>{{ user.wallet_address or '' }}</td>
+            <td>{{ user.ip_address }}</td>
+            <td>{{ referral_counts.get(user.id, 0) }}</td>
+            <td>{{ task_counts.get(user.id, 0) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Reward Claims</h2>
+    <table border="1">
+        <tr>
+            <th>User ID</th>
+            <th>Points</th>
+            <th>Reward ITC</th>
+            <th>Claimed At</th>
+            <th>TXID</th>
+            <th>Action</th>
+        </tr>
+        {% for claim in claims %}
+        <tr>
+            <td>{{ claim.user_id }}</td>
+            <td>{{ claim.points }}</td>
+            <td>{{ '%.2f' % claim.reward_itc }}</td>
+            <td>{{ claim.claimed_at }}</td>
+            <td>{{ claim.txid or '' }}</td>
+            <td>
+                {% if not claim.txid %}
+                <form action="/process_claim/{{ claim.id }}" method="post">
+                    <button type="submit">Send Payment</button>
+                </form>
+                {% else %}
+                Paid
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
