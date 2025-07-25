@@ -85,6 +85,9 @@ TELEGRAM_GROUP_ID  # Numeric ID of the Telegram group to verify
 To obtain your Telegram group ID, invite the `@userinfobot` (or a similar bot)
 to your group and send `/start`. The bot will reply with the numeric
 `chat_id`, which is the value to use for `TELEGRAM_GROUP_ID`.
+Usernames submitted by participants are converted to their numeric ID using
+Telegram's `getChat` (also known as `resolveUsername`) before checking
+membership with `getChatMember`.
 
 ### Example Environment Setup
 
