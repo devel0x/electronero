@@ -9,6 +9,7 @@
     function apiUrl(path){
         return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
     }
+
     const taskNames = [
         'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet'
     ];
@@ -23,15 +24,9 @@
         tweet: '{{ t.share_tweet }}'
     };
 
-    function saveCreds(){
-        localStorage.setItem('username', document.getElementById('username').value);
-        localStorage.setItem('password', document.getElementById('password').value);
-        localStorage.setItem('user_id', document.getElementById('user_id').value);
-    }
-
     function authHeaders(){
-        const u = document.getElementById('username').value;
-        const p = document.getElementById('password').value;
+        const u = localStorage.getItem('username');
+        const p = localStorage.getItem('password');
         const headers = {'Content-Type': 'application/json'};
         if(u && p){
             headers['Authorization'] = 'Basic ' + btoa(u + ':' + p);
@@ -40,7 +35,7 @@
     }
 
     async function completeTask(taskName){
-        const userId = document.getElementById('user_id').value;
+        const userId = localStorage.getItem('user_id');
         const response = await fetch(apiUrl(`/tasks/${userId}`), {
             method: 'POST',
             headers: authHeaders(),
@@ -52,35 +47,23 @@
     }
 
     async function claimReward(){
-        const userId = document.getElementById('user_id').value;
+        const userId = localStorage.getItem('user_id');
         const response = await fetch(apiUrl(`/claim/${userId}`), {method: 'POST', headers: authHeaders()});
         const msg = await response.json();
         alert(msg.message || msg.detail);
         loadProgress();
     }
 
-    async function saveWallet(){
-        const userId = document.getElementById('user_id').value;
-        const address = document.getElementById('wallet_address').value;
-        const response = await fetch(apiUrl('/payout_address'), {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({user_id: parseInt(userId), address})
-        });
-        const msg = await response.json();
-        alert(msg.message || msg.detail);
-    }
-
     function updateReferral(){
         const base = "{{ links.referral_base }}";
-        const userId = document.getElementById('user_id').value;
+        const userId = localStorage.getItem('user_id');
         const span = document.getElementById('referral_link');
         span.textContent = base && userId ? `${base}?ref=${userId}` : '';
         loadProgress();
     }
 
     async function loadProgress(){
-        const userId = document.getElementById('user_id').value;
+        const userId = localStorage.getItem('user_id');
         if(!userId){return;}
         const resp = await fetch(apiUrl(`/progress/${userId}`), {headers: authHeaders()});
         if(!resp.ok){return;}
@@ -97,28 +80,17 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('username').value = localStorage.getItem('username') || '';
-        document.getElementById('password').value = localStorage.getItem('password') || '';
-        document.getElementById('user_id').value = localStorage.getItem('user_id') || '';
         updateReferral();
         loadProgress();
     });
     </script>
 </head>
 <body>
-    <header>
-        <img src="/static/logo.png" class="logo" alt="Logo">
-        <h1>{{ t.title }}</h1>
-    </header>
-    <div class="main-container">
-    <h2>{{ t.intro_heading }}</h2>
-    <p>{{ t.intro_text }}</p>
-    <p>{{ t.instructions }}</p>
-    <label>Username <input id="username" placeholder="Your username" oninput="saveCreds()"/></label>
-    <label>Password <input id="password" type="password" oninput="saveCreds()"/></label>
-    <label>User ID <input id="user_id" placeholder="Enter your user id" oninput="saveCreds();updateReferral()"/></label>
-    <label>Wallet <input id="wallet_address" placeholder="Your ITC address"/></label>
-    <button onclick="saveWallet()">Save Address</button>
+<header>
+    <img src="/static/logo.png" class="logo" alt="Logo">
+    <h1>{{ t.title }}</h1>
+</header>
+<div class="main-container">
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
     <ul id="progress_list"></ul>
@@ -157,14 +129,11 @@
         </li>
     </ul>
     <button onclick="claimReward()">{{ t.claim_reward }}</button>
-    <p>
-        {{ t.referral_link }}
-        <span id="referral_link"></span>
-    </p>
+    <p>{{ t.referral_link }} <span id="referral_link"></span></p>
     <p><a href="/login">Login</a> | <a href="/register">Register</a></p>
-    </div>
-    <footer>
-        Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
-    </footer>
+</div>
+<footer>
+    Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
+</footer>
 </body>
 </html>

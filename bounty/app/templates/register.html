@@ -15,6 +15,7 @@
             twitter_handle: document.getElementById('twitter').value,
             discord_handle: document.getElementById('discord').value,
             reddit_username: document.getElementById('reddit').value,
+            wallet_address: document.getElementById('wallet_address').value,
             referral_code: document.getElementById('referral').value || null
         };
         const resp = await fetch('/users', {
@@ -45,6 +46,7 @@
     <label>Twitter <input id="twitter"></label><br>
     <label>Discord <input id="discord"></label><br>
     <label>Reddit <input id="reddit"></label><br>
+    <label>Wallet Address <input id="wallet_address"></label><br>
     <label>Referral Code <input id="referral"></label><br>
     <label>Captcha Token <input id="captcha"></label><br>
     <button onclick="registerUser()">Submit</button>

@@ -30,6 +30,7 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
         twitter_handle=user.twitter_handle,
         discord_handle=user.discord_handle,
         reddit_username=user.reddit_username,
+        wallet_address=user.wallet_address,
         referral_code=code,
         referred_by_id=user.referred_by_id,
         ip_address=ip_address,
