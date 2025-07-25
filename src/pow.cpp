@@ -12,7 +12,7 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
-unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
+unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 // BITCOIN LEGACY DAA
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
@@ -26,7 +26,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     }
     // Activate DGW3 from block 1 (for example)
     if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
-        return DarkGravityWave3(pindexLast, params);
+        return DarkGravityWave3Nova(pindexLast, params);
     }
     
     arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
@@ -65,16 +65,16 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 }
 
 // DGW3
-unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
+unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
     int nextHeight = pindexLast->nHeight + 1;
-    const int nPastBlocks = (nextHeight >= params.nextDifficultyFork3Height) ? 12 : 24;
+    const int nPastBlocks = (nextHeight >= params.nextDifficultyFork5Height) ? 12 : 24;
 
     arith_uint256 limit = UintToArith256(
         (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
     );
-    LogPrintf("💡 DGW3.5: powLimit used = %s\n", limit.ToString());
+    LogPrintf("💡 DGW3-NOVA: powLimit used = %s\n", limit.ToString());
 
     if (nextHeight < nPastBlocks)
         return limit.GetCompact();
@@ -102,24 +102,23 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
     }
 
     const int64_t targetTimespan = nPastBlocks * params.nPowTargetSpacing;
-    const bool v6 = nextHeight >= 12818;
-    const bool v7 = nextHeight >= 14299;
-    const bool v8 = nextHeight >= 14342;
+    const bool v9 = nextHeight >= params.nextDifficultyFork5Height;
 
     // Define clamping bounds
-    int64_t minTimespanClamp = v6 ? (targetTimespan / 3) : (nextHeight >= params.nextDifficultyFork3Height) ? (targetTimespan / 4) : (targetTimespan / 3);
-    int64_t maxTimespanClamp = v6 ? (targetTimespan * 3) : (nextHeight >= params.nextDifficultyFork3Height) ? (targetTimespan * 4) : (targetTimespan * 3);
+    int64_t minTimespanClamp = (targetTimespan / 3);
+    int64_t maxTimespanClamp = (targetTimespan * 3);
 
-    int64_t emergencyClamp = v6 ? (targetTimespan / 3) : (nextHeight >= params.nextDifficultyFork5Height) ? (targetTimespan / 4) : (targetTimespan / 6);
-    int64_t minSolveClamp = v6 ? (targetTimespan / 4) : (nextHeight >= params.nextDifficultyFork5Height) ? (targetTimespan / 6) : (targetTimespan / 8);
+    int64_t emergencyClamp = v9 ? (targetTimespan / 3) : (targetTimespan / 6);
+    int64_t minSolveClamp = v9 ? (targetTimespan / 4) : (targetTimespan / 8);
 
-    const int64_t minSolveTime = v7 ? 15 : (nextHeight >= 14228 ? 10 : 5);
+    const int64_t minSolveTime = 12;
+
     int64_t actualSolveTime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
     int64_t unclampedActualTimespan = actualTimespan;  // Save raw timespan
 
     // Rolling median of solve times (Fork 8)
     int64_t rollingSolveTime = actualSolveTime;
-    if (v8) {
+    if (v9) {
         std::vector<int64_t> solveTimes;
         const CBlockIndex* cursor = pindexLast;
         for (int i = 0; i < std::min(nPastBlocks, 9); ++i) {
@@ -130,29 +129,25 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         }
         std::sort(solveTimes.begin(), solveTimes.end());
         rollingSolveTime = solveTimes[solveTimes.size() / 2];
-        LogPrintf("🌀 Rolling median solve time = %ds\n", rollingSolveTime);
+        LogPrintf("🌀 DGW3-NOVA Rolling median solve time = %ds\n", rollingSolveTime);
     }
 
     // Trigger emergency logic BEFORE clamping
-    bool triggered = v7
-        ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 6)
-        : (v6
-            ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 5)
-            : (actualSolveTime < minSolveTime || unclampedActualTimespan < targetTimespan / 6));
+    bool triggered = v9 ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 6) : (actualSolveTime < minSolveTime || unclampedActualTimespan < targetTimespan / 6));
 
     if (triggered && nextHeight >= params.nextDifficultyFork3Height) {
-        LogPrintf("🚨 [Fork%s] Emergency/min solve triggered. Solve=%ds Timespan=%ds\n",
-                v6 ? "6" : "", actualSolveTime, unclampedActualTimespan);
+        LogPrintf("🚨 [DGW3%s] Emergency/min solve triggered. Solve=%ds Timespan=%ds\n",
+                v9 ? "-NOVA" : "", actualSolveTime, unclampedActualTimespan);
         actualTimespan = std::min(actualTimespan, std::min(emergencyClamp, minSolveClamp));
     }
 
     // Height-aware clamp normally after emergency trigger check
-    if (nextHeight >= 14067) {
+    if (nextHeight >= v9) {
         if (!triggered) {
             if (actualTimespan < minTimespanClamp) actualTimespan = minTimespanClamp;
             if (actualTimespan > maxTimespanClamp) actualTimespan = maxTimespanClamp;
         } else {
-            LogPrintf("🛡️ Emergency trigger at height %d: skipping normal clamps\n", nextHeight);
+            LogPrintf("🛡️ DGW3-NOVA Emergency trigger at height %d: skipping normal clamps\n", nextHeight);
         }
     } else {
         if (actualTimespan < minTimespanClamp) actualTimespan = minTimespanClamp;
@@ -161,28 +156,18 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
 
     // Graceful decay logic
     double decayFactor = 1.0;
-    if (nextHeight >= 12818 && actualSolveTime > params.nPowTargetSpacing) {
+    if (nextHeight >= v9 && actualSolveTime > params.nPowTargetSpacing) {
         double multiplier = std::min(6.0, double(actualSolveTime) / params.nPowTargetSpacing);
-        double decayExponent = v7 ? 0.45 : (nextHeight >= 14228 ? 0.5 : 0.6);
-        double decayLimit = v7 ? 2.0 : (nextHeight >= 14228 ? 3.0 : 4.0);
+        double decayExponent = 0.45;
+        double decayLimit = 2.0;
         decayFactor = std::pow(multiplier, decayExponent);
         decayFactor = std::min(decayFactor, decayLimit);
-        LogPrintf("📉 DGW-NOVA graceful decay (v6) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
-    } else if (nextHeight >= params.nextDifficultyFork5Height && actualSolveTime > params.nPowTargetSpacing) {
-        double multiplier = std::min(3.0, double(actualSolveTime) / params.nPowTargetSpacing);
-        decayFactor = std::pow(multiplier, 0.4);
-        decayFactor = std::min(decayFactor, 4.0);
-        LogPrintf("📉 DGW3.5 graceful decay (v5) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
-    } else if (nextHeight >= params.nextDifficultyFork4Height && actualSolveTime > params.nPowTargetSpacing) {
-        double multiplier = std::min(3.0, double(actualSolveTime) / params.nPowTargetSpacing);
-        decayFactor = 1.0 + std::log2(multiplier);
-        decayFactor = std::min(decayFactor, 4.0);
-        LogPrintf("📉 DGW3.5 graceful decay (v4) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
-    }
+        LogPrintf("📉 DGW3-NOVA graceful decay (v9) applied: factor=%.2f (solve=%ds)\n", decayFactor, actualSolveTime);
+    } 
 
-    // Median smoothing of pastDifficultyAverage (Fork 8)
+    // Median smoothing of pastDifficultyAverage (Fork 9)
     arith_uint256 difficultySmoothing = pastDifficultyAverage;
-    if (v8) {
+    if (v9) {
         std::vector<arith_uint256> pastDiffs;
         const CBlockIndex* cursor = pindexLast;
         for (int i = 0; i < std::min(nPastBlocks, 5); ++i) {
@@ -194,24 +179,17 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         }
         std::sort(pastDiffs.begin(), pastDiffs.end());
         difficultySmoothing = pastDiffs[pastDiffs.size() / 2];
-        LogPrintf("📊 Difficulty median smoothing active\n");
+        LogPrintf("📊 DGW3-NOVA Difficulty median smoothing active\n");
     }
 
     // Final difficulty calculation with asymmetry
     arith_uint256 baseline = difficultySmoothing * actualTimespan / targetTimespan;
     arith_uint256 newDifficulty = baseline;
 
-    if (nextHeight >= 12575 && decayFactor > 1.0) {
+    if (nextHeight >= v9 && decayFactor > 1.0) {
         arith_uint256 diffToPrevious = baseline > difficultySmoothing ? (baseline - difficultySmoothing) : 0;
         newDifficulty = baseline - (diffToPrevious / decayFactor);
-        LogPrintf("🪂 DGW3.5 decay-from-baseline: newDifficulty=%.8f\n", newDifficulty.getdouble());
-    } else {
-        if (v8 && baseline < difficultySmoothing) {
-            newDifficulty = difficultySmoothing - ((difficultySmoothing - baseline) / decayFactor);
-            LogPrintf("⛏️ Fork 8 asymmetric clamp (drop): newDifficulty=%.8f\n", newDifficulty.getdouble());
-        } else {
-            newDifficulty = difficultySmoothing * actualTimespan * decayFactor / targetTimespan;
-        }
+        LogPrintf("🪂 DGW3-NOVA decay-from-baseline: newDifficulty=%.8f\n", newDifficulty.getdouble());
     }
 
     arith_uint256 bnPowLimit = UintToArith256(
@@ -222,7 +200,7 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Pa
         newDifficulty = bnPowLimit;
     }
 
-    LogPrintf("⛏️ Retargeting at height=%d with DGW3.5\n", pindexLast->nHeight);
+    LogPrintf("⛏️ Retargeting at height=%d with DGW3-NOVA\n", pindexLast->nHeight);
     return newDifficulty.GetCompact();
 }
 
