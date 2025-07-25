@@ -110,38 +110,39 @@
     <p>{{ t.instructions }}</p>
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
+    <p id="conversion">{{ t.conversion_rate.format(itc=itc_per_point) }}</p>
     <ul id="progress_list" class="list-group mb-3"></ul>
     <ul class="list-group mb-3">
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.telegram }}" target="_blank">Telegram</a>
+            <a href="{{ links.telegram }}" target="_blank">{{ t.join_telegram_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('telegram')">{{ t.join_telegram }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.x_profile }}" target="_blank">X Profile</a>
+            <a href="{{ links.x_profile }}" target="_blank">{{ t.follow_x_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('x')">{{ t.follow_x }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.discord }}" target="_blank">Discord</a>
+            <a href="{{ links.discord }}" target="_blank">{{ t.join_discord_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('discord')">{{ t.join_discord }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.web_wallet }}" target="_blank">Web Wallet</a>
+            <a href="{{ links.web_wallet }}" target="_blank">{{ t.register_web_wallet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('web_wallet')">{{ t.register_web_wallet }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.mobile_wallet }}" target="_blank">Mobile Wallet</a>
+            <a href="{{ links.mobile_wallet }}" target="_blank">{{ t.register_mobile_wallet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('mobile_wallet')">{{ t.register_mobile_wallet }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.newsletter }}" target="_blank">Newsletter</a>
+            <a href="{{ links.newsletter }}" target="_blank">{{ t.subscribe_newsletter_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('newsletter')">{{ t.subscribe_newsletter }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.reddit }}" target="_blank">Reddit</a>
+            <a href="{{ links.reddit }}" target="_blank">{{ t.follow_reddit_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('reddit')">{{ t.follow_reddit }}</button>
         </li>
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <a href="{{ links.tweet }}" target="_blank">Tweet</a>
+            <a href="{{ links.tweet }}" target="_blank">{{ t.share_tweet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
         </li>
     </ul>
