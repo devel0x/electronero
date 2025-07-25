@@ -41,7 +41,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 ## Submission Guidelines
 
 1. Create an account from the `/register` page or by calling `/users` directly. Provide a unique
-   `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
+   `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles. The
+   Telegram handle may be provided as `@username`; the server will automatically resolve it to the
+   numeric Telegram ID when your account is created.
    Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
    `referral_code`. Each IP may register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.

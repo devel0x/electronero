@@ -25,6 +25,27 @@ def verify_captcha(token: str) -> bool:
         return False
 
 
+def resolve_telegram_username(handle: str) -> str | None:
+    """Return the numeric Telegram ID for a username if possible."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token or not handle:
+        return None
+    # Already numeric
+    if handle.lstrip("@").isdigit():
+        return handle.lstrip("@")
+    try:
+        resp = httpx.get(
+            f"https://api.telegram.org/bot{token}/getChat",
+            params={"chat_id": handle.lstrip("@")},
+            timeout=5,
+        )
+        if resp.status_code != 200 or not resp.json().get("ok"):
+            return None
+        return str(resp.json()["result"].get("id"))
+    except Exception:
+        return None
+
+
 def verify_telegram(username: str) -> bool:
     """Check if the user has joined the configured Telegram group."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -33,14 +54,8 @@ def verify_telegram(username: str) -> bool:
         return False
 
     base_url = f"https://api.telegram.org/bot{token}/"
-    # Telegram's getChatMember requires a numeric user id. Attempt to resolve the
-    # username first so users only need to provide their handle.
     try:
-        handle = username.lstrip("@")
-        resp = httpx.get(base_url + "getChat", params={"chat_id": handle}, timeout=5)
-        if resp.status_code != 200 or not resp.json().get("ok"):
-            return False
-        user_id = resp.json()["result"].get("id")
+        user_id = resolve_telegram_username(username)
         if not user_id:
             return False
 

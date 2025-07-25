@@ -3,7 +3,7 @@ import secrets
 import subprocess
 import os
 from passlib.context import CryptContext
-from . import models, schemas
+from . import models, schemas, utils
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -22,11 +22,13 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
     if db.query(models.User).filter(models.User.ip_address == ip_address).first():
         return None
     code = user.referral_code or _generate_referral_code(db)
+    tg_id = utils.resolve_telegram_username(user.telegram_handle)
+    telegram_handle = tg_id if tg_id else user.telegram_handle
     db_user = models.User(
         username=user.username,
         email=user.email,
         password_hash=pwd_context.hash(user.password),
-        telegram_handle=user.telegram_handle,
+        telegram_handle=telegram_handle,
         twitter_handle=user.twitter_handle,
         discord_handle=user.discord_handle,
         reddit_username=user.reddit_username,
