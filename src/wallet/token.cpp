@@ -472,6 +472,12 @@ bool TokenLedger::RecordOperationOnChain(const std::string& wallet, const TokenO
     bool created = from->CreateTransaction(vecSend, tx, nFeeRequired, nChangePosRet, err, cc, fee_calc, !from->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     if (!created) return false;
     from->CommitTransaction(tx, {}, {});
+
+    LOCK(m_mutex);
+    if (!op.memo.empty()) {
+        m_tx_memos[{op.token, tx->GetHash()}] = op.memo;
+        Flush();
+    }
     return true;
 }
 
@@ -566,6 +572,9 @@ std::vector<TokenOperation> TokenLedger::TokenHistory(const std::string& token, 
 std::string TokenLedger::GetTokenTxMemo(const std::string& token, const uint256& hash) const
 {
     LOCK(m_mutex);
+    auto it_m = m_tx_memos.find({token, hash});
+    if (it_m != m_tx_memos.end()) return it_m->second;
+
     auto it = m_history.find(token);
     if (it == m_history.end()) return "";
     for (const auto& op : it->second) {
@@ -716,6 +725,26 @@ struct TokenLedgerStateV2 {
     }
 };
 
+struct TokenLedgerStateV3 {
+    std::map<std::pair<std::string, std::string>, CAmount> balances;
+    std::map<AllowanceKey, CAmount> allowances;
+    std::map<std::string, CAmount> totalSupply;
+    std::map<std::string, TokenMeta> token_meta;
+    std::map<std::string, std::vector<TokenOperation>> history;
+    CAmount governance_fees{0};
+    CAmount fee_per_vbyte{1};
+    CAmount create_fee_per_vbyte{10000000};
+    std::map<std::string, WalletSigners> wallet_signers;
+    int64_t tip_height{0};
+    uint32_t version{TOKEN_DB_VERSION};
+
+    SERIALIZE_METHODS(TokenLedgerStateV3, obj) {
+        READWRITE(obj.balances, obj.allowances, obj.totalSupply, obj.token_meta, obj.history,
+                  obj.governance_fees, obj.fee_per_vbyte, obj.create_fee_per_vbyte,
+                  obj.wallet_signers, obj.tip_height, obj.version);
+    }
+};
+
 bool TokenLedger::Load()
 {
     LOCK(m_mutex);
@@ -729,8 +758,23 @@ bool TokenLedger::Load()
 
     TokenLedgerState state;
 
-    if (version >= 3) {
+    if (version >= 4) {
         if (!g_token_db->Read('s', state)) return false;
+    } else if (version == 3) {
+        TokenLedgerStateV3 state_v3;
+        if (!g_token_db->Read('s', state_v3)) return false;
+
+        state.balances = state_v3.balances;
+        state.allowances = state_v3.allowances;
+        state.totalSupply = state_v3.totalSupply;
+        state.token_meta = state_v3.token_meta;
+        state.history = state_v3.history;
+        state.tx_memos.clear();
+        state.governance_fees = state_v3.governance_fees;
+        state.fee_per_vbyte = state_v3.fee_per_vbyte;
+        state.create_fee_per_vbyte = state_v3.create_fee_per_vbyte;
+        state.wallet_signers = state_v3.wallet_signers;
+        state.tip_height = state_v3.tip_height;
     } else {
         TokenLedgerStateV2 state_v2;
         if (!g_token_db->Read('s', state_v2)) return false;
@@ -740,6 +784,7 @@ bool TokenLedger::Load()
         state.totalSupply = state_v2.totalSupply;
         state.token_meta = state_v2.token_meta;
         state.history = state_v2.history;
+        state.tx_memos.clear();
         state.governance_fees = state_v2.governance_fees;
         state.fee_per_vbyte = state_v2.fee_per_vbyte;
         state.create_fee_per_vbyte = state_v2.create_fee_per_vbyte;
@@ -771,6 +816,7 @@ bool TokenLedger::Load()
     m_totalSupply = state.totalSupply;
     m_token_meta = state.token_meta;
     m_history = state.history;
+    m_tx_memos = state.tx_memos;
     m_governance_fees = state.governance_fees;
     m_fee_per_vbyte = state.fee_per_vbyte;
     m_create_fee_per_vbyte = state.create_fee_per_vbyte;
@@ -795,6 +841,7 @@ bool TokenLedger::Flush() const
     state.totalSupply = m_totalSupply;
     state.token_meta = m_token_meta;
     state.history = m_history;
+    state.tx_memos = m_tx_memos;
     state.governance_fees = m_governance_fees;
     state.fee_per_vbyte = m_fee_per_vbyte;
     state.create_fee_per_vbyte = m_create_fee_per_vbyte;
@@ -834,6 +881,9 @@ void TokenLedger::ProcessBlock(const CBlock& block, int height)
             if (DecodeTokenOp(out.scriptPubKey, op)) {
                 LOCK(m_mutex);
                 ReplayOperation(op, height);
+                if (!op.memo.empty()) {
+                    m_tx_memos[{op.token, tx->GetHash()}] = op.memo;
+                }
             }
         }
     }

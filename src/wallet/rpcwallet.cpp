@@ -5841,7 +5841,7 @@ static RPCHelpMan token_tx_memo()
         "\nReturn memo for a token transaction.\n",
         {
             {"token", RPCArg::Type::STR, RPCArg::Optional::NO, "Token identifier"},
-            {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "Token transaction hash"},
+            {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "On-chain transaction hash"},
         },
         RPCResult{
             RPCResult::Type::STR,
@@ -5849,7 +5849,7 @@ static RPCHelpMan token_tx_memo()
             "Memo string"
         },
         RPCExamples{
-            HelpExampleCli("token_tx_memo", "\"tokenidtok\" \"txidhash\"")
+            HelpExampleCli("token_tx_memo", "\"tokenidtok\" \"txid\"")
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
