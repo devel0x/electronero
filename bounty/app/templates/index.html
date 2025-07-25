@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>{{ t.title }}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script>
     const SERVER_PORT = '{{ server_port }}';
     function apiUrl(path){
@@ -22,6 +23,12 @@
         reddit: '{{ t.follow_reddit }}',
         tweet: '{{ t.share_tweet }}'
     };
+
+    function showAlert(message){
+        document.getElementById('alertModalBody').textContent = message;
+        const modal = new bootstrap.Modal(document.getElementById('alertModal'));
+        modal.show();
+    }
 
     function saveCreds(){
         localStorage.setItem('username', document.getElementById('username').value);
@@ -47,7 +54,7 @@
             body: JSON.stringify({task_name: taskName, completed: true})
         });
         const msg = await response.json();
-        alert(msg.message || msg.detail);
+        showAlert(msg.message || msg.detail);
         loadProgress();
     }
 
@@ -55,7 +62,7 @@
         const userId = document.getElementById('user_id').value;
         const response = await fetch(apiUrl(`/claim/${userId}`), {method: 'POST', headers: authHeaders()});
         const msg = await response.json();
-        alert(msg.message || msg.detail);
+        showAlert(msg.message || msg.detail);
         loadProgress();
     }
 
@@ -68,7 +75,7 @@
             body: JSON.stringify({user_id: parseInt(userId), address})
         });
         const msg = await response.json();
-        alert(msg.message || msg.detail);
+        showAlert(msg.message || msg.detail);
     }
 
     function updateReferral(){
@@ -90,8 +97,9 @@
         ul.innerHTML = '';
         taskNames.forEach(n => {
             const li = document.createElement('li');
+            li.className = 'list-group-item';
             const done = data.completed_tasks.includes(n);
-            li.textContent = taskLabels[n] + ': ' + (done ? '✔' : '✘');
+            li.innerHTML = `<input class="form-check-input me-2" type="checkbox" ${done ? 'checked' : ''} disabled> ${taskLabels[n]}`;
             ul.appendChild(li);
         });
     }
@@ -106,57 +114,69 @@
     </script>
 </head>
 <body>
-    <header>
+    <header class="d-flex align-items-center p-3">
         <img src="/static/logo.png" class="logo" alt="Logo">
         <h1>{{ t.title }}</h1>
     </header>
-    <div class="main-container">
+    <div class="main-container container my-4">
     <h2>{{ t.intro_heading }}</h2>
     <p>{{ t.intro_text }}</p>
     <p>{{ t.instructions }}</p>
-    <label>Username <input id="username" placeholder="Your username" oninput="saveCreds()"/></label>
-    <label>Password <input id="password" type="password" oninput="saveCreds()"/></label>
-    <label>User ID <input id="user_id" placeholder="Enter your user id" oninput="saveCreds();updateReferral()"/></label>
-    <label>Wallet <input id="wallet_address" placeholder="Your ITC address"/></label>
-    <button onclick="saveWallet()">Save Address</button>
+    <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input id="username" class="form-control" placeholder="Your username" oninput="saveCreds()" />
+    </div>
+    <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input id="password" type="password" class="form-control" oninput="saveCreds()" />
+    </div>
+    <div class="mb-3">
+        <label for="user_id" class="form-label">User ID</label>
+        <input id="user_id" class="form-control" placeholder="Enter your user id" oninput="saveCreds();updateReferral()" />
+    </div>
+    <div class="mb-3">
+        <label for="wallet_address" class="form-label">Wallet</label>
+        <input id="wallet_address" class="form-control" placeholder="Your ITC address" />
+    </div>
+    <button class="btn btn-secondary mb-3" onclick="saveWallet()">Save Address</button>
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
-    <ul id="progress_list"></ul>
-    <ul>
-        <li>
+    <ul id="progress_list" class="list-group mb-3"></ul>
+    <ul class="list-group mb-3">
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.telegram }}" target="_blank">Telegram</a>
-            <button onclick="completeTask('telegram')">{{ t.join_telegram }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('telegram')">{{ t.join_telegram }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.x_profile }}" target="_blank">X Profile</a>
-            <button onclick="completeTask('x')">{{ t.follow_x }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('x')">{{ t.follow_x }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.discord }}" target="_blank">Discord</a>
-            <button onclick="completeTask('discord')">{{ t.join_discord }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('discord')">{{ t.join_discord }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.web_wallet }}" target="_blank">Web Wallet</a>
-            <button onclick="completeTask('web_wallet')">{{ t.register_web_wallet }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('web_wallet')">{{ t.register_web_wallet }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.mobile_wallet }}" target="_blank">Mobile Wallet</a>
-            <button onclick="completeTask('mobile_wallet')">{{ t.register_mobile_wallet }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('mobile_wallet')">{{ t.register_mobile_wallet }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.newsletter }}" target="_blank">Newsletter</a>
-            <button onclick="completeTask('newsletter')">{{ t.subscribe_newsletter }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('newsletter')">{{ t.subscribe_newsletter }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.reddit }}" target="_blank">Reddit</a>
-            <button onclick="completeTask('reddit')">{{ t.follow_reddit }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('reddit')">{{ t.follow_reddit }}</button>
         </li>
-        <li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.tweet }}" target="_blank">Tweet</a>
-            <button onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
         </li>
     </ul>
-    <button onclick="claimReward()">{{ t.claim_reward }}</button>
+    <button class="btn btn-success mb-3" onclick="claimReward()">{{ t.claim_reward }}</button>
     <p>
         {{ t.referral_link }}
         <span id="referral_link"></span>
@@ -166,5 +186,22 @@
     <footer>
         Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
     </footer>
+
+    <div class="modal fade" id="alertModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="alertModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
