@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+SQLAlchemy
+pymysql
+pydantic
+httpx
+jinja2
