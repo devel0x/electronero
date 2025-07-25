@@ -5,6 +5,10 @@
     <title>{{ t.title }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <script>
+    const SERVER_PORT = '{{ server_port }}';
+    function apiUrl(path){
+        return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
+    }
     const taskNames = [
         'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet'
     ];
@@ -31,7 +35,7 @@
 
     async function completeTask(taskName){
         const userId = document.getElementById('user_id').value;
-        const response = await fetch(`/tasks/${userId}`, {
+        const response = await fetch(apiUrl(`/tasks/${userId}`), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({task_name: taskName, completed: true})
@@ -43,7 +47,7 @@
 
     async function claimReward(){
         const userId = document.getElementById('user_id').value;
-        const response = await fetch(`/claim/${userId}`, {method: 'POST', headers: authHeaders()});
+        const response = await fetch(apiUrl(`/claim/${userId}`), {method: 'POST', headers: authHeaders()});
         const msg = await response.json();
         alert(msg.message || msg.detail);
         loadProgress();
@@ -52,7 +56,7 @@
     async function saveWallet(){
         const userId = document.getElementById('user_id').value;
         const address = document.getElementById('wallet_address').value;
-        const response = await fetch('/payout_address', {
+        const response = await fetch(apiUrl('/payout_address'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({user_id: parseInt(userId), address})
@@ -72,7 +76,7 @@
     async function loadProgress(){
         const userId = document.getElementById('user_id').value;
         if(!userId){return;}
-        const resp = await fetch(`/progress/${userId}`, {headers: authHeaders()});
+        const resp = await fetch(apiUrl(`/progress/${userId}`), {headers: authHeaders()});
         if(!resp.ok){return;}
         const data = await resp.json();
         document.getElementById('points').textContent = `${data.points} {{ t.points_label }}`;

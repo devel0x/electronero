@@ -17,9 +17,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
     `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET` and `ADMIN_PASSWORD`.
 4. Run the application
    ```bash
-   uvicorn main:app --reload
+   uvicorn main:app --reload --port ${SERVER_PORT:-8000}
    ```
-5. Open `http://localhost:8000` in a browser to use the built‑in frontend.
+5. Open `http://localhost:${SERVER_PORT:-8000}` in a browser to use the built‑in frontend.
 
 ## API Endpoints
 
