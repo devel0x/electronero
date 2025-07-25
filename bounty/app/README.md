@@ -179,3 +179,6 @@ Upcoming improvements include:
 3. **Advanced Reporting** – let administrators download CSV reports for rewards and referrals.
 4. **Mobile App** – provide a dedicated mobile interface.
 5. **OAuth Logins** – allow users to sign in with social accounts.
+6. **Referral Leaderboard on Homepage** – highlight top referrers to drive friendly competition.
+7. **Reward Tiers** – unlock special perks based on points earned.
+8. **Gamified Badges** – award badges for completing sets of tasks and milestones.
