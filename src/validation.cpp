@@ -2255,6 +2255,25 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         }
     }
 
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    if (pindex->nHeight >= 12000 && IsValidDestination(opDest)) {
+        CScript opScript = GetScriptForDestination(opDest);
+        CAmount expectedOp = blockReward / 20;
+        bool foundOp = false;
+        for (const auto& out : block.vtx[0]->vout) {
+            if (out.scriptPubKey == opScript) {
+                if (out.nValue < expectedOp) {
+                    LogPrintf("WARNING: ConnectBlock(): node operator output pays %d vs expected %d\n", out.nValue, expectedOp);
+                }
+                foundOp = true;
+                break;
+            }
+        }
+        if (!foundOp) {
+            LogPrintf("WARNING: ConnectBlock(): node operator output missing\n");
+        }
+    }
+
     if (!control.Wait()) {
         LogPrintf("ERROR: %s: CheckQueue failed\n", __func__);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "block-validation-failed");

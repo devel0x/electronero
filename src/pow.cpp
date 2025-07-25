@@ -112,6 +112,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     int64_t minSolveClamp = v9 ? (targetTimespan / 4) : (targetTimespan / 8);
 
     const int64_t minSolveTime = 12;
+
     int64_t actualSolveTime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
     int64_t unclampedActualTimespan = actualTimespan;  // Save raw timespan
 
