@@ -4,7 +4,7 @@ This app uses Telegram and Discord bots to verify that users join your community
 
 ## Why a Telegram Bot?
 
-The backend calls Telegram's `getChatMember` method with a bot token to check membership in your group or channel. The bot must:
+The backend calls Telegram's `getChatMember` method with a bot token to check membership in your group or channel. It first resolves the provided handle to a numeric user ID using the `getChat`/`resolveUsername` endpoint. Handles may include or omit the `@` sign. The bot must:
 
 1. Be created via **@BotFather** and added to your group or channel.
 2. Have permission to read member status.
