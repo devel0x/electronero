@@ -29,6 +29,7 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 ## API Endpoints
 
 - `POST /users` - create a new user
+- `POST /login` - verify credentials and return the user id
 - `POST /tasks/{user_id}` - verify completion of a task and award points
 - `GET /progress/{user_id}` - retrieve the user's points and completed tasks
 - `GET /admin` - view the administrator dashboard (HTML)
@@ -38,11 +39,10 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 
 ## Submission Guidelines
 
-1. Sign up with the `/users` endpoint by providing a unique `username` and `password` along with
-   `email`, `telegram_handle`, `twitter_handle`, `discord_handle` and `reddit_username`.
-   Include the `captcha_token` returned by your CAPTCHA widget. You may also supply
-   an optional `referral_code`. If no code is provided one will be created automatically.
-   Each IP may register only once and duplicate emails are rejected.
+1. Create an account from the `/register` page or by calling `/users` directly. Provide a unique
+   `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
+   Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
+   `referral_code`. Each IP may register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.
 3. Tasks correspond to actions such as following social profiles or registering a wallet. Each successful verification grants points.
 4. Points can be exchanged for rewards once the configured threshold is met. The logic for rewards can be customised in `main.py`.
@@ -50,7 +50,7 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 
 ## Usage Guidelines
 
-* **Run locally** – execute `uvicorn main:app --reload` after installing dependencies. Visit `http://localhost:8000` to use the simple HTML frontend. The home page includes a short introduction for new users.
+* **Run locally** – execute `uvicorn main:app --reload` after installing dependencies. Visit `http://localhost:8000` to use the simple HTML frontend. Use `/register` to create an account and `/login` to authenticate.
 * **Environment variables** – provide API tokens for Telegram, X (Twitter), Discord and Reddit. Set `DATABASE_URL` to your MySQL instance.
 * **Wallet and newsletter** – register web or mobile wallets via the `/wallets` endpoint, provide a payout address through `/payout_address`, and sign up to the mailing list with `/newsletter`.
 * **Authentication** – supply your username and password using HTTP Basic when calling user-specific endpoints such as `/tasks/{user_id}`, `/payout_address`, `/claim/{user_id}` and `/progress/{user_id}`.
@@ -61,25 +61,25 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
 
 ```
-TELEGRAM_URL      # Link to your Telegram group or channel
-X_PROFILE_URL     # Link to your X/Twitter profile to follow
-DISCORD_URL       # Discord invite link
-WEB_WALLET_URL    # Registration page for the web wallet
-MOBILE_WALLET_URL # Registration page for the mobile wallet
-NEWSLETTER_URL    # Sign‑up page for the newsletter
-REDDIT_URL        # Subreddit or profile to follow
-TWEET_URL         # URL of the tweet users should share
-REFERRAL_BASE_URL # Base URL used when displaying the referral link
-REWARD_THRESHOLD  # Minimum points needed to claim rewards
-ITC_PER_POINT     # Amount of ITC paid out per point when claiming
-INTERCHAINED_CLI  # Path to the `interchained-cli` executable used for payouts
-DEFAULT_LANGUAGE  # Default language code for the interface (e.g. 'en')
-SERVER_PORT       # Port the FastAPI server runs on
-CAPTCHA_SECRET    # Secret token for verifying CAPTCHA responses
-NOCAPTCHA         # Set to 'true' to bypass CAPTCHA verification
+TELEGRAM_URL       # Link to your Telegram group or channel
+X_PROFILE_URL      # Link to your X/Twitter profile to follow
+DISCORD_URL        # Discord invite link
+WEB_WALLET_URL     # Registration page for the web wallet
+MOBILE_WALLET_URL  # Registration page for the mobile wallet
+NEWSLETTER_URL     # Sign‑up page for the newsletter
+REDDIT_URL         # Subreddit or profile to follow
+TWEET_URL          # URL of the tweet users should share
+REFERRAL_BASE_URL  # Base URL used when displaying the referral link
+REWARD_THRESHOLD   # Minimum points needed to claim rewards
+ITC_PER_POINT      # Amount of ITC paid out per point when claiming
+INTERCHAINED_CLI   # Path to the `interchained-cli` executable used for payouts
+DEFAULT_LANGUAGE   # Default language code for the interface (e.g. 'en')
+CAPTCHA_SECRET     # Secret token for verifying CAPTCHA responses
+ADMIN_PASSWORD     # Password required to access the /admin dashboard
+SERVER_PORT        # Port the FastAPI server runs on
+NOCAPTCHA          # Set to 'true' to bypass CAPTCHA verification
 TELEGRAM_BOT_TOKEN # Token for the bot used to check Telegram membership
-TELEGRAM_GROUP_ID # Numeric ID of the Telegram group to verify
-ADMIN_PASSWORD    # Password required to access the /admin dashboard
+TELEGRAM_GROUP_ID  # Numeric ID of the Telegram group to verify
 ```
 To obtain your Telegram group ID, invite the `@userinfobot` (or a similar bot)
 to your group and send `/start`. The bot will reply with the numeric

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ t.title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+    async function registerUser(){
+        const body = {
+            username: document.getElementById('username').value,
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+            captcha_token: document.getElementById('captcha').value,
+            telegram_handle: document.getElementById('telegram').value,
+            twitter_handle: document.getElementById('twitter').value,
+            discord_handle: document.getElementById('discord').value,
+            reddit_username: document.getElementById('reddit').value,
+            referral_code: document.getElementById('referral').value || null
+        };
+        const resp = await fetch('/users', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if(resp.ok){
+            alert('Registered! Your user id is ' + data.id);
+        } else {
+            alert(data.detail || 'Error');
+        }
+    }
+    </script>
+</head>
+<body>
+<header>
+    <img src="/static/logo.png" class="logo" alt="Logo">
+    <h1>{{ t.title }}</h1>
+</header>
+<div class="main-container">
+    <h2>Register</h2>
+    <label>Username <input id="username"></label><br>
+    <label>Email <input id="email" type="email"></label><br>
+    <label>Password <input id="password" type="password"></label><br>
+    <label>Telegram <input id="telegram"></label><br>
+    <label>Twitter <input id="twitter"></label><br>
+    <label>Discord <input id="discord"></label><br>
+    <label>Reddit <input id="reddit"></label><br>
+    <label>Referral Code <input id="referral"></label><br>
+    <label>Captcha Token <input id="captcha"></label><br>
+    <button onclick="registerUser()">Submit</button>
+    <p><a href="/login">Login</a></p>
+</div>
+<footer>
+    Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
+</footer>
+</body>
+</html>

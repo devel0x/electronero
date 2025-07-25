@@ -23,6 +23,12 @@
         tweet: '{{ t.share_tweet }}'
     };
 
+    function saveCreds(){
+        localStorage.setItem('username', document.getElementById('username').value);
+        localStorage.setItem('password', document.getElementById('password').value);
+        localStorage.setItem('user_id', document.getElementById('user_id').value);
+    }
+
     function authHeaders(){
         const u = document.getElementById('username').value;
         const p = document.getElementById('password').value;
@@ -90,7 +96,13 @@
         });
     }
 
-    window.addEventListener('DOMContentLoaded', () => {updateReferral(); loadProgress();});
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('username').value = localStorage.getItem('username') || '';
+        document.getElementById('password').value = localStorage.getItem('password') || '';
+        document.getElementById('user_id').value = localStorage.getItem('user_id') || '';
+        updateReferral();
+        loadProgress();
+    });
     </script>
 </head>
 <body>
@@ -102,9 +114,9 @@
     <h2>{{ t.intro_heading }}</h2>
     <p>{{ t.intro_text }}</p>
     <p>{{ t.instructions }}</p>
-    <label>Username <input id="username" placeholder="Your username"/></label>
-    <label>Password <input id="password" type="password"/></label>
-    <label>User ID <input id="user_id" placeholder="Enter your user id" oninput="updateReferral()"/></label>
+    <label>Username <input id="username" placeholder="Your username" oninput="saveCreds()"/></label>
+    <label>Password <input id="password" type="password" oninput="saveCreds()"/></label>
+    <label>User ID <input id="user_id" placeholder="Enter your user id" oninput="saveCreds();updateReferral()"/></label>
     <label>Wallet <input id="wallet_address" placeholder="Your ITC address"/></label>
     <button onclick="saveWallet()">Save Address</button>
     <h2>{{ t.progress_heading }}</h2>
@@ -149,6 +161,7 @@
         {{ t.referral_link }}
         <span id="referral_link"></span>
     </p>
+    <p><a href="/login">Login</a> | <a href="/register">Register</a></p>
     </div>
     <footer>
         Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025

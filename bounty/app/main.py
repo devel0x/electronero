@@ -62,6 +62,28 @@ def index(request: Request, lang: str | None = None):
         "index.html", {"request": request, "links": links, "t": strings, "server_port": server_port}
     )
 
+
+@app.get("/register", response_class=HTMLResponse)
+def register_page(request: Request, lang: str | None = None):
+    language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
+    strings = translations.get(language, translations["en"])
+    return templates.TemplateResponse("register.html", {"request": request, "t": strings, "server_port": server_port})
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, lang: str | None = None):
+    language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
+    strings = translations.get(language, translations["en"])
+    return templates.TemplateResponse("login.html", {"request": request, "t": strings, "server_port": server_port})
+
+
+@app.post("/login")
+def login(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
+    user = crud.authenticate_user(db, credentials.username, credentials.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"user_id": user.id, "server_port": server_port}
+
 @app.post("/users", response_model=schemas.UserResponse)
 def create_user(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     if not utils.verify_captcha(user.captcha_token):
