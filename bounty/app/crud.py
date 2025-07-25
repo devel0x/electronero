@@ -51,9 +51,17 @@ def authenticate_user(db: Session, username: str, password: str) -> models.User 
     return None
 
 def add_points(db: Session, user_id: int, points: int):
+    """Award points to a user factoring in referral multiplier."""
     user = get_user(db, user_id)
     if user:
-        user.points += points
+        # Count how many users signed up using this user's referral code
+        ref_count = (
+            db.query(models.User)
+            .filter(models.User.referred_by_id == user_id)
+            .count()
+        )
+        multiplier = 1 + 0.01 * ref_count
+        user.points += int(points * multiplier)
         db.commit()
     return user
 

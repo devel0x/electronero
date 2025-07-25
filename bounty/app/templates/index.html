@@ -66,7 +66,13 @@
         const base = "{{ links.referral_base }}";
         const userId = localStorage.getItem('user_id');
         const span = document.getElementById('referral_link');
-        span.textContent = base && userId ? `${base}?ref=${userId}` : '';
+        if(!base || !userId){
+            span.textContent = '';
+        } else if(base.includes('?ref=')){
+            span.textContent = `${base}${userId}`;
+        } else {
+            span.textContent = `${base}?ref=${userId}`;
+        }
         loadProgress();
     }
 

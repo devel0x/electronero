@@ -43,7 +43,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 1. Create an account from the `/register` page or by calling `/users` directly. Provide a unique
    `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
    Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
-   `referral_code`. Each IP may register only once and duplicate emails are rejected.
+   `referral_code`. If you arrive at `/register?ref=123` the `123` value is used as the referrer
+   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Each IP may
+   register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.
 3. Tasks correspond to actions such as following social profiles or registering a wallet. Each successful verification grants points.
 4. Points can be exchanged for rewards once the configured threshold is met. The logic for rewards can be customised in `main.py`.
@@ -98,7 +100,6 @@ Configure the following variables before running the server:
 
 ```bash
 export DATABASE_URL="mysql+pymysql://user:password@localhost:3306/referral_db"
-
 export TELEGRAM_URL="https://t.me/examplegroup"
 export X_PROFILE_URL="https://twitter.com/example"
 export DISCORD_URL="https://discord.gg/example"
@@ -109,15 +110,13 @@ export REDDIT_URL="https://reddit.com/r/example"
 export TWEET_URL="https://twitter.com/example/status/1"
 export WEBSITE_URL="https://example.com"
 export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
-export REFERRAL_BASE_URL="https://bounty.example.com/?ref="
-
+export REFERRAL_BASE_URL="https://bounty.example.com/"
 export REWARD_THRESHOLD="100"
 export ITC_PER_POINT="0.01"
 export INTERCHAINED_CLI="/usr/local/bin/interchained-cli"
 export DEFAULT_LANGUAGE="en"
 export CAPTCHA_SECRET="recaptcha-secret"
 export ADMIN_PASSWORD="changeme"
-
 export TELEGRAM_BOT_TOKEN="123456:ABCDEF"
 export TELEGRAM_GROUP_ID="-1009876543210"
 export X_BEARER_TOKEN="x-api-bearer"
@@ -131,7 +130,8 @@ export X_HASHTAG="ExampleTag"
 
 ## Claiming Rewards
 
-Users accumulate points for completing tasks. Once a user reaches
+Users accumulate points for completing tasks. Each referral a user brings in
+grants a 1% bonus multiplier on all future points they earn. Once a user reaches
 `REWARD_THRESHOLD` points they may issue a `POST` request to
 `/claim/{user_id}` or click the **Claim Reward** button on the
 homepage. The server records the claim and resets the user’s point
@@ -183,3 +183,6 @@ Upcoming improvements include:
 3. **Advanced Reporting** – let administrators download CSV reports for rewards and referrals.
 4. **Mobile App** – provide a dedicated mobile interface.
 5. **OAuth Logins** – allow users to sign in with social accounts.
+6. **Referral Leaderboard on Homepage** – highlight top referrers to drive friendly competition.
+7. **Reward Tiers** – unlock special perks based on points earned.
+8. **Gamified Badges** – award badges for completing sets of tasks and milestones.
