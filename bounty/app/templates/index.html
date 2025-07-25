@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Referral Bounty</title>
+    <script>
+    async function completeTask(taskName){
+        const userId = document.getElementById('user_id').value;
+        const response = await fetch(`/tasks/${userId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({task_name: taskName, completed: true})
+        });
+        const msg = await response.json();
+        alert(msg.message || msg.detail);
+    }
+    </script>
+</head>
+<body>
+    <h1>Referral Bounty Tasks</h1>
+    <label>User ID <input id="user_id" placeholder="Enter your user id"/></label>
+    <ul>
+        <li><button onclick="completeTask('telegram')">Join Telegram</button></li>
+        <li><button onclick="completeTask('x')">Follow X</button></li>
+        <li><button onclick="completeTask('discord')">Join Discord</button></li>
+        <li><button onclick="completeTask('web_wallet')">Register Web Wallet</button></li>
+        <li><button onclick="completeTask('mobile_wallet')">Register Mobile Wallet</button></li>
+        <li><button onclick="completeTask('newsletter')">Subscribe Newsletter</button></li>
+        <li><button onclick="completeTask('reddit')">Follow Reddit</button></li>
+        <li><button onclick="completeTask('tweet')">Share Tweet</button></li>
+    </ul>
+</body>
+</html>
