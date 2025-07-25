@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Referral Bounty</title>
+    <script>
+    async function completeTask(taskName){
+        const userId = document.getElementById('user_id').value;
+        const response = await fetch(`/tasks/${userId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({task_name: taskName, completed: true})
+        });
+        const msg = await response.json();
+        alert(msg.message || msg.detail);
+    }
+
+    function updateReferral(){
+        const base = "{{ links.referral_base }}";
+        const userId = document.getElementById('user_id').value;
+        const span = document.getElementById('referral_link');
+        span.textContent = base && userId ? `${base}?ref=${userId}` : '';
+    }
+
+    window.addEventListener('DOMContentLoaded', updateReferral);
+    </script>
+</head>
+<body>
+    <h1>Referral Bounty Tasks</h1>
+    <label>User ID <input id="user_id" placeholder="Enter your user id" oninput="updateReferral()"/></label>
+    <ul>
+        <li>
+            <a href="{{ links.telegram }}" target="_blank">Telegram</a>
+            <button onclick="completeTask('telegram')">Join Telegram</button>
+        </li>
+        <li>
+            <a href="{{ links.x_profile }}" target="_blank">X Profile</a>
+            <button onclick="completeTask('x')">Follow X</button>
+        </li>
+        <li>
+            <a href="{{ links.discord }}" target="_blank">Discord</a>
+            <button onclick="completeTask('discord')">Join Discord</button>
+        </li>
+        <li>
+            <a href="{{ links.web_wallet }}" target="_blank">Web Wallet</a>
+            <button onclick="completeTask('web_wallet')">Register Web Wallet</button>
+        </li>
+        <li>
+            <a href="{{ links.mobile_wallet }}" target="_blank">Mobile Wallet</a>
+            <button onclick="completeTask('mobile_wallet')">Register Mobile Wallet</button>
+        </li>
+        <li>
+            <a href="{{ links.newsletter }}" target="_blank">Newsletter</a>
+            <button onclick="completeTask('newsletter')">Subscribe Newsletter</button>
+        </li>
+        <li>
+            <a href="{{ links.reddit }}" target="_blank">Reddit</a>
+            <button onclick="completeTask('reddit')">Follow Reddit</button>
+        </li>
+        <li>
+            <a href="{{ links.tweet }}" target="_blank">Tweet</a>
+            <button onclick="completeTask('tweet')">Share Tweet</button>
+        </li>
+    </ul>
+    <p>
+        Referral link:
+        <span id="referral_link"></span>
+    </p>
+</body>
+</html>
