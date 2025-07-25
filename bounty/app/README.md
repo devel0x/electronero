@@ -14,10 +14,12 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    `TELEGRAM_URL`, `X_PROFILE_URL`, `DISCORD_URL`, `WEB_WALLET_URL`,
     `MOBILE_WALLET_URL`, `NEWSLETTER_URL`, `REDDIT_URL`, `TWEET_URL`,
    `REFERRAL_BASE_URL`, `ITC_PER_POINT`, `INTERCHAINED_CLI`,
-    `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET` and `ADMIN_PASSWORD`.
+    `DEFAULT_LANGUAGE`, `CAPTCHA_SECRET`, `ADMIN_PASSWORD`,
+    `TELEGRAM_BOT_TOKEN` and `TELEGRAM_GROUP_ID`.
    The `CAPTCHA_SECRET` value comes from the Google reCAPTCHA admin
    console. Create a site at <https://www.google.com/recaptcha/admin>,
    then copy the generated **secret key** here.
+   Set `NOCAPTCHA=true` to disable CAPTCHA checks during testing.
 4. Run the application
    ```bash
    uvicorn main:app --reload --port ${SERVER_PORT:-8000}
@@ -74,8 +76,14 @@ INTERCHAINED_CLI  # Path to the `interchained-cli` executable used for payouts
 DEFAULT_LANGUAGE  # Default language code for the interface (e.g. 'en')
 SERVER_PORT       # Port the FastAPI server runs on
 CAPTCHA_SECRET    # Secret token for verifying CAPTCHA responses
+NOCAPTCHA         # Set to 'true' to bypass CAPTCHA verification
+TELEGRAM_BOT_TOKEN # Token for the bot used to check Telegram membership
+TELEGRAM_GROUP_ID # Numeric ID of the Telegram group to verify
 ADMIN_PASSWORD    # Password required to access the /admin dashboard
 ```
+To obtain your Telegram group ID, invite the `@userinfobot` (or a similar bot)
+to your group and send `/start`. The bot will reply with the numeric
+`chat_id`, which is the value to use for `TELEGRAM_GROUP_ID`.
 
 ### Example Environment Setup
 
