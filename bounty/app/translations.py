@@ -30,7 +30,9 @@ translations = {
         "follow_reddit_task": "Follow Reddit for 10 points",
         "share_tweet_task": "Share Tweet for 10 points",
         "share_referral_task": "Share your referral link for 10 points",
-        "conversion_rate": "1 Point = {itc} ITC"
+        "conversion_rate": "1 Point = {itc} ITC",
+        "claim_in": "Claiming opens in",
+        "claim_now": "Claiming is now available!"
     },
     "es": {
         "title": "Recompensas por Referidos",
@@ -63,7 +65,9 @@ translations = {
         "follow_reddit_task": "Sigue en Reddit y gana 10 puntos",
         "share_tweet_task": "Comparte un Tweet y gana 10 puntos",
         "share_referral_task": "Comparte tu enlace de referido y gana 10 puntos",
-        "conversion_rate": "1 Punto = {itc} ITC"
+        "conversion_rate": "1 Punto = {itc} ITC",
+        "claim_in": "Las reclamaciones abren en",
+        "claim_now": "¡Ya puedes reclamar!"
     },
     "fr": {
         "title": "Prime de Parrainage",
@@ -96,6 +100,9 @@ translations = {
         "follow_reddit_task": "Suivre sur Reddit pour 10 points",
         "share_tweet_task": "Partager un Tweet pour 10 points",
         "share_referral_task": "Partagez votre lien de parrainage pour 10 points",
-        "conversion_rate": "1 Point = {itc} ITC"
+        "conversion_rate": "1 Point = {itc} ITC",
+        "claim_in": "Les réclamations ouvrent dans",
+        "claim_now": "Vous pouvez maintenant réclamer !"
     }
 }
+
