@@ -535,7 +535,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         coinbaseTx.vout[2].scriptPubKey = GetScriptForDestination(opDest);
         coinbaseTx.vout[2].nValue = operatorReward;
     }
-    coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
+    // coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
+    coinbaseTx.vin[0].scriptSig = (CScript() << nHeight << ParseHex("f000000ff111111f"));
+
     // Add witness nonce to scriptWitness
     coinbaseTx.vin[0].scriptWitness.stack.push_back(std::vector<unsigned char>(32, 0x00)); // 32-byte reserved nonce
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
