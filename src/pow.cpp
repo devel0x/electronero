@@ -12,6 +12,7 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
+unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus::Params& params);
 unsigned int Lwma3(const CBlockIndex* pindexLast, const Consensus::Params& params);
 // BITCOIN LEGACY DAA
@@ -26,6 +27,10 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     }
     // Activate DGW3 from block 1 (for example)
     if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
+        return DarkGravityWave3(pindexLast, params);
+    } 
+
+    if (pindexLast->nHeight + 1 >= params.sha256ForkHeight) {
         return DarkGravityWave3Nova(pindexLast, params);
     }
     
@@ -133,7 +138,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     // Trigger emergency logic BEFORE clamping
-    bool triggered = v9 ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 6) : (actualSolveTime < minSolveTime || unclampedActualTimespan < targetTimespan / 6));
+    bool triggered = v9 ? (actualSolveTime < 2 * minSolveTime && unclampedActualTimespan < targetTimespan / 6) : (actualSolveTime < minSolveTime || unclampedActualTimespan < targetTimespan / 6);
 
     if (triggered && nextHeight >= params.nextDifficultyFork3Height) {
         LogPrintf("🚨 [DGW3%s] Emergency/min solve triggered. Solve=%ds Timespan=%ds\n",
@@ -142,7 +147,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     // Height-aware clamp normally after emergency trigger check
-    if (nextHeight >= v9) {
+    if (v9) {
         if (!triggered) {
             if (actualTimespan < minTimespanClamp) actualTimespan = minTimespanClamp;
             if (actualTimespan > maxTimespanClamp) actualTimespan = maxTimespanClamp;
@@ -196,11 +201,80 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
         (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
     );
 
-    if (nextHeight < 5880 && newDifficulty > bnPowLimit) {
+    if (nextHeight < 5879 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
 
     LogPrintf("⛏️ Retargeting at height=%d with DGW3-NOVA\n", pindexLast->nHeight);
+    return newDifficulty.GetCompact();
+}
+
+unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const Consensus::Params& params)
+{
+    assert(pindexLast != nullptr);
+    const int nPastBlocks = 24;
+    int nextHeight = (pindexLast ? pindexLast->nHeight + 1 : 0);
+    
+    LogPrintf("💡 DGW3: nHeight=%d returning powLimit %s\n", nextHeight,
+        (nextHeight >= params.yespowerForkHeight) ?
+        "Yespower" : "SHA256");
+    arith_uint256 limit = UintToArith256((nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    LogPrintf("💡 DGW3: powLimit used = %s\n", limit.ToString());
+    if (nextHeight < nPastBlocks)
+        return UintToArith256(
+            (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+            ? params.powLimitYespower
+            : params.powLimit
+        ).GetCompact();
+
+    const CBlockIndex* pindex = pindexLast;
+    arith_uint256 pastDifficultyAverage;
+    arith_uint256 pastDifficultyAveragePrev;
+
+    int64_t actualTimespan = 0;
+    int64_t lastBlockTime = 0;
+
+    for (int i = 0; i < nPastBlocks; ++i) {
+        if (!pindex)
+            break;
+
+        arith_uint256 currentDifficulty = arith_uint256().SetCompact(pindex->nBits);
+
+        if (i == 0)
+            pastDifficultyAverage = currentDifficulty;
+        else
+            pastDifficultyAverage = ((pastDifficultyAveragePrev * i) + currentDifficulty) / (i + 1);
+
+        pastDifficultyAveragePrev = pastDifficultyAverage;
+
+        if (lastBlockTime > 0)
+            actualTimespan += lastBlockTime - pindex->GetBlockTime();
+
+        lastBlockTime = pindex->GetBlockTime();
+        pindex = pindex->pprev;
+    }
+
+    const int64_t targetTimespan = nPastBlocks * params.nPowTargetSpacing;
+
+    if (actualTimespan < targetTimespan / 3)
+        actualTimespan = targetTimespan / 3;
+    if (actualTimespan > targetTimespan * 3)
+        actualTimespan = targetTimespan * 3;
+
+    arith_uint256 newDifficulty = pastDifficultyAverage * actualTimespan / targetTimespan;
+
+    arith_uint256 bnPowLimit = UintToArith256(
+        (pindexLast->nHeight + 1 >= params.yespowerForkHeight)
+        ? params.powLimitYespower
+        : params.powLimit
+    );
+
+    if (pindexLast->nHeight + 1 <= 5879 && newDifficulty > bnPowLimit) { 
+        newDifficulty = bnPowLimit;
+    }
+    
+    LogPrintf("⛏️ Retargeting at height=%d with DGW3\n", pindexLast->nHeight);
+
     return newDifficulty.GetCompact();
 }
 

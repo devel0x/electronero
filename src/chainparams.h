@@ -61,7 +61,13 @@ public:
 
         MAX_BASE58_TYPES
     };
+    void SetNodeOperatorWallet(const std::string& wallet) {
+        strNodeOperatorWallet = wallet;
+    }
 
+    const std::string& GetNodeOperatorWallet() const {
+        return strNodeOperatorWallet;
+    }
     const Consensus::Params& GetConsensus() const { return consensus; }
     const CMessageHeader::MessageStartChars& MessageStart() const { return pchMessageStart; }
     int GetDefaultPort() const { return nDefaultPort; }

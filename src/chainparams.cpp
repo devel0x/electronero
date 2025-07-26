@@ -71,13 +71,13 @@ public:
         consensus.nSubsidyHalvingInterval = 262800; // 3 months
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.sha256ForkHeight = 11788;
+        consensus.sha256ForkHeight = 23904;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nextDifficultyForkHeight = 5119;
         consensus.nextDifficultyFork2Height = 5226;
-        consensus.nextDifficultyFork3Height = 12245; // todo
-        consensus.nextDifficultyFork4Height = 12500; // todo
-        consensus.nextDifficultyFork5Height = 12528; // todo
+        consensus.nextDifficultyFork3Height = 23904; 
+        consensus.nextDifficultyFork4Height = 23904; 
+        consensus.nextDifficultyFork5Height = 23904; 
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
@@ -122,7 +122,7 @@ public:
         pchMessageStart[2] = 0xD0;
         pchMessageStart[3] = 0x0D;
         nDefaultPort = 17333;
-        nPruneAfterHeight = 10000;
+        nPruneAfterHeight = 1000000;
         m_assumed_blockchain_size = 5;
         m_assumed_chain_state_size = 1;
 
@@ -143,15 +143,8 @@ public:
         // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        vSeeds.emplace_back("seed.interchained.sipa.be"); // Pieter Wuille, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("dnsseed.bluematt.me"); // Matt Corallo, only supports x9
-        vSeeds.emplace_back("dnsseed.interchained.dashjr.org"); // Luke Dashjr
-        vSeeds.emplace_back("seed.interchainedstats.com"); // Christian Decker, supports x1 - xf
-        vSeeds.emplace_back("seed.interchained.jonasschnelli.ch"); // Jonas Schnelli, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("seed.itc.petertodd.org"); // Peter Todd, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("seed.interchained.sprovoost.nl"); // Sjors Provoost
-        vSeeds.emplace_back("dnsseed.emzy.de"); // Stephan Oeste
-        vSeeds.emplace_back("seed.interchained.wiz.biz"); // Jason Maurice
+        vSeeds.emplace_back("seed.interchained.com");
+        vSeeds.emplace_back("seed.interchained.org");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
@@ -542,7 +535,7 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
     } else {
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
     }
-    params->strNodeOperatorWallet = args.GetArg("-nodeoperatorwallet", "");
+    params->SetNodeOperatorWallet(args.GetArg("-nodeoperatorwallet", ""));
     return params;
 }
 

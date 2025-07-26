@@ -2233,9 +2233,10 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
-
+    
+    const Consensus::Params& consensusParams = chainparams.GetConsensus();
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
-    if (pindex->nHeight >= 12000 && IsValidDestination(govDest)) {
+    if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
         CAmount expectedGov = blockReward / 10;
         bool foundGov = false;
@@ -2256,7 +2257,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     }
 
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
-    if (pindex->nHeight >= 12000 && IsValidDestination(opDest)) {
+    if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(opDest)) {
         CScript opScript = GetScriptForDestination(opDest);
         CAmount expectedOp = blockReward / 20;
         bool foundOp = false;
