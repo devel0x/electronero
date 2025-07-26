@@ -44,8 +44,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
    Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
    `referral_code`. If you arrive at `/register?ref=123` the `123` value is used as the referrer
-   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Each IP may
-   register only once and duplicate emails are rejected.
+   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Registering
+   with a valid referral ID grants **10 bonus points** immediately so newcomers and referrers both
+   benefit. Each IP may register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.
 3. Tasks correspond to actions such as following social profiles or registering a wallet. Each successful verification grants points.
 4. Points can be exchanged for rewards once the configured threshold is met. The logic for rewards can be customised in `main.py`.
@@ -62,6 +63,8 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 ## Social Links
 
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
+
+The interface now shows your progress toward claiming rewards with a progress bar and lets you copy your personal referral link with one click.
 
 ```
 TELEGRAM_URL       # Link to your Telegram group or channel

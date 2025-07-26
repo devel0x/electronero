@@ -21,6 +21,13 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
         return None
     if db.query(models.User).filter(models.User.ip_address == ip_address).first():
         return None
+
+    referred_by = None
+    if user.referred_by_id:
+        referred_by = db.query(models.User).filter(models.User.id == user.referred_by_id).first()
+        if not referred_by:
+            user.referred_by_id = None
+
     code = user.referral_code or _generate_referral_code(db)
     db_user = models.User(
         username=user.username,
@@ -38,6 +45,10 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    if referred_by:
+        add_points(db, db_user.id, 10)
+
     return db_user
 
 def get_user(db: Session, user_id: int):
