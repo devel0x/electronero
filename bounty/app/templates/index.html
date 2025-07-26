@@ -11,6 +11,7 @@
     function apiUrl(path){
         return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
     }
+    const REWARD_THRESHOLD = {{ reward_threshold }};
     const taskNames = [
         'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet','referral_share'
     ];
@@ -69,12 +70,25 @@
         const span = document.getElementById('referral_link');
         if(!base || !userId){
             span.textContent = '';
+            document.getElementById('copy_btn').classList.add('d-none');
         } else if(base.includes('?ref=')){
             span.textContent = `${base}${userId}`;
+            document.getElementById('copy_btn').classList.remove('d-none');
         } else {
             span.textContent = `${base}?ref=${userId}`;
+            document.getElementById('copy_btn').classList.remove('d-none');
         }
         loadProgress();
+    }
+
+    function copyReferral(){
+        const text = document.getElementById('referral_link').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('copy_btn');
+            const old = btn.textContent;
+            btn.textContent = '{{ t.copied }}';
+            setTimeout(() => {btn.textContent = old;}, 1000);
+        });
     }
 
     async function loadProgress(){
@@ -84,6 +98,9 @@
         if(!resp.ok){return;}
         const data = await resp.json();
         document.getElementById('points').textContent = `${data.base_points} x (1 + 0.01*${data.referral_count}) = ${data.points} {{ t.points_label }}`;
+        const pct = Math.min(100, 100 * data.base_points / REWARD_THRESHOLD);
+        document.getElementById('points_bar').style.width = pct + '%';
+        document.getElementById('progress_text').textContent = `${data.base_points}/${REWARD_THRESHOLD} {{ t.points_label }}`;
         const ul = document.getElementById('progress_list');
         ul.innerHTML = '';
         taskNames.forEach(n => {
@@ -135,6 +152,10 @@
     <p>{{ t.instructions }}</p>
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
+    <div class="progress mb-2">
+        <div id="points_bar" class="progress-bar" role="progressbar" style="width:0%"></div>
+    </div>
+    <small class="text-white">{{ t.progress_to_claim }}: <span id="progress_text"></span></small>
     <p id="conversion">{{ t.conversion_rate.format(itc=itc_per_point) }}</p>
     <ul id="progress_list" class="list-group mb-3"></ul>
     <ul class="list-group mb-3">
@@ -179,6 +200,7 @@
     <p>
         {{ t.referral_link }}
         <span id="referral_link"></span>
+        <button id="copy_btn" class="btn btn-sm btn-secondary ms-2 d-none" onclick="copyReferral()">{{ t.copy_link }}</button>
     </p>
     </div>
     <footer>

@@ -32,7 +32,7 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 - `POST /users` - create a new user
 - `POST /login` - verify credentials and return the user id
 - `POST /tasks/{user_id}` - verify completion of a task and award points
-- `GET /progress/{user_id}` - retrieve the user's points and completed tasks
+- `GET /progress/{user_id}` - return `{base_points, referral_count, points, completed_tasks}`
 - `GET /admin` - view the administrator dashboard (HTML)
 - `GET /analytics/leaderboard` - referral leaderboard in JSON format
 - `POST /payout_address` - save the ITC wallet address for payouts
@@ -62,6 +62,8 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 ## Social Links
 
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
+
+The interface now shows your progress toward claiming rewards with a progress bar and lets you copy your personal referral link with one click.
 
 ```
 TELEGRAM_URL       # Link to your Telegram group or channel
