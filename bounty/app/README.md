@@ -130,16 +130,17 @@ export X_HASHTAG="ExampleTag"
 
 ## Claiming Rewards
 
-Users accumulate points for completing tasks. Each referral a user brings in
-grants a 1% bonus multiplier on all future points they earn. Once a user reaches
-`REWARD_THRESHOLD` points they may issue a `POST` request to
-`/claim/{user_id}` or click the **Claim Reward** button on the
-homepage. The server records the claim and resets the user’s point
-balance. The amount of Interchained (ITC) awarded is calculated using
-`ITC_PER_POINT`:
+Users accumulate raw points for completing tasks. Every successful referral
+increases their reward multiplier by **1%**. The multiplier is applied when a
+user claims their reward rather than at the moment tasks are completed. Once a
+user reaches `REWARD_THRESHOLD` base points they may issue a `POST` request to
+`/claim/{user_id}` or click the **Claim Reward** button on the homepage. The
+server records the claim and resets the user’s point balance. The final amount of
+Interchained (ITC) awarded is calculated using `ITC_PER_POINT` and the referral
+multiplier:
 
 ```
-reward_itc = points * ITC_PER_POINT
+reward_itc = points * (1 + 0.01 * referrals) * ITC_PER_POINT
 ```
 
 Administrators can process payouts manually based on the recorded

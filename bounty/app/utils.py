@@ -142,3 +142,8 @@ def verify_tweet(handle: str) -> bool:
     resp = httpx.get(url, headers=headers)
     return resp.status_code == 200 and bool(resp.json().get("data"))
 
+
+def verify_referral_share(db: Session, user_id: int) -> bool:
+    """Check that the user has at least one successful referral."""
+    return crud.referral_count(db, user_id) > 0
+

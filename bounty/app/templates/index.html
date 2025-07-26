@@ -12,7 +12,7 @@
         return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
     }
     const taskNames = [
-        'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet'
+        'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet','referral_share'
     ];
     const taskLabels = {
         telegram: '{{ t.join_telegram }}',
@@ -22,7 +22,8 @@
         mobile_wallet: '{{ t.register_mobile_wallet }}',
         newsletter: '{{ t.subscribe_newsletter }}',
         reddit: '{{ t.follow_reddit }}',
-        tweet: '{{ t.share_tweet }}'
+        tweet: '{{ t.share_tweet }}',
+        referral_share: '{{ t.share_referral }}'
     };
 
     function showAlert(message){
@@ -82,7 +83,7 @@
         const resp = await fetch(apiUrl(`/progress/${userId}`), {headers: authHeaders()});
         if(!resp.ok){return;}
         const data = await resp.json();
-        document.getElementById('points').textContent = `${data.points} {{ t.points_label }}`;
+        document.getElementById('points').textContent = `${data.base_points} x (1 + 0.01*${data.referral_count}) = ${data.points} {{ t.points_label }}`;
         const ul = document.getElementById('progress_list');
         ul.innerHTML = '';
         taskNames.forEach(n => {
@@ -168,6 +169,10 @@
         <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.tweet }}" target="_blank">{{ t.share_tweet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>{{ t.share_referral_task }}</span>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('referral_share')">{{ t.share_referral }}</button>
         </li>
     </ul>
     <button class="btn btn-success mb-3" onclick="claimReward()">{{ t.claim_reward }}</button>
