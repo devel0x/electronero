@@ -11,8 +11,11 @@
     function apiUrl(path){
         return `${window.location.protocol}//${window.location.hostname}:${SERVER_PORT}${path}`;
     }
+    const REWARD_THRESHOLD = {{ reward_threshold }};
+    const CLAIM_DATE_STR = "{{ claim_date }}";
+    const CLAIM_DATE = CLAIM_DATE_STR ? new Date(CLAIM_DATE_STR) : null;
     const taskNames = [
-        'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet'
+        'telegram','x','discord','web_wallet','mobile_wallet','newsletter','reddit','tweet','referral_share'
     ];
     const taskLabels = {
         telegram: '{{ t.join_telegram }}',
@@ -22,7 +25,8 @@
         mobile_wallet: '{{ t.register_mobile_wallet }}',
         newsletter: '{{ t.subscribe_newsletter }}',
         reddit: '{{ t.follow_reddit }}',
-        tweet: '{{ t.share_tweet }}'
+        tweet: '{{ t.share_tweet }}',
+        referral_share: '{{ t.share_referral }}'
     };
 
     function showAlert(message){
@@ -54,6 +58,10 @@
     }
 
     async function claimReward(){
+        if(CLAIM_DATE && new Date() < CLAIM_DATE){
+            showCountdown();
+            return;
+        }
         const userId = localStorage.getItem('user_id');
         const response = await fetch(apiUrl(`/claim/${userId}`), {method: 'POST', headers: authHeaders()});
         const msg = await response.json();
@@ -68,12 +76,47 @@
         const span = document.getElementById('referral_link');
         if(!base || !userId){
             span.textContent = '';
+            document.getElementById('copy_btn').classList.add('d-none');
         } else if(base.includes('?ref=')){
             span.textContent = `${base}${userId}`;
+            document.getElementById('copy_btn').classList.remove('d-none');
         } else {
             span.textContent = `${base}?ref=${userId}`;
+            document.getElementById('copy_btn').classList.remove('d-none');
         }
         loadProgress();
+    }
+
+    function copyReferral(){
+        const text = document.getElementById('referral_link').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('copy_btn');
+            const old = btn.textContent;
+            btn.textContent = '{{ t.copied }}';
+            setTimeout(() => {btn.textContent = old;}, 1000);
+        });
+    }
+
+    function showCountdown(){
+        const body = document.getElementById('countdownBody');
+        function update(){
+            const now = new Date();
+            const diff = CLAIM_DATE - now;
+            if(diff <= 0){
+                body.textContent = '{{ t.claim_now }}';
+                clearInterval(timer);
+                return;
+            }
+            const d = Math.floor(diff/86400000);
+            const h = Math.floor((diff%86400000)/3600000);
+            const m = Math.floor((diff%3600000)/60000);
+            const s = Math.floor((diff%60000)/1000);
+            body.textContent = '{{ t.claim_in }} ' + `${d}d ${h}h ${m}m ${s}s`;
+        }
+        update();
+        const timer = setInterval(update,1000);
+        const modal = new bootstrap.Modal(document.getElementById('countdownModal'));
+        modal.show();
     }
 
     async function loadProgress(){
@@ -82,7 +125,10 @@
         const resp = await fetch(apiUrl(`/progress/${userId}`), {headers: authHeaders()});
         if(!resp.ok){return;}
         const data = await resp.json();
-        document.getElementById('points').textContent = `${data.points} {{ t.points_label }}`;
+        document.getElementById('points').textContent = `${data.base_points} x (1 + 0.01*${data.referral_count}) = ${data.points} {{ t.points_label }}`;
+        const pct = Math.min(100, 100 * data.base_points / REWARD_THRESHOLD);
+        document.getElementById('points_bar').style.width = pct + '%';
+        document.getElementById('progress_text').textContent = `${data.base_points}/${REWARD_THRESHOLD} {{ t.points_label }}`;
         const ul = document.getElementById('progress_list');
         ul.innerHTML = '';
         taskNames.forEach(n => {
@@ -134,8 +180,20 @@
     <p>{{ t.instructions }}</p>
     <h2>{{ t.progress_heading }}</h2>
     <p id="points"></p>
+    <div class="progress mb-2">
+        <div id="points_bar" class="progress-bar" role="progressbar" style="width:0%"></div>
+    </div>
+    <small class="text-white">{{ t.progress_to_claim }}: <span id="progress_text"></span></small>
     <p id="conversion">{{ t.conversion_rate.format(itc=itc_per_point) }}</p>
     <ul id="progress_list" class="list-group mb-3"></ul>
+    <div class="text-center mb-4">
+        <button class="btn btn-success mb-2" onclick="claimReward()">{{ t.claim_reward }}</button>
+        <p class="mb-0">
+            {{ t.referral_link }}
+            <span id="referral_link"></span>
+            <button id="copy_btn" class="btn btn-sm btn-secondary ms-2 d-none" onclick="copyReferral()">{{ t.copy_link }}</button>
+        </p>
+    </div>
     <ul class="list-group mb-3">
         <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.telegram }}" target="_blank">{{ t.join_telegram_task }}</a>
@@ -169,12 +227,11 @@
             <a href="{{ links.tweet }}" target="_blank">{{ t.share_tweet_task }}</a>
             <button class="btn btn-sm btn-primary" onclick="completeTask('tweet')">{{ t.share_tweet }}</button>
         </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>{{ t.share_referral_task }}</span>
+            <button class="btn btn-sm btn-primary" onclick="completeTask('referral_share')">{{ t.share_referral }}</button>
+        </li>
     </ul>
-    <button class="btn btn-success mb-3" onclick="claimReward()">{{ t.claim_reward }}</button>
-    <p>
-        {{ t.referral_link }}
-        <span id="referral_link"></span>
-    </p>
     </div>
     <footer>
         Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
@@ -188,6 +245,21 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="alertModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="countdownModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ t.claim_reward }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="countdownBody"></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>

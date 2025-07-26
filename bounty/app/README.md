@@ -32,7 +32,7 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 - `POST /users` - create a new user
 - `POST /login` - verify credentials and return the user id
 - `POST /tasks/{user_id}` - verify completion of a task and award points
-- `GET /progress/{user_id}` - retrieve the user's points and completed tasks
+- `GET /progress/{user_id}` - return `{base_points, referral_count, points, completed_tasks}`
 - `GET /admin` - view the administrator dashboard (HTML)
 - `GET /analytics/leaderboard` - referral leaderboard in JSON format
 - `POST /payout_address` - save the ITC wallet address for payouts
@@ -44,8 +44,9 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
    `username`, `password`, `email`, plus your Telegram, Twitter, Discord and Reddit handles.
    Include the `captcha_token` returned by your CAPTCHA widget. You may also supply an optional
    `referral_code`. If you arrive at `/register?ref=123` the `123` value is used as the referrer
-   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Each IP may
-   register only once and duplicate emails are rejected.
+   ID automatically. Otherwise you can fill in the **Referral ID** field on the form. Registering
+   with a valid referral ID grants **10 bonus points** immediately so newcomers and referrers both
+   benefit. Each IP may register only once and duplicate emails are rejected.
 2. Use the provided user ID when submitting task completion via `/tasks/{user_id}`.
 3. Tasks correspond to actions such as following social profiles or registering a wallet. Each successful verification grants points.
 4. Points can be exchanged for rewards once the configured threshold is met. The logic for rewards can be customised in `main.py`.
@@ -63,6 +64,8 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
 
+The interface now shows your progress toward claiming rewards with a progress bar and lets you copy your personal referral link with one click.
+
 ```
 TELEGRAM_URL       # Link to your Telegram group or channel
 X_PROFILE_URL      # Link to your X/Twitter profile to follow
@@ -77,6 +80,7 @@ WHITEPAPER_URL     # Link to the whitepaper
 REFERRAL_BASE_URL  # Base URL used when displaying the referral link
 REWARD_THRESHOLD   # Minimum points needed to claim rewards
 ITC_PER_POINT      # Amount of ITC paid out per point when claiming
+CLAIM_DATE         # ISO date/time after which rewards can be claimed
 INTERCHAINED_CLI   # Path to the `interchained-cli` executable used for payouts
 DEFAULT_LANGUAGE   # Default language code for the interface (e.g. 'en')
 CAPTCHA_SECRET     # Secret token for verifying CAPTCHA responses
@@ -113,6 +117,7 @@ export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
 export REFERRAL_BASE_URL="https://bounty.example.com/"
 export REWARD_THRESHOLD="100"
 export ITC_PER_POINT="0.01"
+export CLAIM_DATE="2025-08-01T00:00:00Z"
 export INTERCHAINED_CLI="/usr/local/bin/interchained-cli"
 export DEFAULT_LANGUAGE="en"
 export CAPTCHA_SECRET="recaptcha-secret"
@@ -130,16 +135,18 @@ export X_HASHTAG="ExampleTag"
 
 ## Claiming Rewards
 
-Users accumulate points for completing tasks. Each referral a user brings in
-grants a 1% bonus multiplier on all future points they earn. Once a user reaches
-`REWARD_THRESHOLD` points they may issue a `POST` request to
-`/claim/{user_id}` or click the **Claim Reward** button on the
-homepage. The server records the claim and resets the user’s point
-balance. The amount of Interchained (ITC) awarded is calculated using
-`ITC_PER_POINT`:
+Users accumulate raw points for completing tasks. Every successful referral
+increases their reward multiplier by **1%**. The multiplier is applied when a
+user claims their reward rather than at the moment tasks are completed. Claims
+are locked until the optional `CLAIM_DATE` has passed. Once a user reaches
+`REWARD_THRESHOLD` base points they may issue a `POST` request to
+`/claim/{user_id}` or click the **Claim Reward** button on the homepage. The
+server records the claim and resets the user’s point balance. The final amount of
+Interchained (ITC) awarded is calculated using `ITC_PER_POINT` and the referral
+multiplier:
 
 ```
-reward_itc = points * ITC_PER_POINT
+reward_itc = points * (1 + 0.01 * referrals) * ITC_PER_POINT
 ```
 
 Administrators can process payouts manually based on the recorded

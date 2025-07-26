@@ -21,6 +21,13 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
         return None
     if db.query(models.User).filter(models.User.ip_address == ip_address).first():
         return None
+
+    referred_by = None
+    if user.referred_by_id:
+        referred_by = db.query(models.User).filter(models.User.id == user.referred_by_id).first()
+        if not referred_by:
+            user.referred_by_id = None
+
     code = user.referral_code or _generate_referral_code(db)
     db_user = models.User(
         username=user.username,
@@ -38,6 +45,10 @@ def create_user(db: Session, user: schemas.UserCreate, ip_address: str) -> model
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    if referred_by:
+        add_points(db, db_user.id, 10)
+
     return db_user
 
 def get_user(db: Session, user_id: int):
@@ -50,18 +61,20 @@ def authenticate_user(db: Session, username: str, password: str) -> models.User 
         return user
     return None
 
+def referral_count(db: Session, user_id: int) -> int:
+    """Return how many users registered with the given referral."""
+    return (
+        db.query(models.User)
+        .filter(models.User.referred_by_id == user_id)
+        .count()
+    )
+
+
 def add_points(db: Session, user_id: int, points: int):
-    """Award points to a user factoring in referral multiplier."""
+    """Award raw points without referral multiplier."""
     user = get_user(db, user_id)
     if user:
-        # Count how many users signed up using this user's referral code
-        ref_count = (
-            db.query(models.User)
-            .filter(models.User.referred_by_id == user_id)
-            .count()
-        )
-        multiplier = 1 + 0.01 * ref_count
-        user.points += int(points * multiplier)
+        user.points += points
         db.commit()
     return user
 
@@ -140,9 +153,12 @@ def claim_reward(db: Session, user_id: int, threshold: int, rate: float):
     user = get_user(db, user_id)
     if not user or user.points < threshold:
         return None
-    reward_itc = user.points * rate
+    refs = referral_count(db, user_id)
+    multiplier = 1 + 0.01 * refs
+    bonus_points = int(user.points * multiplier)
+    reward_itc = bonus_points * rate
     claim = models.RewardClaim(
-        user_id=user_id, points=user.points, reward_itc=reward_itc
+        user_id=user_id, points=bonus_points, reward_itc=reward_itc
     )
     user.points = 0
     db.add(claim)
