@@ -70,6 +70,8 @@ MOBILE_WALLET_URL  # Registration page for the mobile wallet
 NEWSLETTER_URL     # Sign‑up page for the newsletter
 REDDIT_URL         # Subreddit or profile to follow
 TWEET_URL          # URL of the tweet users should share
+WEBSITE_URL        # Main project website
+WHITEPAPER_URL     # Link to the whitepaper
 REFERRAL_BASE_URL  # Base URL used when displaying the referral link
 REWARD_THRESHOLD   # Minimum points needed to claim rewards
 ITC_PER_POINT      # Amount of ITC paid out per point when claiming
@@ -105,6 +107,8 @@ export MOBILE_WALLET_URL="https://mwallet.example.com/signup"
 export NEWSLETTER_URL="https://example.com/newsletter"
 export REDDIT_URL="https://reddit.com/r/example"
 export TWEET_URL="https://twitter.com/example/status/1"
+export WEBSITE_URL="https://example.com"
+export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
 export REFERRAL_BASE_URL="https://bounty.example.com/?ref="
 
 export REWARD_THRESHOLD="100"
@@ -131,11 +135,13 @@ Users accumulate points for completing tasks. Once a user reaches
 `REWARD_THRESHOLD` points they may issue a `POST` request to
 `/claim/{user_id}` or click the **Claim Reward** button on the
 homepage. The server records the claim and resets the user’s point
-balance. The amount of Interchained (ITC) awarded is calculated using
-`ITC_PER_POINT`:
+balance. Each referral adds a 1% bonus to the user’s points. The amount
+of Interchained (ITC) awarded is calculated using `ITC_PER_POINT`:
 
 ```
-reward_itc = points * ITC_PER_POINT
+bonus_points = int(points * referrals * 0.01)
+total_points = points + bonus_points
+reward_itc = total_points * ITC_PER_POINT
 ```
 
 Administrators can process payouts manually based on the recorded

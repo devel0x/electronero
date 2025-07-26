@@ -6,14 +6,9 @@ body {
     color: #fff !important;
 }
 
-header {
-    display: flex;
-    align-items: center;
-    padding: 20px;
-}
-header img.logo {
-    height: 50px;
-    margin-right: 15px;
+.navbar-brand .logo {
+    height: 40px;
+    margin-right: 10px;
 }
 footer {
     text-align: center;

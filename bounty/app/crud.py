@@ -128,13 +128,20 @@ def get_completed_tasks(db: Session, user_id: int) -> list[str]:
     return [r.name for r in rows]
 
 
-def claim_reward(db: Session, user_id: int, threshold: int, rate: float):
+def count_referrals(db: Session, user_id: int) -> int:
+    """Return how many other users were referred by the given user."""
+    return db.query(models.User).filter(models.User.referred_by_id == user_id).count()
+
+
+def claim_reward(db: Session, user_id: int, threshold: int, rate: float, refs: int = 0):
+    """Claim rewards using current points plus referral bonus."""
     user = get_user(db, user_id)
     if not user or user.points < threshold:
         return None
-    reward_itc = user.points * rate
+    total_points = int(user.points * (1 + (refs * 0.01)))
+    reward_itc = total_points * rate
     claim = models.RewardClaim(
-        user_id=user_id, points=user.points, reward_itc=reward_itc
+        user_id=user_id, points=total_points, reward_itc=reward_itc
     )
     user.points = 0
     db.add(claim)

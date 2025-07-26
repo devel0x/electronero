@@ -54,12 +54,21 @@ def index(request: Request, lang: str | None = None):
         "newsletter": os.getenv("NEWSLETTER_URL", "#"),
         "reddit": os.getenv("REDDIT_URL", "#"),
         "tweet": os.getenv("TWEET_URL", "#"),
-        "referral_base": os.getenv("REFERRAL_BASE_URL", "")
+        "referral_base": os.getenv("REFERRAL_BASE_URL", ""),
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
     }
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
     return templates.TemplateResponse(
-        "index.html", {"request": request, "links": links, "t": strings, "server_port": SERVER_PORT}
+        "index.html",
+        {
+            "request": request,
+            "links": links,
+            "t": strings,
+            "server_port": SERVER_PORT,
+            "itc_per_point": ITC_PER_POINT,
+        },
     )
 
 
@@ -68,7 +77,13 @@ def register_page(request: Request, lang: str | None = None):
     server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("register.html", {"request": request, "t": strings, "server_port": SERVER_PORT})
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "t": strings, "server_port": SERVER_PORT, "links": links}
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -76,7 +91,13 @@ def login_page(request: Request, lang: str | None = None):
     server_port = SERVER_PORT
     language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
     strings = translations.get(language, translations["en"])
-    return templates.TemplateResponse("login.html", {"request": request, "t": strings, "server_port": SERVER_PORT})
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "t": strings, "server_port": SERVER_PORT, "links": links}
+    )
 
 
 @app.post("/login")
@@ -115,6 +136,7 @@ def complete_task(
         "newsletter": lambda: utils.verify_newsletter(db, user.email),
         "reddit": lambda: utils.verify_reddit(user.reddit_username),
         "tweet": lambda: utils.verify_tweet(user.twitter_handle),
+        "referral": lambda: True,
     }
 
     verifier = verification_map.get(status.task_name)
@@ -173,7 +195,8 @@ def claim_reward(
 ):
     if current_user.id != user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    claim = crud.claim_reward(db, user_id, REWARD_THRESHOLD, ITC_PER_POINT)
+    refs = crud.count_referrals(db, user_id)
+    claim = crud.claim_reward(db, user_id, REWARD_THRESHOLD, ITC_PER_POINT, refs)
     if not claim:
         raise HTTPException(status_code=400, detail="Not enough points to claim")
     return {
@@ -191,7 +214,14 @@ def get_progress(
     current_user: models.User = Depends(get_current_user),
 ):
     tasks = crud.get_completed_tasks(db, user_id)
-    return {"points": current_user.points, "completed_tasks": tasks}
+    refs = crud.count_referrals(db, user_id)
+    total_points = int(current_user.points * (1 + refs * 0.01))
+    return {
+        "points": current_user.points,
+        "completed_tasks": tasks,
+        "referrals": refs,
+        "effective_points": total_points,
+    }
 
 
 @app.post("/process_claim/{claim_id}")
