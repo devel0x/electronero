@@ -970,6 +970,30 @@ static RPCHelpMan getblocktemplate()
     std::vector<unsigned char> vch(ssTx.begin(), ssTx.end());
     result.pushKV("coinbasetxn", HexStr(vch));
     result.pushKV("extranonce_marker", "f000000ff111111f");
+    LOCK(cs_main);
+    CBlockIndex* pindexPrev = ::ChainActive().Tip();
+    int nHeight = pindexPrev->nHeight + 1;
+    CAmount blockReward = GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    CAmount governanceReward = blockReward / 10;  // 10% governance
+    CAmount operatorReward   = 0;
+
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    if (IsValidDestination(opDest)) {
+        operatorReward = blockReward / 20; // 5% node operators
+    }
+
+    // Miner gets remainder (subsidy - governance - operator + fees)
+    CAmount minerReward = blockReward - governanceReward - operatorReward + nFees;
+
+    // Provide info to the template
+    result.pushKV("coinbasevalue", blockReward + nFees);
+    result.pushKV("minerReward", minerReward);
+    result.pushKV("governanceAddress", chainparams.GovernanceWallet());
+    result.pushKV("governanceReward", governanceReward);
+    result.pushKV("nodeOperatorsAddress", chainparams.NodeOperatorWallet());
+    result.pushKV("nodeOperatorsReward", operatorReward);
+    result.pushKV("fees", nFees);
+
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
 

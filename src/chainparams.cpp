@@ -78,6 +78,8 @@ public:
         consensus.nextDifficultyFork3Height = 23904; 
         consensus.nextDifficultyFork4Height = 23904; 
         consensus.nextDifficultyFork5Height = 23904; 
+        consensus.nGovernanceBp = 1000; // 10.00% example
+        consensus.nNodeOpsBp    = 500; // 5.00% example
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();

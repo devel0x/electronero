@@ -48,6 +48,8 @@ struct BIP9Deployment {
  * Parameters that influence chain consensus.
  */
 struct Params {
+    int64_t nNodeOpsBp   = 0;
+    int64_t nGovernanceBp = 0; 
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
     int nDGW3Height;
