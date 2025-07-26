@@ -158,6 +158,14 @@
     <small class="text-white">{{ t.progress_to_claim }}: <span id="progress_text"></span></small>
     <p id="conversion">{{ t.conversion_rate.format(itc=itc_per_point) }}</p>
     <ul id="progress_list" class="list-group mb-3"></ul>
+    <div class="text-center mb-4">
+        <button class="btn btn-success mb-2" onclick="claimReward()">{{ t.claim_reward }}</button>
+        <p class="mb-0">
+            {{ t.referral_link }}
+            <span id="referral_link"></span>
+            <button id="copy_btn" class="btn btn-sm btn-secondary ms-2 d-none" onclick="copyReferral()">{{ t.copy_link }}</button>
+        </p>
+    </div>
     <ul class="list-group mb-3">
         <li class="list-group-item d-flex justify-content-between align-items-center">
             <a href="{{ links.telegram }}" target="_blank">{{ t.join_telegram_task }}</a>
@@ -196,12 +204,6 @@
             <button class="btn btn-sm btn-primary" onclick="completeTask('referral_share')">{{ t.share_referral }}</button>
         </li>
     </ul>
-    <button class="btn btn-success mb-3" onclick="claimReward()">{{ t.claim_reward }}</button>
-    <p>
-        {{ t.referral_link }}
-        <span id="referral_link"></span>
-        <button id="copy_btn" class="btn btn-sm btn-secondary ms-2 d-none" onclick="copyReferral()">{{ t.copy_link }}</button>
-    </p>
     </div>
     <footer>
         Source code available on GitHub | <a href="https://interchained.com" target="_blank">interchained.com</a> | Interchained Labs 🧪 2025
