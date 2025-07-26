@@ -967,7 +967,8 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
     ssTx << *pblocktemplate->block.vtx[0];
-    result.pushKV("coinbasetxn", HexStr(ssTx.begin(), ssTx.end()));
+    std::vector<unsigned char> vch(ssTx.begin(), ssTx.end());
+    result.pushKV("coinbasetxn", HexStr(vch));
     result.pushKV("extranonce_marker", "f000000ff111111f");
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
