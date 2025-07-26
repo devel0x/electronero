@@ -198,13 +198,13 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     arith_uint256 bnPowLimit = UintToArith256(
-        (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : (nextHeight >= 24060) ?  params.powLimit : params.powLimit
+        (nextHeight >= 24078) ?  params.powLimit : (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
     );
 
     if (nextHeight < 5879 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
-    
+
     if (nextHeight >= 24060 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
     }
