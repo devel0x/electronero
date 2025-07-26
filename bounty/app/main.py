@@ -68,6 +68,7 @@ def index(request: Request, lang: str | None = None):
             "t": strings,
             "server_port": SERVER_PORT,
             "itc_per_point": ITC_PER_POINT,
+            "reward_threshold": REWARD_THRESHOLD,
         },
     )
 

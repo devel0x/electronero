@@ -63,6 +63,8 @@ This application tracks user referral tasks using FastAPI with a MySQL backend.
 
 The homepage shows links for each task so users know which profiles to follow or posts to share. These URLs are loaded from environment variables. Set them before running the app:
 
+The interface now shows your progress toward claiming rewards with a progress bar and lets you copy your personal referral link with one click.
+
 ```
 TELEGRAM_URL       # Link to your Telegram group or channel
 X_PROFILE_URL      # Link to your X/Twitter profile to follow
