@@ -68,6 +68,7 @@ def index(request: Request, lang: str | None = None):
             "t": strings,
             "server_port": SERVER_PORT,
             "itc_per_point": ITC_PER_POINT,
+            "reward_threshold": REWARD_THRESHOLD,
         },
     )
 
@@ -136,6 +137,7 @@ def complete_task(
         "newsletter": lambda: utils.verify_newsletter(db, user.email),
         "reddit": lambda: utils.verify_reddit(user.reddit_username),
         "tweet": lambda: utils.verify_tweet(user.twitter_handle),
+        "referral_share": lambda: utils.verify_referral_share(db, user.id),
     }
 
     verifier = verification_map.get(status.task_name)
@@ -212,7 +214,14 @@ def get_progress(
     current_user: models.User = Depends(get_current_user),
 ):
     tasks = crud.get_completed_tasks(db, user_id)
-    return {"points": current_user.points, "completed_tasks": tasks}
+    refs = crud.referral_count(db, user_id)
+    bonus = int(current_user.points * (1 + 0.01 * refs))
+    return {
+        "points": bonus,
+        "base_points": current_user.points,
+        "referral_count": refs,
+        "completed_tasks": tasks,
+    }
 
 
 @app.post("/process_claim/{claim_id}")
