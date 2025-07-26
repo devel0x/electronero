@@ -2,6 +2,8 @@
 
 *.exe
 *.pdb
+bounty/venv
+bounty/app/venv
 src/interchained
 src/interchainedd
 src/interchained-cli
