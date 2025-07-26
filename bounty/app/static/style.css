@@ -46,3 +46,11 @@ a:hover {
 .todo-item.completed {
   background-color: rgba(25, 135, 84, 0.2);
 }
+
+.progress {
+  height: 20px;
+}
+
+.progress-bar {
+  background-color: #198754;
+}
