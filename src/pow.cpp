@@ -21,7 +21,11 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     assert(pindexLast != nullptr);
     LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
           (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
-    
+          
+    if (pindexLast->nHeight + 1 >= 23985) {
+        return DarkGravityWave3Nova(pindexLast, params);
+    }
+
     if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + 59) {
         return Lwma3(pindexLast, params);
     }
@@ -29,10 +33,6 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
         return DarkGravityWave3(pindexLast, params);
     } 
-
-    if (pindexLast->nHeight + 1 >= params.sha256ForkHeight) {
-        return DarkGravityWave3Nova(pindexLast, params);
-    }
     
     arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
     LogPrintf("💡 GetNextWorkRequired: powLimit used = %s\n", limit.ToString());
