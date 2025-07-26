@@ -970,21 +970,20 @@ static RPCHelpMan getblocktemplate()
     std::vector<unsigned char> vch(ssTx.begin(), ssTx.end());
     result.pushKV("coinbasetxn", HexStr(vch));
     result.pushKV("extranonce_marker", "f000000ff111111f");
-    LOCK(cs_main);
-    CBlockIndex* pindexPrev = ::ChainActive().Tip();
     int nHeight = pindexPrev->nHeight + 1;
-    CAmount blockReward = GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    const CChainParams& chainparams = Params();
+    CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
     CAmount governanceReward = blockReward / 10;  // 10% governance
     CAmount operatorReward   = 0;
-
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
     if (IsValidDestination(opDest)) {
         operatorReward = blockReward / 20; // 5% node operators
     }
-
+    CAmount nFees = 0;
+    for (const CAmount& fee : pblocktemplate->vTxFees)
+        nFees += fee;
     // Miner gets remainder (subsidy - governance - operator + fees)
     CAmount minerReward = blockReward - governanceReward - operatorReward + nFees;
-
     // Provide info to the template
     result.pushKV("coinbasevalue", blockReward + nFees);
     result.pushKV("minerReward", minerReward);
