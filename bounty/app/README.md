@@ -80,6 +80,7 @@ WHITEPAPER_URL     # Link to the whitepaper
 REFERRAL_BASE_URL  # Base URL used when displaying the referral link
 REWARD_THRESHOLD   # Minimum points needed to claim rewards
 ITC_PER_POINT      # Amount of ITC paid out per point when claiming
+CLAIM_DATE         # ISO date/time after which rewards can be claimed
 INTERCHAINED_CLI   # Path to the `interchained-cli` executable used for payouts
 DEFAULT_LANGUAGE   # Default language code for the interface (e.g. 'en')
 CAPTCHA_SECRET     # Secret token for verifying CAPTCHA responses
@@ -116,6 +117,7 @@ export WHITEPAPER_URL="https://example.com/whitepaper.pdf"
 export REFERRAL_BASE_URL="https://bounty.example.com/"
 export REWARD_THRESHOLD="100"
 export ITC_PER_POINT="0.01"
+export CLAIM_DATE="2025-08-01T00:00:00Z"
 export INTERCHAINED_CLI="/usr/local/bin/interchained-cli"
 export DEFAULT_LANGUAGE="en"
 export CAPTCHA_SECRET="recaptcha-secret"
@@ -135,8 +137,9 @@ export X_HASHTAG="ExampleTag"
 
 Users accumulate raw points for completing tasks. Every successful referral
 increases their reward multiplier by **1%**. The multiplier is applied when a
-user claims their reward rather than at the moment tasks are completed. Once a
-user reaches `REWARD_THRESHOLD` base points they may issue a `POST` request to
+user claims their reward rather than at the moment tasks are completed. Claims
+are locked until the optional `CLAIM_DATE` has passed. Once a user reaches
+`REWARD_THRESHOLD` base points they may issue a `POST` request to
 `/claim/{user_id}` or click the **Claim Reward** button on the homepage. The
 server records the claim and resets the user’s point balance. The final amount of
 Interchained (ITC) awarded is calculated using `ITC_PER_POINT` and the referral

@@ -3,7 +3,7 @@ translations = {
         "title": "Referral Bounty",
         "intro_heading": "Welcome to the Referral Bounty App",
         "intro_text": "Complete social tasks to earn points and claim rewards in ITC.",
-        "instructions": "Enter your user ID and follow each link to complete tasks.",
+        "instructions": "Follow each link below to complete tasks. Your user ID is stored automatically.",
         "join_telegram": "Verify Telegram",
         "follow_x": "Verify X",
         "join_discord": "Verify Discord",
@@ -30,13 +30,15 @@ translations = {
         "follow_reddit_task": "Follow Reddit for 10 points",
         "share_tweet_task": "Share Tweet for 10 points",
         "share_referral_task": "Share your referral link for 10 points",
-        "conversion_rate": "1 Point = {itc} ITC"
+        "conversion_rate": "1 Point = {itc} ITC",
+        "claim_in": "Claiming opens in",
+        "claim_now": "Claiming is now available!"
     },
     "es": {
         "title": "Recompensas por Referidos",
         "intro_heading": "Bienvenido a la App de Recompensas",
         "intro_text": "Completa tareas sociales para ganar puntos y reclamar recompensas en ITC.",
-        "instructions": "Ingresa tu ID de usuario y sigue cada enlace para completar las tareas.",
+        "instructions": "Sigue cada enlace a continuación para completar las tareas. Tu ID se guarda automáticamente.",
         "join_telegram": "Verificar Telegram",
         "follow_x": "Verificar X",
         "join_discord": "Verificar Discord",
@@ -63,13 +65,15 @@ translations = {
         "follow_reddit_task": "Sigue en Reddit y gana 10 puntos",
         "share_tweet_task": "Comparte un Tweet y gana 10 puntos",
         "share_referral_task": "Comparte tu enlace de referido y gana 10 puntos",
-        "conversion_rate": "1 Punto = {itc} ITC"
+        "conversion_rate": "1 Punto = {itc} ITC",
+        "claim_in": "Las reclamaciones abren en",
+        "claim_now": "¡Ya puedes reclamar!"
     },
     "fr": {
         "title": "Prime de Parrainage",
         "intro_heading": "Bienvenue dans l'application de parrainage",
         "intro_text": "Accomplissez des tâches sociales pour gagner des points et obtenir des récompenses en ITC.",
-        "instructions": "Entrez votre identifiant utilisateur et suivez chaque lien pour accomplir les tâches.",
+        "instructions": "Suivez chaque lien ci-dessous pour accomplir les tâches. Votre identifiant est enregistré automatiquement.",
         "join_telegram": "Vérifier Telegram",
         "follow_x": "Vérifier X",
         "join_discord": "Vérifier Discord",
@@ -96,6 +100,9 @@ translations = {
         "follow_reddit_task": "Suivre sur Reddit pour 10 points",
         "share_tweet_task": "Partager un Tweet pour 10 points",
         "share_referral_task": "Partagez votre lien de parrainage pour 10 points",
-        "conversion_rate": "1 Point = {itc} ITC"
+        "conversion_rate": "1 Point = {itc} ITC",
+        "claim_in": "Les réclamations ouvrent dans",
+        "claim_now": "Vous pouvez maintenant réclamer !"
     }
 }
+
