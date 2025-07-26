@@ -12,10 +12,14 @@ translations = {
         "subscribe_newsletter": "Verify Newsletter",
         "follow_reddit": "Verify Reddit",
         "share_tweet": "Verify Tweet",
+        "share_referral": "Verify Referral Share",
         "claim_reward": "Claim Reward",
         "referral_link": "Referral link:",
+        "copy_link": "Copy",
+        "copied": "Copied!",
         "progress_heading": "Your Progress",
         "points_label": "Points",
+        "progress_to_claim": "Progress to reward",
         "completed_tasks": "Completed Tasks",
         "join_telegram_task": "Join Telegram for 10 points",
         "follow_x_task": "Follow X for 10 points",
@@ -25,6 +29,7 @@ translations = {
         "subscribe_newsletter_task": "Subscribe Newsletter for 10 points",
         "follow_reddit_task": "Follow Reddit for 10 points",
         "share_tweet_task": "Share Tweet for 10 points",
+        "share_referral_task": "Share your referral link for 10 points",
         "conversion_rate": "1 Point = {itc} ITC"
     },
     "es": {
@@ -40,10 +45,14 @@ translations = {
         "subscribe_newsletter": "Verificar Boletín",
         "follow_reddit": "Verificar Reddit",
         "share_tweet": "Verificar Tweet",
+        "share_referral": "Verificar Referido Compartido",
         "claim_reward": "Reclamar Recompensa",
         "referral_link": "Enlace de referido:",
+        "copy_link": "Copiar",
+        "copied": "¡Copiado!",
         "progress_heading": "Tu Progreso",
         "points_label": "Puntos",
+        "progress_to_claim": "Progreso para la recompensa",
         "completed_tasks": "Tareas Completadas",
         "join_telegram_task": "Únete a Telegram y gana 10 puntos",
         "follow_x_task": "Sigue en X y gana 10 puntos",
@@ -53,6 +62,7 @@ translations = {
         "subscribe_newsletter_task": "Suscríbete al Boletín y gana 10 puntos",
         "follow_reddit_task": "Sigue en Reddit y gana 10 puntos",
         "share_tweet_task": "Comparte un Tweet y gana 10 puntos",
+        "share_referral_task": "Comparte tu enlace de referido y gana 10 puntos",
         "conversion_rate": "1 Punto = {itc} ITC"
     },
     "fr": {
@@ -68,10 +78,14 @@ translations = {
         "subscribe_newsletter": "Vérifier la newsletter",
         "follow_reddit": "Vérifier Reddit",
         "share_tweet": "Vérifier le Tweet",
+        "share_referral": "Vérifier le partage de parrainage",
         "claim_reward": "Réclamer la Récompense",
         "referral_link": "Lien de parrainage :",
+        "copy_link": "Copier",
+        "copied": "Copié !",
         "progress_heading": "Votre progression",
         "points_label": "Points",
+        "progress_to_claim": "Progression vers la récompense",
         "completed_tasks": "Tâches terminées",
         "join_telegram_task": "Rejoignez Telegram pour 10 points",
         "follow_x_task": "Suivre sur X pour 10 points",
@@ -81,6 +95,7 @@ translations = {
         "subscribe_newsletter_task": "Abonnez-vous à la newsletter pour 10 points",
         "follow_reddit_task": "Suivre sur Reddit pour 10 points",
         "share_tweet_task": "Partager un Tweet pour 10 points",
+        "share_referral_task": "Partagez votre lien de parrainage pour 10 points",
         "conversion_rate": "1 Point = {itc} ITC"
     }
 }
