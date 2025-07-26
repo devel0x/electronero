@@ -118,8 +118,7 @@
         const modal = new bootstrap.Modal(document.getElementById('countdownModal'));
         modal.show();
     }
-
-    async function loadProgress(){
+    
         const userId = localStorage.getItem('user_id');
         if(!userId){return;}
         const resp = await fetch(apiUrl(`/progress/${userId}`), {headers: authHeaders()});
