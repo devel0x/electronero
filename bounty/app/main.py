@@ -34,10 +34,11 @@ def get_db():
 
 
 def get_current_user(
-    user_id: int, credentials: HTTPBasicCredentials = Depends(user_security), db: Session = Depends(get_db)
+    credentials: HTTPBasicCredentials = Depends(user_security), db: Session = Depends(get_db)
 ) -> models.User:
+    """Authenticate the user using HTTP Basic credentials."""
     user = crud.authenticate_user(db, credentials.username, credentials.password)
-    if not user or user.id != user_id:
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return user
 
@@ -101,6 +102,8 @@ def complete_task(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     user = current_user
 
     verification_map = {
