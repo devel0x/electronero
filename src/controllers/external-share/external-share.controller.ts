@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ExternalPoolShare } from '../../models/ExternalPoolShare';
 import { ExternalSharesService } from '../../ORM/external-shares/external-shares.service';
 import { DifficultyUtils } from '../../utils/difficulty.utils';
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 
 @Controller('share')
 export class ExternalShareController {

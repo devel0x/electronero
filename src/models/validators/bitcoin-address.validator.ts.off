@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { validate } from 'bitcoin-address-validation';
 import { registerDecorator, ValidationOptions, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 
+
 @ValidatorConstraint({ name: 'bitcoinAddress', async: false })
 @Injectable()
 export class BitcoinAddressValidator implements ValidatorConstraintInterface {
@@ -12,21 +13,11 @@ export class BitcoinAddressValidator implements ValidatorConstraintInterface {
     ) { }
 
     validate(value: string): boolean {
-        // Accept Interchained bech32 (itc1...) or standard BTC addresses
-        if (typeof value !== 'string') return false;
-
-        // Basic Interchained Bech32 regex: starts with "itc1" + 6 to 87 characters (Bech32 max length)
-        const itcRegex = /^itc1[ac-hj-np-z02-9]{6,87}$/i;
-        if (itcRegex.test(value)) {
-            return true;
-        }
-
-        // Fall back to Bitcoin validation
         return validate(value, this.configService.get('NETWORK'));
     }
 
     defaultMessage(): string {
-        return 'Must be a valid Bitcoin or Interchained (itc1...) address';
+        return 'Must be a bitcoin address';
     }
 }
 
@@ -42,4 +33,3 @@ export function IsBitcoinAddress(validationOptions?: ValidationOptions) {
         });
     };
 }
-

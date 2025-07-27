@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { validate } from 'bitcoin-address-validation';
-import { Block } from 'bitcoinjs-lib';
+import { Block } from 'interchainedjs-lib';
 import * as TelegramBot from 'node-telegram-bot-api';
 
 import { TelegramSubscriptionsService } from '../ORM/telegram-subscriptions/telegram-subscriptions.service';

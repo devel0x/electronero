@@ -1,7 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 import { useContainer } from 'class-validator';
 import { readFileSync } from 'fs';
 import * as ecc from 'tiny-secp256k1';

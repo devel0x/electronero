@@ -135,23 +135,42 @@ export class BitcoinRpcService implements OnModuleInit {
     }
 
     private async loadBlockTemplate(blockHeight: number) {
+    let blockTemplate: IBlockTemplate;
 
-        let blockTemplate: IBlockTemplate;
-        while (blockTemplate == null) {
-            blockTemplate = await this.client.getblocktemplate({
-                template_request: {
-                    rules: ['segwit'],
-                    mode: 'template',
-                    capabilities: ['serverlist', 'proposal']
-                }
-            });
-        }
-
-
-        await this.rpcBlockService.saveBlock(blockHeight, JSON.stringify(blockTemplate));
-
-        return blockTemplate;
+    while (!blockTemplate) {
+        blockTemplate = await this.client.getblocktemplate({
+            template_request: {
+                rules: ['segwit'],
+                mode: 'template',
+                capabilities: ['serverlist', 'proposal']
+            }
+        });
     }
+
+    // Patch: Add governance + operator fields to blockData
+    const governanceReward = blockTemplate?.governanceReward ?? 0;
+    const governanceAddress = blockTemplate?.governanceAddress ?? '';
+    const nodeOperatorsReward = blockTemplate?.nodeOperatorsReward ?? 0;
+    const nodeOperatorsAddress = blockTemplate?.nodeOperatorsAddress ?? '';
+    const minerReward = blockTemplate?.minerReward ?? (blockTemplate.coinbasevalue || 0);
+    console.log('Rewards & Addresses:', {
+  governanceReward,
+  governanceAddress,
+  nodeOperatorsReward,
+  nodeOperatorsAddress,
+  minerReward
+});
+	blockTemplate.minerReward = blockTemplate.coinbasevalue - (blockTemplate.governanceReward ?? 0) - (blockTemplate.nodeOperatorsReward ?? 0);
+
+blockTemplate.governanceReward = blockTemplate.governanceReward || 0;
+blockTemplate.governanceAddress = blockTemplate.governanceAddress || '';
+blockTemplate.nodeOperatorsReward = blockTemplate.nodeOperatorsReward || 0;
+blockTemplate.nodeOperatorsAddress = blockTemplate.nodeOperatorsAddress || '';
+blockTemplate.defaultPoolAddress = this.configService.get('POOL_ADDRESS') || '';
+    await this.rpcBlockService.saveBlock(blockHeight, JSON.stringify(blockTemplate));
+    return blockTemplate;
+}
+
 
     public async getMiningInfo(): Promise<IMiningInfo> {
         try {
@@ -164,6 +183,8 @@ export class BitcoinRpcService implements OnModuleInit {
     }
 
     public async SUBMIT_BLOCK(hexdata: string): Promise<string> {
+	console.log("Block Hex:", hexdata);
+console.log("Block Hex Length:", hexdata.length);
         let response: string = 'unknown';
         try {
             response = await this.client.submitblock({
@@ -177,7 +198,7 @@ export class BitcoinRpcService implements OnModuleInit {
             console.log(JSON.stringify(response));
         } catch (e) {
             response = e;
-            console.log(`BLOCK SUBMISSION RESPONSE ERROR: ${e}`);
+	    console.log("BLOCK SUBMISSION RESPONSE ERROR:", JSON.stringify(e, null, 2));
         }
         return response;
 

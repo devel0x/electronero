@@ -1,5 +1,5 @@
 import { ConfigService } from "@nestjs/config";
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 import { Test, TestingModule } from "@nestjs/testing";
 import { MiningJob } from "./MiningJob";
 import { IJobTemplate } from "../services/stratum-v1-jobs.service";

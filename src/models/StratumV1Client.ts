@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidatorOptions } from 'class-validator';
 import * as crypto from 'crypto';
@@ -28,7 +28,7 @@ import { SuggestDifficulty } from './stratum-messages/SuggestDifficultyMessage';
 import { StratumV1ClientStatistics } from './StratumV1ClientStatistics';
 import { ExternalSharesService } from '../services/external-shares.service';
 import { DifficultyUtils } from '../utils/difficulty.utils';
-
+import { u8, hex } from '../utils/helpers';
 
 export class StratumV1Client {
 
@@ -100,7 +100,7 @@ export class StratumV1Client {
         }
 
         this.backgroundWork.forEach(work => {
-            clearInterval(work);
+            clearInterval(work as unknown as ReturnType<typeof setInterval>);
         });
     }
 
@@ -512,9 +512,9 @@ export class StratumV1Client {
             parseInt(submission.ntime, 16)
         );
         const header = updatedJobBlock.toBuffer(true);
-        const { submissionDifficulty } = DifficultyUtils.calculateDifficulty(header);
-
-        //console.log(`DIFF: ${submissionDifficulty} of ${this.sessionDifficulty} from ${this.clientAuthorization.worker + '.' + this.extraNonceAndSessionId}`);
+        //const { submissionDifficulty } = DifficultyUtils.calculateDifficulty(header);
+	const { submissionDifficulty } = DifficultyUtils.calculateDifficulty(u8(header));
+        console.log(`DIFF: ${submissionDifficulty} of ${this.sessionDifficulty} from ${this.clientAuthorization.worker + '.' + this.extraNonceAndSessionId}`);
 
 
         if (submissionDifficulty >= this.sessionDifficulty) {
@@ -567,7 +567,8 @@ export class StratumV1Client {
                     worker: this.clientAuthorization.worker,
                     address: this.clientAuthorization.address,
                     userAgent: this.clientSubscription.userAgent,
-                    header: header.toString('hex'),
+                    header: hex(header),	
+		    //header: header.toString('hex'),
                     externalPoolName: this.configService.get('POOL_IDENTIFIER') || 'Public-Pool'
                 });
             }

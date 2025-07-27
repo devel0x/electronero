@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Block } from 'bitcoinjs-lib';
+import { Block } from 'interchainedjs-lib';
 
 import { DiscordService } from './discord.service';
 import { TelegramService } from './telegram.service';

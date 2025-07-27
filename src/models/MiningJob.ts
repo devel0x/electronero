@@ -1,13 +1,14 @@
 import { AddressType, getAddressInfo } from 'bitcoin-address-validation';
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 
 import { IJobTemplate } from '../services/stratum-v1-jobs.service';
 import { eResponseMethod } from './enums/eResponseMethod';
 import { IMiningNotify } from './stratum-messages/IMiningNotify';
 import { ConfigService } from '@nestjs/config';
+import { u8, hex } from '../utils/helpers';
 
 const MAX_BLOCK_WEIGHT = 4000000;
-const MAX_SCRIPT_SIZE = 100; //   https://github.com/bitcoin/bitcoin/blob/ffdc3d6060f6e65e69cf115a13b83e6eb4a0a0a8/src/consensus/tx_check.cpp#L49
+const MAX_SCRIPT_SIZE = 10000; //   https://github.com/bitcoin/bitcoin/blob/ffdc3d6060f6e65e69cf115a13b83e6eb4a0a0a8/src/consensus/tx_check.cpp#L49
 interface AddressObject {
     address: string;
     percent: number;
@@ -33,8 +34,11 @@ export class MiningJob {
         this.creation = new Date().getTime();
         this.jobTemplateId = jobTemplate.blockData.id;
 
-        this.coinbaseTransaction = this.createCoinbaseTransaction(payoutInformation, jobTemplate.blockData.coinbasevalue);
-
+        this.coinbaseTransaction = this.createCoinbaseTransaction(payoutInformation, jobTemplate);
+	console.log("Coinbase TX Hex:", this.coinbaseTransaction.toHex());
+console.log("Coinbase Outputs:", this.coinbaseTransaction.outs);
+console.log("Total Outputs:", this.coinbaseTransaction.outs.reduce((s, o) => s + Number(o.value), 0));
+console.log("Coinbase Value (from template):", jobTemplate.blockData.coinbasevalue);
         //The commitment is recorded in a scriptPubKey of the coinbase transaction. It must be at least 38 bytes, with the first 6-byte of 0x6a24aa21a9ed, that is:
         //     1-byte - OP_RETURN (0x6a)
         //     1-byte - Push the following 36 bytes (0x24)
@@ -58,15 +62,22 @@ export class MiningJob {
         const padding = Buffer.alloc(8 + (3 - blockHeightEncoded.length), 0)
 
         // Build the script
-        let script = Buffer.concat([blockHeightLengthByte, blockHeightEncoded, extra, padding]);
+        // let script = Buffer.concat([blockHeightLengthByte, blockHeightEncoded, extra, padding]);
         // Check if the pool identifier is too long
-        if (script.length > MAX_SCRIPT_SIZE) {
-            console.warn('Pool identifier is too long, removing the pool identifier');
-            script = Buffer.concat([blockHeightLengthByte, blockHeightEncoded, padding]);
-        }
+        // this.coinbaseTransaction.ins[0].script = script;
+	
+	// Encode block height (BIP34)
 
-        this.coinbaseTransaction.ins[0].script = script;
-        this.coinbaseTransaction.addOutput(bitcoinjs.script.compile([bitcoinjs.opcodes.OP_RETURN, Buffer.concat([segwitMagicBits, jobTemplate.block.witnessCommit])]), 0);
+// Optional tag (e.g., pool name)
+const poolTag = Buffer.from(configService.get('POOL_IDENTIFIER') || 'Public-Pool');
+
+// Combine into scriptSig
+const scriptSig = Buffer.concat([blockHeightLengthByte, blockHeightEncoded, poolTag]);
+let script = scriptSig;
+	//
+	// Set the coinbase input script
+	this.coinbaseTransaction.ins[0].script = script;
+	this.coinbaseTransaction.addOutput(bitcoinjs.script.compile([bitcoinjs.opcodes.OP_RETURN, Buffer.concat([segwitMagicBits, jobTemplate.block.witnessCommit])]), BigInt(0));
 
         // Check if the pool identifier is too long
         if ((this.coinbaseTransaction.weight() + jobTemplate.block.weight()) > MAX_BLOCK_WEIGHT) {
@@ -77,9 +88,10 @@ export class MiningJob {
 
         // get the non-witness coinbase tx
         //@ts-ignore
-        const serializedCoinbaseTx = this.coinbaseTransaction.__toBuffer().toString('hex');
+        // const serializedCoinbaseTx = this.coinbaseTransaction.__toBuffer().toString('hex');
+	const serializedCoinbaseTx = hex(this.coinbaseTransaction.toBuffer());
 
-        const inputScript = this.coinbaseTransaction.ins[0].script.toString('hex');
+        const inputScript = hex(this.coinbaseTransaction.ins[0].script);
 
         const partOneIndex = serializedCoinbaseTx.indexOf(inputScript) + inputScript.length;
 
@@ -106,13 +118,14 @@ export class MiningJob {
         }
 
         // set the nonces
-        const nonceScript = testBlock.transactions[0].ins[0].script.toString('hex');
+        // const nonceScript = testBlock.transactions[0].ins[0].script.toString('hex');
+	const nonceScript = hex(testBlock.transactions[0].ins[0].script);
 
         testBlock.transactions[0].ins[0].script = Buffer.from(`${nonceScript.substring(0, nonceScript.length - 16)}${extraNonce}${extraNonce2}`, 'hex');
 
         //recompute the root since we updated the coinbase script with the nonces
-        testBlock.merkleRoot = this.calculateMerkleRootHash(testBlock.transactions[0].getHash(false), jobTemplate.merkle_branch);
-
+        // testBlock.merkleRoot = this.calculateMerkleRootHash(testBlock.transactions[0].getHash(false), jobTemplate.merkle_branch);
+	testBlock.merkleRoot = this.calculateMerkleRootHash(u8(testBlock.transactions[0].getHash(false)), jobTemplate.merkle_branch);
 
         testBlock.timestamp = timestamp;
 
@@ -128,61 +141,114 @@ export class MiningJob {
 
         for (let i = 0; i < merkleBranches.length; i++) {
             bothMerkles.set(Buffer.from(merkleBranches[i], 'hex'), 32);
-            newRoot = bitcoinjs.crypto.hash256(bothMerkles);
-            bothMerkles.set(newRoot);
+            // newRoot = bitcoinjs.crypto.hash256(bothMerkles);
+            newRoot = u8(bitcoinjs.crypto.hash256(bothMerkles));
+	    bothMerkles.set(newRoot);
         }
 
         return bothMerkles.subarray(0, 32)
     }
 
 
-    private createCoinbaseTransaction(addresses: AddressObject[], reward: number): bitcoinjs.Transaction {
-        // Part 1
-        const coinbaseTransaction = new bitcoinjs.Transaction();
+    private createCoinbaseTransaction(
+    addresses: AddressObject[],
+    jobTemplate: IJobTemplate
+): bitcoinjs.Transaction {
+    const coinbaseTransaction = new bitcoinjs.Transaction();
+    coinbaseTransaction.version = 2;
 
-        // Set the version of the transaction
-        coinbaseTransaction.version = 2;
+    // Coinbase input
+    coinbaseTransaction.addInput(Buffer.alloc(32, 0), 0xffffffff, 0xffffffff);
+    console.log(jobTemplate);
+    // Extract rewards & addresses from the block template
+    const {
+        minerReward = 0,
+        governanceReward = 0,
+        governanceAddress,
+        nodeOperatorsReward = 0,
+        nodeOperatorsAddress,
+        defaultPoolAddress
+    } = jobTemplate.blockData;
 
-        // Add the coinbase input (input with no previous output)
-        coinbaseTransaction.addInput(Buffer.alloc(32, 0), 0xffffffff, 0xffffffff);
-
-        // Add an output
-        let rewardBalance = reward;
-
-        addresses.forEach(recipientAddress => {
-            const amount = Math.floor((recipientAddress.percent / 100) * reward);
-            rewardBalance -= amount;
-            coinbaseTransaction.addOutput(this.getPaymentScript(recipientAddress.address), amount);
-        })
-
-        //Add any remaining sats from the Math.floor
-        coinbaseTransaction.outs[0].value += rewardBalance;
-
-        const segwitWitnessReservedValue = Buffer.alloc(32, 0);
-
-        //and the coinbase's input's witness must consist of a single 32-byte array for the witness reserved value
-        coinbaseTransaction.ins[0].witness = [segwitWitnessReservedValue];
-
-        return coinbaseTransaction;
+    if (!minerReward && !governanceReward && !nodeOperatorsReward) {
+        console.warn(`⚠️ All rewards are zero. Template may be invalid.`);
     }
+
+    // ---- Miner / Pool outputs ----
+    if (addresses && addresses.length > 0) {
+    let left = minerReward;
+    for (let i = 0; i < addresses.length; i++) {
+        let amount = (i === addresses.length - 1)
+            ? left
+            : Math.floor((addresses[i].percent / 100) * minerReward);
+
+        if (amount < 0) amount = 0;
+        left -= amount;
+
+        console.log(`💰 Adding miner output: ${addresses[i].address} => ${amount}`);
+        coinbaseTransaction.addOutput(this.getPaymentScript(addresses[i].address), BigInt(amount));
+    }
+} else {
+    const poolAddress = jobTemplate.blockData.defaultPoolAddress || (addresses?.[0]?.address || '');
+    console.log(`💰 Adding default pool output: ${poolAddress} => ${minerReward}`);
+    coinbaseTransaction.addOutput(this.getPaymentScript(poolAddress), BigInt(minerReward));
+}
+
+
+    // ---- Governance output ----
+    if (governanceReward > 0 && governanceAddress) {
+        coinbaseTransaction.addOutput(this.getPaymentScript(governanceAddress), BigInt(governanceReward));
+    }
+
+    // ---- Node Operators output ----
+    if (nodeOperatorsReward > 0 && nodeOperatorsAddress) {
+        coinbaseTransaction.addOutput(this.getPaymentScript(nodeOperatorsAddress), BigInt(nodeOperatorsReward));
+    }
+
+    // ---- Debugging ----
+    const totalOutputs = coinbaseTransaction.outs.reduce((sum, o) => sum + Number(o.value), 0);
+    console.log(`Coinbase Outputs:`, coinbaseTransaction.outs.map(o => ({
+        script: o.script,
+        value: o.value
+    })));
+    console.log(`Total Outputs: ${totalOutputs}`);
+    console.log(`Coinbase Value (from template): ${jobTemplate.blockData.coinbasevalue}`);
+
+    if (totalOutputs !== jobTemplate.blockData.coinbasevalue) {
+        console.warn(`⚠️ Coinbase mismatch: expected ${jobTemplate.blockData.coinbasevalue}, got ${totalOutputs}`);
+    }
+
+    // Witness reserved value (for SegWit)
+    const segwitWitnessReservedValue = Buffer.alloc(32, 0);
+    coinbaseTransaction.ins[0].witness = [segwitWitnessReservedValue];
+
+    return coinbaseTransaction;
+}
+
+
 
     private getPaymentScript(address: string): Buffer {
         const addressInfo = getAddressInfo(address);
         switch (addressInfo.type) {
             case AddressType.p2wpkh: {
-                return bitcoinjs.payments.p2wpkh({ address, network: this.network }).output;
+                return u8(bitcoinjs.payments.p2wpkh({ address, network: this.network }).output!);
+		// return bitcoinjs.payments.p2wpkh({ address, network: this.network }).output;
             }
             case AddressType.p2pkh: {
-                return bitcoinjs.payments.p2pkh({ address, network: this.network }).output;
+                return u8(bitcoinjs.payments.p2pkh({ address, network: this.network }).output!);
+		// return bitcoinjs.payments.p2pkh({ address, network: this.network }).output;
             }
             case AddressType.p2sh: {
-                return bitcoinjs.payments.p2sh({ address, network: this.network }).output;
+                return u8(bitcoinjs.payments.p2sh({ address, network: this.network }).output!);
+		// return bitcoinjs.payments.p2sh({ address, network: this.network }).output;
             }
             case AddressType.p2tr: {
-                return bitcoinjs.payments.p2tr({ address, network: this.network }).output;
+                return u8(bitcoinjs.payments.p2tr({ address, network: this.network }).output!);
+		// return bitcoinjs.payments.p2tr({ address, network: this.network }).output;
             }
             case AddressType.p2wsh: {
-                return bitcoinjs.payments.p2wsh({ address, network: this.network }).output;
+                return u8(bitcoinjs.payments.p2wsh({ address, network: this.network }).output!);
+		// return bitcoinjs.payments.p2wsh({ address, network: this.network }).output;
             }
             default: {
                 return Buffer.alloc(0);
@@ -197,7 +263,11 @@ export class MiningJob {
             method: eResponseMethod.MINING_NOTIFY,
             params: [
                 this.jobId,
-                this.swapEndianWords(jobTemplate.block.prevHash).toString('hex'),
+                //hex(this.swapEndianWords(jobTemplate.block.prevHash)),
+		hex(this.swapEndianWords(Buffer.from(jobTemplate.block.prevHash))),
+		//hex(Buffer.from(this.swapEndianWords(jobTemplate.block.prevHash) as Uint8Array)),
+		//hex(Buffer.from(this.swapEndianWords(jobTemplate.block.prevHash))),
+		// this.swapEndianWords(jobTemplate.block.prevHash).toString('hex'),
                 this.coinbasePart1,
                 this.coinbasePart2,
                 jobTemplate.merkle_branch,

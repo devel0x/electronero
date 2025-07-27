@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import * as bitcoinjs from 'bitcoinjs-lib';
+import * as bitcoinjs from 'interchainedjs-lib';
 import * as merkle from 'merkle-lib';
 import * as merkleProof from 'merkle-lib/proof';
 import { combineLatest, delay, filter, from, interval, map, Observable, shareReplay, startWith, switchMap, tap } from 'rxjs';
@@ -8,16 +8,23 @@ import { MiningJob } from '../models/MiningJob';
 import { BitcoinRpcService } from './bitcoin-rpc.service';
 
 export interface IJobTemplate {
-
     block: bitcoinjs.Block;
     merkle_branch: string[];
     blockData: {
-        id: string,
-        creation: number,
+        id: string;
+        creation: number;
         coinbasevalue: number;
         networkDifficulty: number;
         height: number;
         clearJobs: boolean;
+
+        // New fields for reward distribution
+        minerReward?: number;
+        governanceReward?: number;
+        governanceAddress?: string;
+        nodeOperatorsReward?: number;
+        nodeOperatorsAddress?: string;
+        defaultPoolAddress?: string;
     };
 }
 
@@ -68,20 +75,29 @@ export class StratumV1JobsService {
                 this.lastIntervalCount = interval;
 
                 const currentTime = Math.floor(new Date().getTime() / 1000);
-                return {
-                    version: blockTemplate.version,
-                    bits: parseInt(blockTemplate.bits, 16),
-                    prevHash: this.convertToLittleEndian(blockTemplate.previousblockhash),
-                    transactions: blockTemplate.transactions.map(t => bitcoinjs.Transaction.fromHex(t.data)),
-                    coinbasevalue: blockTemplate.coinbasevalue,
-                    timestamp: blockTemplate.mintime > currentTime ? blockTemplate.mintime : currentTime,
-                    networkDifficulty: this.calculateNetworkDifficulty(parseInt(blockTemplate.bits, 16)),
-                    clearJobs,
-                    height: blockTemplate.height
-                };
+		return {
+    version: blockTemplate.version,
+    bits: parseInt(blockTemplate.bits, 16),
+    prevHash: this.convertToLittleEndian(blockTemplate.previousblockhash),
+    transactions: blockTemplate.transactions.map(t => bitcoinjs.Transaction.fromHex(t.data)),
+    coinbasevalue: blockTemplate.coinbasevalue,
+    timestamp: blockTemplate.mintime > currentTime ? blockTemplate.mintime : currentTime,
+    networkDifficulty: this.calculateNetworkDifficulty(parseInt(blockTemplate.bits, 16)),
+    clearJobs,
+    height: blockTemplate.height,
+    blockTemplate,
+    // Extended rewards
+    minerReward: blockTemplate.minerReward ?? blockTemplate.coinbasevalue,
+    governanceReward: blockTemplate.governanceReward ?? 0,
+    governanceAddress: blockTemplate.governanceAddress ?? '',
+    nodeOperatorsReward: blockTemplate.nodeOperatorsReward ?? 0,
+    nodeOperatorsAddress: blockTemplate.nodeOperatorsAddress ?? '',
+    defaultPoolAddress: blockTemplate.defaultPoolAddress ?? ''
+};
+
             }),
             filter(next => next != null),
-            map(({ version, bits, prevHash, transactions, timestamp, coinbasevalue, networkDifficulty, clearJobs, height }) => {
+            map(({ version, bits, prevHash, transactions, timestamp, coinbasevalue, networkDifficulty, clearJobs, height, blockTemplate }) => {
                 const block = new bitcoinjs.Block();
 
                 //create an empty coinbase tx
@@ -119,7 +135,13 @@ export class StratumV1JobsService {
                         coinbasevalue,
                         networkDifficulty,
                         height,
-                        clearJobs
+                        clearJobs,
+			minerReward: blockTemplate.minerReward,          // example split
+			governanceReward: blockTemplate.governanceReward,     // adjust as needed
+			governanceAddress: blockTemplate.governanceAddress,
+			nodeOperatorsReward: blockTemplate.nodeOperatorsReward,
+			nodeOperatorsAddress: blockTemplate.nodeOperatorsAddress,
+			defaultPoolAddress: blockTemplate.defaultPoolAddress
                     }
                 }
             }),
