@@ -5,7 +5,7 @@ import { IJobTemplate } from '../services/stratum-v1-jobs.service';
 import { eResponseMethod } from './enums/eResponseMethod';
 import { IMiningNotify } from './stratum-messages/IMiningNotify';
 import { ConfigService } from '@nestjs/config';
-import { u8, hex } from '../utils/helpers';
+import { u8, hex, buildCoinbaseScriptSig } from '../utils/helpers';
 
 const MAX_BLOCK_WEIGHT = 4000000;
 const MAX_SCRIPT_SIZE = 10000; //   https://github.com/bitcoin/bitcoin/blob/ffdc3d6060f6e65e69cf115a13b83e6eb4a0a0a8/src/consensus/tx_check.cpp#L49
@@ -66,14 +66,9 @@ console.log("Coinbase Value (from template):", jobTemplate.blockData.coinbaseval
         // Check if the pool identifier is too long
         // this.coinbaseTransaction.ins[0].script = script;
 	
-	// Encode block height (BIP34)
+	const scriptSig = buildCoinbaseScriptSig(jobTemplate.blockData.height, 'Public-Pool');
 
-// Optional tag (e.g., pool name)
-const poolTag = Buffer.from(configService.get('POOL_IDENTIFIER') || 'Public-Pool');
-
-// Combine into scriptSig
-const scriptSig = Buffer.concat([blockHeightLengthByte, blockHeightEncoded, poolTag]);
-let script = scriptSig;
+const script = scriptSig;
 	//
 	// Set the coinbase input script
 	this.coinbaseTransaction.ins[0].script = script;
@@ -116,11 +111,11 @@ let script = scriptSig;
         if (versionMask !== undefined && versionMask != 0) {
             testBlock.version = (testBlock.version ^ versionMask);
         }
-
+	console.log("testBlock VersionMask: ",testBlock.version);
         // set the nonces
         // const nonceScript = testBlock.transactions[0].ins[0].script.toString('hex');
 	const nonceScript = hex(testBlock.transactions[0].ins[0].script);
-
+	console.log("nonceScript: ",nonceScript);
         testBlock.transactions[0].ins[0].script = Buffer.from(`${nonceScript.substring(0, nonceScript.length - 16)}${extraNonce}${extraNonce2}`, 'hex');
 
         //recompute the root since we updated the coinbase script with the nonces
@@ -159,8 +154,12 @@ let script = scriptSig;
 
     // Coinbase input
     coinbaseTransaction.addInput(Buffer.alloc(32, 0), 0xffffffff, 0xffffffff);
-    console.log(jobTemplate);
-    // Extract rewards & addresses from the block template
+
+    // --- Add scriptSig ---
+    const scriptSig = buildCoinbaseScriptSig(jobTemplate.blockData.height, 'Public-Pool');
+console.log("Coinbase scriptSig (hex final):", hex(scriptSig));
+  
+    // Extract rewards & addresses
     const {
         minerReward = 0,
         governanceReward = 0,
@@ -176,24 +175,23 @@ let script = scriptSig;
 
     // ---- Miner / Pool outputs ----
     if (addresses && addresses.length > 0) {
-    let left = minerReward;
-    for (let i = 0; i < addresses.length; i++) {
-        let amount = (i === addresses.length - 1)
-            ? left
-            : Math.floor((addresses[i].percent / 100) * minerReward);
+        let left = minerReward;
+        for (let i = 0; i < addresses.length; i++) {
+            let amount = (i === addresses.length - 1)
+                ? left
+                : Math.floor((addresses[i].percent / 100) * minerReward);
 
-        if (amount < 0) amount = 0;
-        left -= amount;
+            if (amount < 0) amount = 0;
+            left -= amount;
 
-        console.log(`💰 Adding miner output: ${addresses[i].address} => ${amount}`);
-        coinbaseTransaction.addOutput(this.getPaymentScript(addresses[i].address), BigInt(amount));
+            console.log(`💰 Adding miner output: ${addresses[i].address} => ${amount}`);
+            coinbaseTransaction.addOutput(this.getPaymentScript(addresses[i].address), BigInt(amount));
+        }
+    } else {
+        const poolAddress = defaultPoolAddress || (addresses?.[0]?.address || '');
+        console.log(`💰 Adding default pool output: ${poolAddress} => ${minerReward}`);
+        coinbaseTransaction.addOutput(this.getPaymentScript(poolAddress), BigInt(minerReward));
     }
-} else {
-    const poolAddress = jobTemplate.blockData.defaultPoolAddress || (addresses?.[0]?.address || '');
-    console.log(`💰 Adding default pool output: ${poolAddress} => ${minerReward}`);
-    coinbaseTransaction.addOutput(this.getPaymentScript(poolAddress), BigInt(minerReward));
-}
-
 
     // ---- Governance output ----
     if (governanceReward > 0 && governanceAddress) {
@@ -205,7 +203,7 @@ let script = scriptSig;
         coinbaseTransaction.addOutput(this.getPaymentScript(nodeOperatorsAddress), BigInt(nodeOperatorsReward));
     }
 
-    // ---- Debugging ----
+    // Debugging
     const totalOutputs = coinbaseTransaction.outs.reduce((sum, o) => sum + Number(o.value), 0);
     console.log(`Coinbase Outputs:`, coinbaseTransaction.outs.map(o => ({
         script: o.script,
@@ -218,12 +216,13 @@ let script = scriptSig;
         console.warn(`⚠️ Coinbase mismatch: expected ${jobTemplate.blockData.coinbasevalue}, got ${totalOutputs}`);
     }
 
-    // Witness reserved value (for SegWit)
+    // Witness reserved value
     const segwitWitnessReservedValue = Buffer.alloc(32, 0);
     coinbaseTransaction.ins[0].witness = [segwitWitnessReservedValue];
 
     return coinbaseTransaction;
 }
+
 
 
 
