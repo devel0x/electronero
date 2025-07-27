@@ -72,7 +72,7 @@ const script = scriptSig;
 	//
 	// Set the coinbase input script
 	this.coinbaseTransaction.ins[0].script = script;
-	this.coinbaseTransaction.addOutput(bitcoinjs.script.compile([bitcoinjs.opcodes.OP_RETURN, Buffer.concat([segwitMagicBits, jobTemplate.block.witnessCommit])]), BigInt(0));
+	//this.coinbaseTransaction.addOutput(bitcoinjs.script.compile([bitcoinjs.opcodes.OP_RETURN, Buffer.concat([segwitMagicBits, jobTemplate.block.witnessCommit])]), BigInt(0));
 
         // Check if the pool identifier is too long
         if ((this.coinbaseTransaction.weight() + jobTemplate.block.weight()) > MAX_BLOCK_WEIGHT) {
@@ -96,36 +96,78 @@ const script = scriptSig;
 
     }
 
-    public copyAndUpdateBlock(jobTemplate: IJobTemplate, versionMask: number, nonce: number, extraNonce: string, extraNonce2: string, timestamp: number): bitcoinjs.Block {
+    public copyAndUpdateBlock(
+  jobTemplate: IJobTemplate,
+  versionMask: number,
+  nonce: number,
+  extraNonce: string,      // hex
+  extraNonce2: string,     // hex
+  timestamp: number,
+  expectedExtraNonce2Size = 4
+): bitcoinjs.Block {
 
-        const testBlock = Object.assign(new bitcoinjs.Block(), jobTemplate.block);
-        testBlock.transactions = jobTemplate.block.transactions.map(tx => {
-            return Object.assign(new bitcoinjs.Transaction(), tx);
-        });
+  const testBlock = Object.assign(new bitcoinjs.Block(), jobTemplate.block);
+  testBlock.transactions = jobTemplate.block.transactions.map(tx =>
+    Object.assign(new bitcoinjs.Transaction(), tx)
+  );
 
-        testBlock.transactions[0] = this.coinbaseTransaction;
+  testBlock.transactions[0] = this.coinbaseTransaction;
 
-        testBlock.nonce = nonce;
+  // Apply version mask if needed
+  if (versionMask) {
+    testBlock.version = (testBlock.version ^ versionMask);
+  }
 
-        // recompute version mask
-        if (versionMask !== undefined && versionMask != 0) {
-            testBlock.version = (testBlock.version ^ versionMask);
-        }
-	console.log("testBlock VersionMask: ",testBlock.version);
-        // set the nonces
-        // const nonceScript = testBlock.transactions[0].ins[0].script.toString('hex');
-	const nonceScript = hex(testBlock.transactions[0].ins[0].script);
-	console.log("nonceScript: ",nonceScript);
-        testBlock.transactions[0].ins[0].script = Buffer.from(`${nonceScript.substring(0, nonceScript.length - 16)}${extraNonce}${extraNonce2}`, 'hex');
+  // Normalize extraNonce2 to expected size
+  extraNonce2 = extraNonce2.padStart(expectedExtraNonce2Size * 2, '0');
 
-        //recompute the root since we updated the coinbase script with the nonces
-        // testBlock.merkleRoot = this.calculateMerkleRootHash(testBlock.transactions[0].getHash(false), jobTemplate.merkle_branch);
-	testBlock.merkleRoot = this.calculateMerkleRootHash(u8(testBlock.transactions[0].getHash(false)), jobTemplate.merkle_branch);
+  // ---- Rebuild scriptSig from scratch with placeholder ----
+  const baseScriptSig = buildCoinbaseScriptSig(jobTemplate.blockData.height, "Public-Pool");
+  const placeholder = Buffer.alloc((extraNonce.length + extraNonce2.length) / 2, 0); // zero bytes placeholder
+  const script = Buffer.concat([baseScriptSig, placeholder]);
 
-        testBlock.timestamp = timestamp;
+  // ---- Inject extranonce into placeholder ----
+  const fullEx = Buffer.from(extraNonce + extraNonce2, 'hex');
+  const neededBytes = fullEx.length;
 
-        return testBlock;
-    }
+  console.log("Coinbase script before injection:", script.toString('hex'));
+  console.log("Injecting extranonce of", neededBytes, "bytes");
+
+  fullEx.copy(script, script.length - neededBytes);
+  console.log("Coinbase script after injection:", script.toString('hex'));
+
+  testBlock.transactions[0].ins[0].script = script;
+
+  // ---- Recompute merkle root since coinbase changed ----
+  const coinbaseHash = testBlock.transactions[0].getHash(false);
+  testBlock.merkleRoot = this.calculateMerkleRootHash(u8(coinbaseHash), jobTemplate.merkle_branch);
+  // Recompute SegWit witness commitment and update OP_RETURN
+const witnessCommitment = bitcoinjs.Block.calculateMerkleRoot(testBlock.transactions, true);
+testBlock.witnessCommit = witnessCommitment;
+
+const segwitMagic = Buffer.from('aa21a9ed', 'hex');
+const opReturnData = Buffer.concat([segwitMagic, witnessCommitment]);
+
+// Replace or add OP_RETURN output (last output)
+const opReturnScript = bitcoinjs.script.compile([
+  bitcoinjs.opcodes.OP_RETURN,
+  opReturnData,
+]);
+
+const coinbaseTx = testBlock.transactions[0];
+if (coinbaseTx.outs.length > 0 && coinbaseTx.outs[coinbaseTx.outs.length - 1].script[0] === bitcoinjs.opcodes.OP_RETURN) {
+  coinbaseTx.outs[coinbaseTx.outs.length - 1].script = opReturnScript;
+} else {
+  coinbaseTx.addOutput(opReturnScript, BigInt(0));
+}
+
+
+  // Set timestamp and nonce
+  testBlock.timestamp = timestamp;
+  testBlock.nonce = nonce;
+
+  return testBlock;
+}
 
 
     private calculateMerkleRootHash(newRoot: Buffer, merkleBranches: string[]): Buffer {
@@ -157,6 +199,7 @@ const script = scriptSig;
 
     // --- Add scriptSig ---
     const scriptSig = buildCoinbaseScriptSig(jobTemplate.blockData.height, 'Public-Pool');
+    coinbaseTransaction.ins[0].script = scriptSig;
 console.log("Coinbase scriptSig (hex final):", hex(scriptSig));
   
     // Extract rewards & addresses
@@ -219,7 +262,15 @@ console.log("Coinbase scriptSig (hex final):", hex(scriptSig));
     // Witness reserved value
     const segwitWitnessReservedValue = Buffer.alloc(32, 0);
     coinbaseTransaction.ins[0].witness = [segwitWitnessReservedValue];
-
+    // Add witness commitment (SegWit required)
+if (jobTemplate.blockData.default_witness_commitment) {
+    const commitScript = Buffer.from(
+        jobTemplate.blockData.default_witness_commitment,
+        'hex'
+    );
+    coinbaseTransaction.addOutput(commitScript, BigInt(0));
+}
+console.log("Final coinbase script (hex):", hex(coinbaseTransaction.ins[0].script));
     return coinbaseTransaction;
 }
 

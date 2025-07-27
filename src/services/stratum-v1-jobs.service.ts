@@ -25,6 +25,7 @@ export interface IJobTemplate {
         nodeOperatorsReward?: number;
         nodeOperatorsAddress?: string;
         defaultPoolAddress?: string;
+	default_witness_commitment?: string;
     };
 }
 
@@ -92,7 +93,8 @@ export class StratumV1JobsService {
     governanceAddress: blockTemplate.governanceAddress ?? '',
     nodeOperatorsReward: blockTemplate.nodeOperatorsReward ?? 0,
     nodeOperatorsAddress: blockTemplate.nodeOperatorsAddress ?? '',
-    defaultPoolAddress: blockTemplate.defaultPoolAddress ?? ''
+    defaultPoolAddress: blockTemplate.defaultPoolAddress ?? '',
+    default_witness_commitment: blockTemplate.default_witness_commitment ?? ''
 };
 
             }),
@@ -136,12 +138,13 @@ export class StratumV1JobsService {
                         networkDifficulty,
                         height,
                         clearJobs,
-			minerReward: blockTemplate.minerReward,          // example split
-			governanceReward: blockTemplate.governanceReward,     // adjust as needed
+			minerReward: blockTemplate.minerReward,
+			governanceReward: blockTemplate.governanceReward,
 			governanceAddress: blockTemplate.governanceAddress,
 			nodeOperatorsReward: blockTemplate.nodeOperatorsReward,
 			nodeOperatorsAddress: blockTemplate.nodeOperatorsAddress,
-			defaultPoolAddress: blockTemplate.defaultPoolAddress
+			defaultPoolAddress: blockTemplate.defaultPoolAddress,
+			default_witness_commitment: blockTemplate.default_witness_commitment
                     }
                 }
             }),

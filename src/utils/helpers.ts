@@ -37,8 +37,14 @@ export function encodeBip34Height(height: number): Buffer {
   return Buffer.concat([Buffer.from([trimmed.length]), trimmed]);
 }
 
-export function buildCoinbaseScriptSig(height: number, tag = 'Public-Pool'): Buffer {
+export function buildCoinbaseScriptSig(
+  height: number,
+  tag = 'Public-Pool',
+  extraNonceSize = 8
+): Buffer {
   const heightPush = encodeBip34Height(height);
   const tagBuf = Buffer.from(tag, 'utf8');
-  return Buffer.concat([heightPush, tagBuf]);
+  const extraNoncePlaceholder = Buffer.alloc(extraNonceSize, 0);
+  
+  return Buffer.concat([heightPush, tagBuf, extraNoncePlaceholder]);
 }
