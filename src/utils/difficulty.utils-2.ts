@@ -15,7 +15,7 @@ export class DifficultyUtils {
     // Convert hashResult to Buffer for le256todouble
     const s64 = DifficultyUtils.le256todouble(Buffer.from(hashResult));
 
-    const truediffone = Big('26959535291011309493156476344723991336010898738574164086137773096960');
+    const truediffone = Big('26959946667150639794667015087019630673637144422540572481103610249215');
     const difficulty = truediffone.div(s64.toString());
 
     return {
