@@ -100,63 +100,50 @@ public serializeBlockWithWitness(block: bitcoinjs.Block): Buffer {
   jobTemplate: IJobTemplate,
   versionMask: number,
   nonce: number,
-  extraNonce: string,   // hex
-  extraNonce2: string,  // hex
+  extraNonce: string,
+  extraNonce2: string,
   timestamp: number,
   expectedExtraNonce2Size = 4
 ): bitcoinjs.Block {
-  // Clone the block and all transactions
+  // Clone block and transactions
   const block = Object.assign(new bitcoinjs.Block(), jobTemplate.block);
   block.transactions = jobTemplate.block.transactions.map(tx =>
     Object.assign(new bitcoinjs.Transaction(), tx)
   );
 
-  // Clone coinbase transaction to avoid modifying the template's copy
   const cbTx = Object.assign(new bitcoinjs.Transaction(), this.coinbaseTransaction);
   block.transactions[0] = cbTx;
 
-  // Apply version mask (if needed)
   block.version = versionMask ? (block.version ^ versionMask) : block.version;
 
-  // Normalize extraNonce2 length
   extraNonce2 = extraNonce2.padStart(expectedExtraNonce2Size * 2, '0');
-
-  // Determine total padding for extranonce
   const padBytes = (extraNonce.length + extraNonce2.length) / 2;
 
-  // Build a fresh scriptSig with zeroed placeholder for extranonce
   let script = buildCoinbaseScriptSigWithPad(
     jobTemplate.blockData.height,
     "Public-Pool",
     padBytes
   );
 
-  console.log("Coinbase script before injection:", script.toString('hex'));
-
-  // Inject extranonce data into the placeholder
   const fullEx = Buffer.from(extraNonce + extraNonce2, 'hex');
   injectExtraNonce(script, fullEx);
-  console.log("Coinbase script after injection:", script.toString('hex'));
-
   cbTx.ins[0].script = script;
 
-  // Recompute the merkle root from the updated coinbase
+  // 🔁 Must update witness commitment BEFORE merkle root
+  this.updateWitnessCommitment(block);
+
+  // ✅ Recompute Merkle root *after* coinbase is finalized
   const coinbaseHash = cbTx.getHash(false);
   block.merkleRoot = this.calculateMerkleRootHash(
     u8(coinbaseHash),
     jobTemplate.merkle_branch
   );
 
-  // Update the witness commitment (replaces the OP_RETURN)
-  this.updateWitnessCommitment(block);
-
-  // Update timestamp and nonce
   block.timestamp = timestamp;
   block.nonce = nonce;
 
   return block;
 }
-
 
   private updateWitnessCommitment(block: bitcoinjs.Block) {
     const wtxids = block.transactions.map(tx => tx.getHash(true));
