@@ -88,6 +88,14 @@ export class MiningJob {
     this.coinbasePart2 = serializedCoinbaseTx.slice(partOneIndex);
   }
 
+public serializeBlockWithWitness(block: bitcoinjs.Block): Buffer {
+  const header = block.toBuffer(false); // false = header only
+  const txCount = bitcoinjs.script.number.encode(block.transactions.length);
+
+  const txBuffers = block.transactions.map((tx) => tx.toBuffer()); // include witness
+  return Buffer.concat([header, txCount, ...txBuffers]);
+}
+
   public copyAndUpdateBlock(
   jobTemplate: IJobTemplate,
   versionMask: number,
