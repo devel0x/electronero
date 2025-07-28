@@ -192,19 +192,16 @@ export class MiningJob {
     return layer[0];
   }
 
-  private calculateMerkleRootHash(
-    newRoot: Buffer,
-    merkleBranches: string[]
-  ): Buffer {
-    const bothMerkles = Buffer.alloc(64);
-    bothMerkles.set(newRoot);
-    for (let i = 0; i < merkleBranches.length; i++) {
-      bothMerkles.set(Buffer.from(merkleBranches[i], 'hex'), 32);
-      newRoot = u8(bitcoinjs.crypto.hash256(bothMerkles));
-      bothMerkles.set(newRoot);
-    }
-    return bothMerkles.subarray(0, 32);
+
+
+  private calculateMerkleRootHash(newRoot: Buffer, merkleBranches: string[]): Buffer {
+  for (let i = 0; i < merkleBranches.length; i++) {
+    const branch = Buffer.from(merkleBranches[i], 'hex');
+    const concat = Buffer.concat([newRoot, branch]);
+    newRoot = Buffer.from(bitcoinjs.crypto.hash256(concat));
   }
+  return newRoot;
+}
 
   private createCoinbaseTransaction(
     addresses: { address: string; percent: number }[],

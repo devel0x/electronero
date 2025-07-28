@@ -55,12 +55,14 @@ export function serializeBlockWithWitness(block: bitcoinjs.Block): Buffer {
   const txCountVarInt = encodeVarInt(txCount);
 
   const txBuffers = (block.transactions || []).map(tx => {
-    // Serialize each transaction with witness
-    if (typeof (tx as any).__toBuffer === 'function') {
-      return (tx as any).__toBuffer(undefined, undefined, true);
-    }
-    return tx.toBuffer(); // fallback if __toBuffer doesn't exist
-  });
+  let buf: Buffer;
+  if (typeof (tx as any).__toBuffer === 'function') {
+    buf = (tx as any).__toBuffer(undefined, undefined, true);
+  } else {
+    buf = Buffer.from(tx.toBuffer());
+  }
+  return Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+});
 
   return Buffer.concat([header, txCountVarInt, ...txBuffers]);
 }
