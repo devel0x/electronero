@@ -522,7 +522,8 @@ export class StratumV1Client {
 
             if (submissionDifficulty >= jobTemplate.blockData.networkDifficulty) {
                 console.log('!!! BLOCK FOUND !!!');
-                const blockHex = blockToHex(updatedJobBlock);
+		const blockWithWitness = job.serializeBlockWithWitness(updatedJobBlock);
+		const blockHex = hex(blockWithWitness);
 		console.log('Block Hex:', blockHex);
 		console.log('Block Hex Length:', blockHex.length);
 
