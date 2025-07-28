@@ -85,3 +85,17 @@ export function buildCoinbaseScriptSigWithPad(
 }
 
 
+export function updateWitnessCommitment(block: bitcoinjs.Block) {
+  const wtxids = block.transactions.map(tx => tx.getHash(true)); // with witness
+  const witnessRoot = this.calculateMerkleRootHash(u8(wtxids[0]), []); 
+  const reserved = Buffer.alloc(32, 0); 
+  const commitment = bitcoinjs.crypto.hash256(Buffer.concat([reserved, witnessRoot]));
+
+  // Find OP_RETURN output and replace
+  const opretIndex = block.transactions[0].outs.findIndex(o => o.script[0] === bitcoinjs.opcodes.OP_RETURN);
+  block.transactions[0].outs[opretIndex] = {
+    script: bitcoinjs.script.compile([bitcoinjs.opcodes.OP_RETURN, Buffer.concat([Buffer.from('aa21a9ed', 'hex'), commitment])]),
+    value: 0n
+  };
+}
+
