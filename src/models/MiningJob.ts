@@ -151,57 +151,56 @@ export class MiningJob {
 
 
   private updateWitnessCommitment(block: bitcoinjs.Block) {
-    const wtxids = block.transactions.map(tx => u8(tx.getHash(true) as any));
-    const witnessRoot = this.merkleFromHashes(wtxids);
-    const reserved = Buffer.alloc(32, 0);
-    const commitment = bitcoinjs.crypto.hash256(
-      Buffer.concat([reserved, witnessRoot])
-    );
+    const wtxids = block.transactions.map(tx => tx.getHash(true));
+    const wtxidBuffers = wtxids.map(h => Buffer.from(h));
 
-    // Replace the existing OP_RETURN output
-    const opretIndex = block.transactions[0].outs.findIndex(
-      o => o.script[0] === bitcoinjs.opcodes.OP_RETURN
-    );
+    const witnessRoot = this.merkleFromHashes(wtxidBuffers);
+    const reserved = Buffer.alloc(32, 0); // Optional: randomize for security
+    const commitment = bitcoinjs.crypto.hash256(Buffer.concat([reserved, witnessRoot]));
 
-    const newOpret = bitcoinjs.script.compile([
+    const opretScript = bitcoinjs.script.compile([
       bitcoinjs.opcodes.OP_RETURN,
-      Buffer.concat([Buffer.from('aa21a9ed', 'hex'), commitment])
+      Buffer.concat([
+        Buffer.from('aa21a9ed', 'hex'),
+        Buffer.from(commitment)
+      ])
     ]);
 
-    if (opretIndex !== -1) {
-      block.transactions[0].outs[opretIndex] = { script: newOpret, value: 0n };
+    const cb = block.transactions[0];
+    const index = cb.outs.findIndex(o => o.script[0] === bitcoinjs.opcodes.OP_RETURN);
+    if (index !== -1) {
+      cb.outs[index] = { script: opretScript, value: 0n };
     } else {
-      block.transactions[0].addOutput(newOpret, 0n);
+      cb.addOutput(opretScript, 0n);
     }
   }
 
-  private merkleFromHashes(hashes: Array<Buffer | Uint8Array>): Buffer {
-    let layer: Buffer[] = hashes.map(h => u8(h));
-    while (layer.length > 1) {
-      if (layer.length % 2 === 1) {
-        layer.push(layer[layer.length - 1]);
+  private merkleFromHashes(hashes: Buffer[]): Buffer {
+    if (hashes.length === 0) return Buffer.alloc(32, 0);
+
+    while (hashes.length > 1) {
+      if (hashes.length % 2 !== 0) {
+        hashes.push(hashes[hashes.length - 1]);
       }
-      const next: Buffer[] = [];
-      for (let i = 0; i < layer.length; i += 2) {
-        next.push(
-          u8(bitcoinjs.crypto.hash256(Buffer.concat([layer[i], layer[i + 1]])))
-        );
+
+      const newHashes: Buffer[] = [];
+      for (let i = 0; i < hashes.length; i += 2) {
+        const concat = Buffer.concat([hashes[i], hashes[i + 1]]);
+        newHashes.push(Buffer.from(bitcoinjs.crypto.hash256(concat)));
       }
-      layer = next;
+      hashes = newHashes;
     }
-    return layer[0];
+    return hashes[0];
   }
-
-
 
   private calculateMerkleRootHash(newRoot: Buffer, merkleBranches: string[]): Buffer {
-  for (let i = 0; i < merkleBranches.length; i++) {
-    const branch = Buffer.from(merkleBranches[i], 'hex');
-    const concat = Buffer.concat([newRoot, branch]);
-    newRoot = Buffer.from(bitcoinjs.crypto.hash256(concat));
+    for (const branchHex of merkleBranches) {
+      const branch = Buffer.from(branchHex, 'hex');
+      const concat = Buffer.concat([newRoot, branch]);
+      newRoot = Buffer.from(bitcoinjs.crypto.hash256(concat));
+    }
+    return newRoot;
   }
-  return newRoot;
-}
 
   private createCoinbaseTransaction(
     addresses: { address: string; percent: number }[],
