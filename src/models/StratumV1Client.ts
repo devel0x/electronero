@@ -29,6 +29,7 @@ import { StratumV1ClientStatistics } from './StratumV1ClientStatistics';
 import { ExternalSharesService } from '../services/external-shares.service';
 import { DifficultyUtils } from '../utils/difficulty.utils';
 import { u8, hex } from '../utils/helpers';
+import { blockToHex } from '../utils/block-serialize';
 
 export class StratumV1Client {
 
@@ -521,7 +522,10 @@ export class StratumV1Client {
 
             if (submissionDifficulty >= jobTemplate.blockData.networkDifficulty) {
                 console.log('!!! BLOCK FOUND !!!');
-                const blockHex = updatedJobBlock.toHex(false);
+                const blockHex = blockToHex(updatedJobBlock);
+		console.log('Block Hex:', blockHex);
+		console.log('Block Hex Length:', blockHex.length);
+
                 const result = await this.bitcoinRpcService.SUBMIT_BLOCK(blockHex);
                 await this.blocksService.save({
                     height: jobTemplate.blockData.height,
