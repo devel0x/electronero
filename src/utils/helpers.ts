@@ -28,8 +28,8 @@ export function injectExtraNonce(script: Buffer, extranonce: Buffer): Buffer {
  *  <len><height little-endian, minimally encoded>
  */
 export function encodeBip34Height(height: number): Buffer {
-  console.log('encodeBip34Height CALLED FROM:', new Error().stack);
-  console.log('encodeBip34Height INPUT HEIGHT:', height);
+//  console.log('encodeBip34Height CALLED FROM:', new Error().stack);
+//  console.log('encodeBip34Height INPUT HEIGHT:', height);
 
   if (height === 0) return Buffer.from([0]);
 
@@ -40,9 +40,9 @@ export function encodeBip34Height(height: number): Buffer {
     tmp >>= 8;
   }
 
-  console.log('encodeBip34Height RAW BYTES:', bytes);
+  //console.log('encodeBip34Height RAW BYTES:', bytes);
   const result = Buffer.concat([Buffer.from([bytes.length]), Buffer.from(bytes)]);
-  console.log('encodeBip34Height RESULT:', result.toString('hex'));
+  //console.log('encodeBip34Height RESULT:', result.toString('hex'));
   return result;
 }
 
@@ -99,3 +99,22 @@ export function updateWitnessCommitment(block: bitcoinjs.Block) {
   };
 }
 
+/**
+ * Converts a compact difficulty representation (bits) into a full 256-bit target.
+ */
+export function bitsToTarget(bits: number): Buffer {
+  const exponent = bits >>> 24;
+  const mantissa = bits & 0xffffff;
+
+  let target = Buffer.alloc(32, 0);
+  let mantissaBuf = Buffer.alloc(3);
+  mantissaBuf.writeUIntBE(mantissa, 0, 3);
+
+  if (exponent <= 3) {
+    mantissaBuf.copy(target, 32 - 3 - (3 - exponent));
+  } else {
+    mantissaBuf.copy(target, 32 - exponent);
+  }
+
+  return target;
+}

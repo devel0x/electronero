@@ -3,35 +3,28 @@ import * as bitcoinjs from 'interchainedjs-lib';
 import { u8, hex } from './helpers';
 
 export class DifficultyUtils {
-  static calculateDifficulty(header: Buffer | Uint8Array | string): { submissionDifficulty: number; submissionHash: string } {
-    const headerBuf = Buffer.isBuffer(header)
-      ? header
-      : typeof header === 'string'
-        ? Buffer.from(header, 'hex')
-        : Buffer.from(header);
-
-    const hashResult = bitcoinjs.crypto.hash256(headerBuf);
-
-    // Convert hashResult to bigint
+  static calculateDifficulty(header: Buffer): { submissionDifficulty: number; submissionHash: string } {
+    const hashResult = bitcoinjs.crypto.hash256(Buffer.isBuffer(header) ? header : Buffer.from(header, 'hex'));
+    //const s64 = DifficultyUtils.le256todouble(hashResult);
     const s64 = DifficultyUtils.le256todouble(Buffer.from(hashResult));
-
-    // Use your chain's powLimit for diff1
-    const diff1 = Big('115792089237316195423570985008687907853269984665640564039457584007913129639935'); 
-    // 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff in decimal
-
-    const difficulty = diff1.div(s64.toString());
-
-    return {
-      submissionDifficulty: difficulty.toNumber(),
-      submissionHash: hex(hashResult)
+    const truediffone = Big('115792089237316195423570985008687907853269984665640564039457584007913129639935');
+    const difficulty = truediffone.div(s64.toString());
+    
+    return { 
+      submissionDifficulty: difficulty.toNumber(), 
+      submissionHash: hex(hashResult) 
     };
   }
-
-  private static le256todouble(target: Buffer): bigint {
-    return target.reduceRight((acc, byte) => {
+private static le256todouble(target: Buffer): bigint {
+    const number = target.reduceRight((acc, byte) => {
       return (acc << BigInt(8)) | BigInt(byte);
     }, BigInt(0));
+    return number;
   }
+private static le256toBigInt(target: Buffer): bigint {
+  return target.reduceRight((acc, byte) => (acc << BigInt(8)) | BigInt(byte), BigInt(0));
+}
+
 }
 
 export function bitsToDifficulty(bitsHex: string): number {
@@ -47,3 +40,27 @@ export function bitsToDifficulty(bitsHex: string): number {
   // Difficulty = diff1_target / current_target
   return powLimit.div(target).toNumber();
 }
+
+/**
+ * Converts a `difficulty` value to a 32-byte target (Buffer)
+ * Assumes diff1 target = powLimit
+ */
+export function difficultyToTarget(difficulty: number): Buffer {
+  const powLimit = Big('0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+  const target = powLimit.div(difficulty);
+  const hexStr = BigInt(target.toFixed(0)).toString(16).padStart(64, '0');
+  return Buffer.from(hexStr, 'hex');
+}
+
+/**
+ * Converts compact bits (e.g., 0x1d00ffff) to 32-byte full target
+ */
+export function bitsToTarget(bits: number): Buffer {
+  const exponent = (bits >>> 24) & 0xff;
+  const mantissa = bits & 0xffffff;
+
+  let target = Big(mantissa).mul(Big(2).pow(8 * (exponent - 3)));
+  const hexStr = BigInt(target.toFixed(0)).toString(16).padStart(64, '0');
+  return Buffer.from(hexStr, 'hex');
+}
+

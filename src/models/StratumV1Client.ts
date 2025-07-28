@@ -1,3 +1,4 @@
+
 import { ConfigService } from '@nestjs/config';
 import * as bitcoinjs from 'interchainedjs-lib';
 import { plainToInstance } from 'class-transformer';
@@ -28,8 +29,9 @@ import { SuggestDifficulty } from './stratum-messages/SuggestDifficultyMessage';
 import { StratumV1ClientStatistics } from './StratumV1ClientStatistics';
 import { ExternalSharesService } from '../services/external-shares.service';
 import { DifficultyUtils } from '../utils/difficulty.utils';
-import { u8, hex } from '../utils/helpers';
+import { bitsToTarget, u8, hex } from '../utils/helpers';
 import { blockToHex } from '../utils/block-serialize';
+import { bitsToDifficulty } from '../utils/difficulty.utils';
 
 export class StratumV1Client {
 
@@ -521,7 +523,19 @@ export class StratumV1Client {
         if (submissionDifficulty >= this.sessionDifficulty) {
 
             if (submissionDifficulty >= jobTemplate.blockData.networkDifficulty) {
-                console.log('!!! BLOCK FOUND !!!');
+                const hash256 = crypto.createHash('sha256').update(crypto.createHash('sha256').update(header).digest()).digest().reverse(); // Big-endian block hash
+
+const networkTarget = bitsToTarget(updatedJobBlock.bits); // 32-byte target
+
+console.log('Block Hash:', hex(hash256));
+console.log('Target:', hex(networkTarget));
+
+if (hash256.compare(networkTarget) > 0) {
+  console.log('❌ Block hash is above network target (HIGH-HASH)');
+} else {
+  console.log('✅ Block hash is below network target — VALID BLOCK');
+}
+		console.log('!!! BLOCK FOUND !!!');
 		const blockWithWitness = job.serializeBlockWithWitness(updatedJobBlock);
 		const blockHex = hex(blockWithWitness);
 		console.log('Block Hex:', blockHex);
@@ -598,31 +612,47 @@ export class StratumV1Client {
     }
 
     private async checkDifficulty() {
-        const targetDiff = this.statistics.getSuggestedDifficulty(this.sessionDifficulty);
-        if (targetDiff == null) {
-            return;
-        }
+    let targetDiff = this.statistics.getSuggestedDifficulty(this.sessionDifficulty);
+    if (targetDiff == null) return;
 
-        if (targetDiff != this.sessionDifficulty) {
-            //console.log(`Adjusting ${this.extraNonceAndSessionId} difficulty from ${this.sessionDifficulty} to ${targetDiff}`);
-            this.sessionDifficulty = targetDiff;
-
-            const data = JSON.stringify({
-                id: null,
-                method: eResponseMethod.SET_DIFFICULTY,
-                params: [targetDiff]
-            }) + '\n';
-
-
-            await this.socket.write(data);
-
-            const jobTemplate = await firstValueFrom(this.stratumV1JobsService.newMiningJob$);
-            // we need to clear the jobs so that the difficulty set takes effect. Otherwise the different miner implementations can cause issues
-            jobTemplate.blockData.clearJobs = true;
-            await this.sendNewMiningJob(jobTemplate);
-
-        }
+    const MIN_DIFF = 0.0001;
+    if (targetDiff < MIN_DIFF) {
+        console.log(`⚠️ Suggested difficulty ${targetDiff} below minimum, clamping to ${MIN_DIFF}`);
+        targetDiff = MIN_DIFF;
     }
+
+    if (targetDiff !== this.sessionDifficulty) {
+        console.log(`Adjusting ${this.extraNonceAndSessionId} difficulty from ${this.sessionDifficulty} to ${targetDiff}`);
+        this.sessionDifficulty = targetDiff;
+
+        // Send mining.set_difficulty
+        const difficultyMsg = JSON.stringify({
+            id: null,
+            method: eResponseMethod.SET_DIFFICULTY,
+            params: [targetDiff]
+        }) + '\n';
+        await this.socket.write(difficultyMsg);
+
+        // Calculate and send mining.set_target
+        //const powLimit = BigInt("0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        //const newTarget = powLimit / BigInt(Math.floor(targetDiff));
+        //const targetHex = newTarget.toString(16).padStart(64, '0'); // Ensure full 256-bit length
+
+        //const targetMsg = JSON.stringify({
+        //    id: null,
+        //    method: "mining.set_target",
+        //    params: [targetHex]
+        //}) + '\n';
+        //await this.socket.write(targetMsg);
+
+        // Send new job
+        const jobTemplate = await firstValueFrom(this.stratumV1JobsService.newMiningJob$);
+        jobTemplate.blockData.clearJobs = true;
+        await this.sendNewMiningJob(jobTemplate);
+    }
+}
+
+
 
     private async write(message: string): Promise<boolean> {
         try {

@@ -30,10 +30,12 @@ export class SuggestDifficulty extends StratumBaseMessage {
 
 
     public response(difficulty: number) {
-        return {
+        const MIN_DIFFICULTY = 0.001;
+	const finalDiff = Math.max(difficulty, MIN_DIFFICULTY);
+	return {
             id: null,
             method: eResponseMethod.SET_DIFFICULTY,
-            params: [difficulty]
+            params: [finalDiff]
         }
     }
 }
