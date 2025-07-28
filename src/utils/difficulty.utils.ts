@@ -7,7 +7,7 @@ export class DifficultyUtils {
     const hashResult = bitcoinjs.crypto.hash256(Buffer.isBuffer(header) ? header : Buffer.from(header, 'hex'));
     //const s64 = DifficultyUtils.le256todouble(hashResult);
     const s64 = DifficultyUtils.le256todouble(Buffer.from(hashResult));
-    const truediffone = Big('115792089237316195423570985008687907853269984665640564039457584007913129639935');
+    const truediffone = Big('26959946667150639794667015087019630673637144422540572481103610249215');
     const difficulty = truediffone.div(s64.toString());
     
     return { 
@@ -35,7 +35,7 @@ export function bitsToDifficulty(bitsHex: string): number {
   const target = Big(mantissa).mul(Big(2).pow((8 * (exponent - 3))));
 
   // Your chain's powLimit (diff1 target)
-  const powLimit = Big('0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+  const powLimit = Big('26959946667150639794667015087019630673637144422540572481103610249215');
 
   // Difficulty = diff1_target / current_target
   return powLimit.div(target).toNumber();
@@ -46,7 +46,7 @@ export function bitsToDifficulty(bitsHex: string): number {
  * Assumes diff1 target = powLimit
  */
 export function difficultyToTarget(difficulty: number): Buffer {
-  const powLimit = Big('0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+  const powLimit = Big('26959946667150639794667015087019630673637144422540572481103610249215');
   const target = powLimit.div(difficulty);
   const hexStr = BigInt(target.toFixed(0)).toString(16).padStart(64, '0');
   return Buffer.from(hexStr, 'hex');
