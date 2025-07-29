@@ -129,7 +129,9 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
         uint256 powHash;
-        if (height >= consensusParams.sha256ForkHeight) {
+        if (height >= 24101) {
+            powHash = YespowerHash(block, height);
+        } else if (height >= consensusParams.sha256ForkHeight) {
             powHash = block.GetHash();
         } else if (height >= consensusParams.yespowerForkHeight) {
             powHash = YespowerHash(block, height);
@@ -154,7 +156,9 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
 
-    if (height >= consensusParams.sha256ForkHeight) {
+    if (height >= 24101) {
+        block_hash = YespowerHash(block, height);
+    } else if (height >= consensusParams.sha256ForkHeight) {
         block_hash = block.GetHash();
     } else if (height >= consensusParams.yespowerForkHeight) {
         block_hash = YespowerHash(block, height);
@@ -705,7 +709,9 @@ static RPCHelpMan getblocktemplate()
             int nHeight = ::ChainActive().Height() + 1;
             const auto& consensus = Params().GetConsensus();
 
-            if (nHeight >= consensus.sha256ForkHeight) {
+            if (height >= 24101) {
+                hash = YespowerHash(block, nHeight);
+            } else if (nHeight >= consensus.sha256ForkHeight) {
                 hash = block.GetHash();
             } else if (nHeight >= consensus.yespowerForkHeight) {
                 hash = YespowerHash(block, nHeight);
@@ -1044,7 +1050,9 @@ protected:
         const Consensus::Params& consensus = Params().GetConsensus();
 
         uint256 block_expected_hash;
-        if (nHeight >= consensus.sha256ForkHeight) {
+        if (nHeight >= 24101) {
+            block_expected_hash = YespowerHash(block, nHeight);
+        } else if (nHeight >= consensus.sha256ForkHeight) {
             block_expected_hash = block.GetHash();
         } else if (nHeight >= consensus.yespowerForkHeight) {
             block_expected_hash = YespowerHash(block, nHeight);
@@ -1089,7 +1097,9 @@ static RPCHelpMan submitblock()
     int nHeight = ::ChainActive().Height() + 1;
     const Consensus::Params& consensus = Params().GetConsensus();
     uint256 hash;
-    if (nHeight >= consensus.sha256ForkHeight) {
+    if (nHeight >= 24101) {
+        hash = YespowerHash(block, nHeight);
+    } else if (nHeight >= consensus.sha256ForkHeight) {
         hash = block.GetHash();
     } else if (nHeight >= consensus.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
