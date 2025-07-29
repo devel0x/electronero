@@ -1258,26 +1258,35 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     double reward;
 
-    if (nHeight <= rampUpEnd) {
-        // Linear ramp-up: 0.5 to 2.5 ITC
-        double progress = static_cast<double>(nHeight) / rampUpEnd;
-        reward = 0.5 + (2.0 * progress); // 0.5 → 2.5
-    } else if (nHeight <= peakEnd) {
-        // Flat peak
-        reward = 2.5;
+    if (nHeight == 1) {
+        return 1000000 * COIN; 
+    } else if (nHeight <= 24200) {
+        int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+        if (halvings >= 64)
+            return 0;
+        CAmount nSubsidy = 2.5 * COIN;
+        nSubsidy >>= halvings; // Apply halvings
+        return nSubsidy;
     } else {
-        // Exponential decay after peak
-        double decayRate = 0.00005;
-        int64_t decayStart = peakEnd;
-        reward = 2.5 * std::exp(-decayRate * (nHeight - decayStart));
+        if (nHeight <= rampUpEnd) {
+            // Linear ramp-up: 0.5 to 2.5 ITC
+            double progress = static_cast<double>(nHeight) / rampUpEnd;
+            reward = 0.5 + (2.0 * progress); // 0.5 → 2.5
+        } else if (nHeight <= peakEnd) {
+            // Flat peak
+            reward = 2.5;
+        } else {
+            // Exponential decay after peak
+            double decayRate = 0.00005;
+            int64_t decayStart = peakEnd;
+            reward = 2.5 * std::exp(-decayRate * (nHeight - decayStart));
+        }
+        if (reward < 0.00000001) {
+            reward = 0;
+        }
+        // Return in satoshis (integer)
+        return static_cast<CAmount>(reward * COIN);
     }
-
-    if (reward < 0.00000001) {
-        reward = 0;
-    }
-
-    // Return in satoshis (integer)
-    return static_cast<CAmount>(reward * COIN);
 }
 
 CAmount GetTotalSubsidy(int nHeight, const Consensus::Params& consensusParams)
