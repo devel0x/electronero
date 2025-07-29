@@ -7,6 +7,7 @@
 #define BITCOIN_CONSENSUS_PARAMS_H
 
 #include <uint256.h>
+#include <amount.h>
 #include <limits>
 
 static const int32_t VERSIONBITS_KAWPOW = 0x20000038;
@@ -62,6 +63,10 @@ struct Params {
     int nextDifficultyFork3Height;
     int nextDifficultyFork4Height;
     int nextDifficultyFork5Height;
+    /** Block height up to which transaction fees are burned */
+    int nFeeBurnEndHeight{0};
+    /** Total amount of fees burned so far */
+    mutable CAmount nFeesBurned{0};
     uint256 powLimitEasyBlocks;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
