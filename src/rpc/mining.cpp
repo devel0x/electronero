@@ -982,26 +982,29 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("extranonce_marker", "f000000ff111111f");
     int nHeight = pindexPrev->nHeight + 1;
     const CChainParams& chainparams = Params();
-    CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
+    CAmount minerFees = 0;
+    for (const CAmount& fee : pblocktemplate->vTxFees)
+        minerFees += fee;
+    if (nHeight < consensusParams.feeBurnEndHeight) {
+        minerFees = 0;
+    }
+    CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams) + minerFees;
     CAmount governanceReward = blockReward / 10;  // 10% governance
     CAmount operatorReward   = 0;
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
     if (IsValidDestination(opDest)) {
         operatorReward = blockReward / 20; // 5% node operators
     }
-    CAmount nFees = 0;
-    for (const CAmount& fee : pblocktemplate->vTxFees)
-        nFees += fee;
-    // Miner gets remainder (subsidy - governance - operator + fees)
-    CAmount minerReward = blockReward - governanceReward - operatorReward + nFees;
+    // Miner gets remainder (subsidy + eligible fees - governance - operator)
+    CAmount minerReward = blockReward - governanceReward - operatorReward;
     // Provide info to the template
-    result.pushKV("coinbasevalue", blockReward + nFees);
+    result.pushKV("coinbasevalue", blockReward);
     result.pushKV("minerReward", minerReward);
     result.pushKV("governanceAddress", chainparams.GovernanceWallet());
     result.pushKV("governanceReward", governanceReward);
     result.pushKV("nodeOperatorsAddress", chainparams.NodeOperatorWallet());
     result.pushKV("nodeOperatorsReward", operatorReward);
-    result.pushKV("fees", nFees);
+    result.pushKV("fees", minerFees);
 
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
