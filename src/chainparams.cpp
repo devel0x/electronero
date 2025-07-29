@@ -80,6 +80,7 @@ public:
         consensus.nextDifficultyFork5Height = 23904; 
         consensus.nGovernanceBp = 1000; // 10.00% example
         consensus.nNodeOpsBp    = 500; // 5.00% example
+        consensus.oracleAddress = "itc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqt6wpk";
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
@@ -207,6 +208,7 @@ public:
         consensus.nextDifficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nRuleChangeActivationThreshold = 1512; // 75% for testchains
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+        consensus.oracleAddress = "tb1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq2z8g2w";
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 1199145601; // January 1, 2008
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = 1230767999; // December 31, 2008
@@ -337,6 +339,7 @@ public:
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1916; // 95% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+        consensus.oracleAddress = "tb1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0h3lz6";
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("00000377ae000000000000000000000000000000000000000000000000000000");
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -407,6 +410,7 @@ public:
         consensus.nextDifficultyForkHeight = std::numeric_limits<int>::max();
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
         consensus.nMinerConfirmationWindow = 144; // Faster than normal for regtest (144 instead of 2016)
+        consensus.oracleAddress = "bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrp8t7e";
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
