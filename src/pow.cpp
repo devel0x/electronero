@@ -209,7 +209,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
         newDifficulty = bnPowLimit;
     }
 
-    if(nextHeight == 24101) {
+    if(nextHeight >= 24101 && nextHeight < 24121) {
         newDifficulty = bnPowLimit;
     }
 
