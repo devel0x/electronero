@@ -8,6 +8,7 @@
 
 #include <chainparamsbase.h>
 #include <consensus/params.h>
+#include <amount.h>
 #include <primitives/block.h>
 #include <protocol.h>
 
@@ -99,6 +100,12 @@ public:
     const ChainTxData& TxData() const { return chainTxData; }
     const std::string& GovernanceWallet() const { return strGovernanceWallet; }
     const std::string& NodeOperatorWallet() const { return strNodeOperatorWallet; }
+    /** Increase burned fee counter */
+    void AddBurnedFees(CAmount amount) const { consensus.nFeesBurned += amount; }
+    /** Set the total burned fees */
+    void SetBurnedFees(CAmount amount) const { consensus.nFeesBurned = amount; }
+    /** Retrieve the total burned fees */
+    CAmount GetBurnedFees() const { return consensus.nFeesBurned; }
     int TokenActivationHeight() const { return nTokenActivationHeight; }
 protected:
     CChainParams() {}

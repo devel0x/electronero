@@ -516,7 +516,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-    CAmount blockReward = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    bool burn_fees = nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight;
+    CAmount blockReward = GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    if (!burn_fees) blockReward += nFees;
     CAmount governanceReward = blockReward / 10; // 10% goes to governance
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
     bool hasOpDest = IsValidDestination(opDest);
@@ -544,7 +546,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin[0].scriptWitness.stack.push_back(std::vector<unsigned char>(32, 0x00)); // 32-byte reserved nonce
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
-    pblocktemplate->vTxFees[0] = -nFees;
+    pblocktemplate->vTxFees[0] = burn_fees ? 0 : -nFees;
 
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
 
