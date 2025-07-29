@@ -212,9 +212,9 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     if(nextHeight >= 24101 && nextHeight <= 24102) {
         newDifficulty = bnPowLimit;
     }
-    
+
     if(nextHeight >= 24103 && nextHeight <= 24130) {
-        newDifficulty = params.powLimitEasyBlocks;
+        newDifficulty = UintToArith256(params.powLimitEasyBlocks);
     }
 
     LogPrintf("⛏️ Retargeting at height=%d with DGW3-NOVA\n", pindexLast->nHeight);
