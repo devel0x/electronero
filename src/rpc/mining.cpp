@@ -982,7 +982,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("extranonce_marker", "f000000ff111111f");
     int nHeight = pindexPrev->nHeight + 1;
     const CChainParams& chainparams = Params();
-    bool burn_fees = nHeight <= consensusParams.nFeeBurnEndHeight;
+    bool burn_fees = nHeight >= 24500 && nHeight <= consensusParams.nFeeBurnEndHeight;
     CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
     CAmount governanceReward = blockReward / 10;  // 10% governance
     CAmount operatorReward   = 0;

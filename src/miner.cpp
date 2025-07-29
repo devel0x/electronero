@@ -516,13 +516,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-    bool burn_fees = nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight;
+    bool burn_fees = nHeight >= 24500 && nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight; // fees burned until 
     CAmount blockReward = GetBlockSubsidy(nHeight, chainparams.GetConsensus());
     if (!burn_fees) blockReward += nFees;
     CAmount governanceReward = blockReward / 10; // 10% goes to governance
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
     bool hasOpDest = IsValidDestination(opDest);
-    CAmount operatorReward = hasOpDest ? blockReward / 20 : 0; // 5%
+    CAmount operatorReward = hasOpDest ? blockReward / 20 : 0; // 5% goes to node operator 
     coinbaseTx.vout.resize(hasOpDest ? 3 : 2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
     coinbaseTx.vout[0].nValue = blockReward - governanceReward - operatorReward;
