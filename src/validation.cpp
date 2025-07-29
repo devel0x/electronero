@@ -1253,8 +1253,8 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     static const int64_t COIN = 100000000;
-    static const int64_t rampUpEnd = 129600;
-    static const int64_t peakEnd = 259200;
+    static const int64_t rampUpEnd = 259200;
+    static const int64_t peakEnd = 518400;
 
     double reward;
 
@@ -1271,15 +1271,15 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         if (nHeight <= rampUpEnd) {
             // Linear ramp-up: 0.5 to 2.5 ITC
             double progress = static_cast<double>(nHeight) / rampUpEnd;
-            reward = 0.5 + (2.0 * progress); // 0.5 → 2.5
+            reward = 0.5 + (1.5 * progress); // 0.5 → 1.5
         } else if (nHeight <= peakEnd) {
-            // Flat peak
-            reward = 2.5;
+            // Flat peak at 1.5
+            reward = 1.5;
         } else {
             // Exponential decay after peak
-            double decayRate = 0.00005;
+            double decayRate = 0.0000038405;
             int64_t decayStart = peakEnd;
-            reward = 2.5 * std::exp(-decayRate * (nHeight - decayStart));
+            reward = 1.10301990 * std::exp(-decayRate * (nHeight - decayStart));
         }
         if (reward < 0.00000001) {
             reward = 0;
