@@ -5647,6 +5647,30 @@ static RPCHelpMan getgovernancebalance()
     };
 }
 
+static RPCHelpMan gettotalsubsidy()
+{
+    return RPCHelpMan{
+        "gettotalsubsidy",
+        "\nReturn the cumulative block subsidy up to the current chain tip.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::STR_AMOUNT,
+            "",
+            "Total subsidy in " + CURRENCY_UNIT
+        },
+        RPCExamples{
+            HelpExampleCli("gettotalsubsidy", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            LOCK(cs_main);
+            int height = ::ChainActive().Height();
+            CAmount total = GetTotalSubsidy(height, Params().GetConsensus());
+            return ValueFromAmount(total);
+        }
+    };
+}
+
 static RPCHelpMan my_tokens()
 {
     return RPCHelpMan{
@@ -5934,6 +5958,7 @@ RPCHelpMan token_history();
 RPCHelpMan token_meta();
 RPCHelpMan rescan_tokentx();
 RPCHelpMan token_tx_memo();
+RPCHelpMan gettotalsubsidy();
 
 Span<const CRPCCommand> GetWalletRPCCommands()
 {
@@ -6023,6 +6048,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "token_meta",                       &token_meta,                    {"token"} },
     { "wallet",             "token_tx_memo",                   &token_tx_memo,               {"token","txid"} },
     { "wallet",             "rescan_tokentx",                   &rescan_tokentx,                {"from_height"} },
+    { "wallet",             "gettotalsubsidy",                 &gettotalsubsidy,           {} },
 };
 // clang-format on
     return MakeSpan(commands);
