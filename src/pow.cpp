@@ -34,7 +34,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return DarkGravityWave3(pindexLast, params);
     } 
     
-    arith_uint256 limit = UintToArith256((pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
+    arith_uint256 limit = UintToArith256(pindexLast->nHeight + 1 >= 23985 ? params.powLimit : (pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
     LogPrintf("💡 GetNextWorkRequired: powLimit used = %s\n", limit.ToString());
     unsigned int nProofOfWorkLimit = limit.GetCompact();
 
@@ -205,7 +205,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
         newDifficulty = bnPowLimit;
     }
 
-    if (nextHeight >= 24060 && newDifficulty > bnPowLimit) {
+    if (nextHeight >= 24060 && newDifficulty > bnPowLimit && nextHeight < 24109) {
         newDifficulty = bnPowLimit;
     }
 

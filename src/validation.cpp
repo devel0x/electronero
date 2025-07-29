@@ -1167,6 +1167,8 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
+    } else if (nHeight >= 24101) {
+        hash = YespowerHash(block, nHeight);
     } else if (nHeight >= consensusParams.sha256ForkHeight) {
         hash = block.GetHash(); // Legacy SHA256
     } else if (nHeight >= consensusParams.yespowerForkHeight) {
@@ -2233,7 +2235,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
-    
+
     const Consensus::Params& consensusParams = chainparams.GetConsensus();
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
     if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(govDest)) {
@@ -3403,7 +3405,9 @@ static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& st
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= consensusParams.sha256ForkHeight) {
+    } else if (nHeight >= 24101) {
+        hash = YespowerHash(block, nHeight);
+    }  else if (nHeight >= consensusParams.sha256ForkHeight) {
         hash = block.GetHash(); // force legacy SHA256
     } else if (nHeight >= consensusParams.yespowerForkHeight) {
         hash = YespowerHash(block, nHeight);
