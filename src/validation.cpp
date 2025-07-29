@@ -2230,13 +2230,14 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    const Consensus::Params& consensusParams = chainparams.GetConsensus();
+    CAmount minerFees = pindex->nHeight < consensusParams.feeBurnEndHeight ? 0 : nFees;
+    CAmount blockReward = minerFees + GetBlockSubsidy(pindex->nHeight, consensusParams);
     if (block.vtx[0]->GetValueOut() > blockReward) {
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
 
-    const Consensus::Params& consensusParams = chainparams.GetConsensus();
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
     if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);

@@ -62,6 +62,8 @@ struct Params {
     int nextDifficultyFork3Height;
     int nextDifficultyFork4Height;
     int nextDifficultyFork5Height;
+    /** Block height up to which transaction fees are burned instead of paid to miners */
+    int feeBurnEndHeight{0};
     uint256 powLimitEasyBlocks;
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
