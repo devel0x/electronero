@@ -99,6 +99,7 @@ public:
     const ChainTxData& TxData() const { return chainTxData; }
     const std::string& GovernanceWallet() const { return strGovernanceWallet; }
     const std::string& NodeOperatorWallet() const { return strNodeOperatorWallet; }
+    const std::string& OracleAddress() const { return consensus.oracleAddress; }
     int TokenActivationHeight() const { return nTokenActivationHeight; }
 protected:
     CChainParams() {}

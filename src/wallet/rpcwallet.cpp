@@ -43,6 +43,7 @@
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 #include <wallet/token.h>
+#include <chainparams.h>
 #include <fs.h>
 #include <sstream>
 #include <boost/algorithm/string/replace.hpp>
@@ -532,6 +533,70 @@ static RPCHelpMan sendtoaddress()
 
     return SendMoney(pwallet, coin_control, recipients, mapValue, verbose);
 },
+    };
+}
+
+static RPCHelpMan sendtooracle()
+{
+    return RPCHelpMan{"sendtooracle",
+        "\nSend coins to the consensus oracle address with a chain B address encoded in OP_RETURN." +
+        HELP_REQUIRING_PASSPHRASE,
+        {
+            {"chainb_address", RPCArg::Type::STR, RPCArg::Optional::NO, "Destination address on chain B"},
+            {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount in " + CURRENCY_UNIT + " to send"},
+        },
+        RPCResult{
+            RPCResult::Type::STR_HEX, "txid", "The transaction id"
+        },
+        RPCExamples{
+            HelpExampleCli("sendtooracle", "\"baddr\" 1.0")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            CWallet* const pwallet = wallet.get();
+
+            pwallet->BlockUntilSyncedToCurrentChain();
+
+            LOCK(pwallet->cs_wallet);
+
+            EnsureWalletIsUnlocked(pwallet);
+
+            const Consensus::Params& params = Params().GetConsensus();
+            if (params.oracleAddress.empty()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "oracleAddress not configured");
+            }
+
+            CTxDestination oracleDest = DecodeDestination(params.oracleAddress);
+            if (!IsValidDestination(oracleDest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid oracle address");
+            }
+
+            CAmount amount = AmountFromValue(request.params[1]);
+
+            CScript scriptPubKey = GetScriptForDestination(oracleDest);
+            CRecipient recipient{scriptPubKey, amount, false};
+
+            std::string op_data = std::string("address:") + request.params[0].get_str();
+            CScript op_script = CScript() << OP_RETURN << ToByteVector(op_data);
+            CRecipient op_recipient{op_script, 0, false};
+
+            std::vector<CRecipient> vecSend{recipient, op_recipient};
+
+            CCoinControl cc;
+            CTransactionRef tx;
+            CAmount fee;
+            int changePos = -1;
+            bilingual_str err;
+            FeeCalculation fee_calc;
+            bool created = pwallet->CreateTransaction(vecSend, tx, fee, changePos, err, cc, fee_calc, !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+            if (!created || !tx) {
+                throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, err.original);
+            }
+            pwallet->CommitTransaction(tx, {}, {});
+            return tx->GetHash().GetHex();
+        }
     };
 }
 
@@ -5989,6 +6054,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "sendmany",                         &sendmany,                      {"dummy","amounts","minconf","comment","subtractfeefrom","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "bulktransfer",                    &bulktransfer,                {"csv","replaceable","conf_target","estimate_mode","fee_rate","verbose"} },
     { "wallet",             "sendtoaddress",                    &sendtoaddress,                 {"address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode","avoid_reuse","fee_rate","verbose"} },
+    { "wallet",             "sendtooracle",                     &sendtooracle,                  {"chainb_address","amount"} },
     { "wallet",             "sethdseed",                        &sethdseed,                     {"newkeypool","seed"} },
     { "wallet",             "setlabel",                         &setlabel,                      {"address","label"} },
     { "wallet",             "settxfee",                         &settxfee,                      {"amount"} },

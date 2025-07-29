@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Watch an oracle address for atomic swap requests.
+
+This script monitors transactions to a specific chain A address. If a
+transaction to the oracle address contains a chain B address in an
+``OP_RETURN`` output, the amount received is automatically sent to the
+provided chain B address using chain B RPC. When ``PRICE_API_URL`` is
+set, the amount is first multiplied by a rate fetched from the API.
+"""
+
+import os
+import base64
+import json
+import time
+from http.client import HTTPConnection
+from typing import List, Optional, Set
+from urllib.parse import urlparse
+
+
+class RPCClient:
+    """Minimal JSON-RPC client."""
+
+    def __init__(self, host: str, port: int, user: str, password: str) -> None:
+        auth = f"{user}:{password}".encode()
+        self.authhdr = b"Basic " + base64.b64encode(auth)
+        self.conn = HTTPConnection(host, port=port, timeout=30)
+
+    def call(self, method: str, params: Optional[List] = None):
+        if params is None:
+            params = []
+        obj = {
+            "jsonrpc": "1.0",
+            "id": "oracle-watcher",
+            "method": method,
+            "params": params,
+        }
+        self.conn.request(
+            "POST",
+            "/",
+            json.dumps(obj),
+            {"Authorization": self.authhdr, "Content-type": "application/json"},
+        )
+        resp = self.conn.getresponse()
+        if resp is None:
+            raise ConnectionError("no response from RPC server")
+        body = resp.read().decode()
+        reply = json.loads(body)
+        if reply.get("error"):
+            raise RuntimeError(reply["error"])
+        return reply["result"]
+
+
+def fetch_exchange_rate(url: str) -> float:
+    """Fetch the exchange rate from a simple price API.
+
+    The endpoint is expected to return JSON like ``{"rate": 1.23}``.
+    On failure ``1.0`` is returned.
+    """
+    if not url:
+        return 1.0
+    try:
+        parsed = urlparse(url)
+        conn = HTTPConnection(parsed.hostname, parsed.port or 80, timeout=10)
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        if resp.status != 200:
+            raise ConnectionError(f"unexpected HTTP status {resp.status}")
+        data = resp.read().decode()
+        obj = json.loads(data)
+        rate = float(obj.get("rate", 1.0))
+        return rate
+    except Exception as e:
+        print(f"Price fetch failed: {e}")
+        return 1.0
+
+
+class OracleWatcher:
+    def __init__(
+        self,
+        oracle_address: str,
+        chaina_rpc: RPCClient,
+        chainb_rpc: RPCClient,
+        interval: int = 30,
+        price_api_url: str = "",
+    ) -> None:
+        self.oracle_address = oracle_address
+        self.chaina_rpc = chaina_rpc
+        self.chainb_rpc = chainb_rpc
+        self.interval = interval
+        self.price_api_url = price_api_url
+        self.seen: Set[str] = set()
+
+    def run(self) -> None:
+        while True:
+            try:
+                self.poll()
+            except Exception as e:
+                print(f"Error: {e}")
+            time.sleep(self.interval)
+
+    def poll(self) -> None:
+        txs = self.chaina_rpc.call("listtransactions", ["*", 100, 0, True])
+        for tx in txs:
+            if tx.get("category") != "receive" or tx.get("address") != self.oracle_address:
+                continue
+            txid = tx.get("txid")
+            if not txid or txid in self.seen:
+                continue
+            raw = self.chaina_rpc.call("getrawtransaction", [txid, True])
+            chainb_address = self._extract_chainb_address(raw)
+            if not chainb_address:
+                continue
+            amount = self._amount_to_oracle(raw)
+            if amount <= 0:
+                continue
+            rate = fetch_exchange_rate(self.price_api_url)
+            send_amt = amount * rate
+            self.chainb_rpc.call("sendtoaddress", [chainb_address, send_amt])
+            print(
+                f"Sent {send_amt} on chain B to {chainb_address} for tx {txid}"
+            )
+            self.seen.add(txid)
+
+    def _amount_to_oracle(self, raw: dict) -> float:
+        total = 0.0
+        for vout in raw.get("vout", []):
+            spk = vout.get("scriptPubKey", {})
+            if self.oracle_address in spk.get("addresses", []):
+                total += float(vout.get("value", 0))
+        return total
+
+    def _extract_chainb_address(self, raw: dict) -> Optional[str]:
+        for vout in raw.get("vout", []):
+            spk = vout.get("scriptPubKey", {})
+            asm = spk.get("asm", "")
+            if asm.startswith("OP_RETURN "):
+                data_hex = asm.split(" ", 1)[1]
+                try:
+                    data = bytes.fromhex(data_hex).decode()
+                    return data.strip()
+                except Exception:
+                    continue
+            for addr in spk.get("addresses", []):
+                if addr != self.oracle_address:
+                    return addr
+        return None
+
+
+def load_env() -> dict:
+    """Load configuration from environment variables."""
+    def env(name: str, default: Optional[str] = None, required: bool = False):
+        value = os.getenv(name, default)
+        if required and value is None:
+            raise RuntimeError(f"Missing required env var {name}")
+        return value
+
+    cfg = {
+        "oracle": env("ORACLE_ADDRESS", required=True),
+        "chaina_rpchost": env("CHAINA_RPCHOST", "127.0.0.1"),
+        "chaina_rpcport": int(env("CHAINA_RPCPORT", "8332")),
+        "chaina_rpcuser": env("CHAINA_RPCUSER", required=True),
+        "chaina_rpcpassword": env("CHAINA_RPCPASSWORD", required=True),
+        "chainb_rpchost": env("CHAINB_RPCHOST", "127.0.0.1"),
+        "chainb_rpcport": int(env("CHAINB_RPCPORT", "8332")),
+        "chainb_rpcuser": env("CHAINB_RPCUSER", required=True),
+        "chainb_rpcpassword": env("CHAINB_RPCPASSWORD", required=True),
+        "interval": int(env("POLL_INTERVAL", "30")),
+        "price_api_url": env("PRICE_API_URL", ""),
+    }
+    return cfg
+
+
+def main() -> None:
+    cfg = load_env()
+    chaina = RPCClient(cfg["chaina_rpchost"], cfg["chaina_rpcport"], cfg["chaina_rpcuser"], cfg["chaina_rpcpassword"])
+    chainb = RPCClient(cfg["chainb_rpchost"], cfg["chainb_rpcport"], cfg["chainb_rpcuser"], cfg["chainb_rpcpassword"])
+    watcher = OracleWatcher(cfg["oracle"], chaina, chainb, cfg["interval"], cfg["price_api_url"])
+    watcher.run()
+
+
+if __name__ == "__main__":
+    main()
