@@ -198,7 +198,7 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     arith_uint256 bnPowLimit = UintToArith256(
-        (nextHeight >= 24078) ? params.powLimit : (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
+        (nextHeight >= 24101) ? params.powLimitYespower : (nextHeight >= 24078) ? params.powLimit : (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
     );
 
     if (nextHeight < 5879 && newDifficulty > bnPowLimit) {
@@ -206,6 +206,10 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     if (nextHeight >= 24060 && newDifficulty > bnPowLimit && nextHeight < 24101) {
+        newDifficulty = bnPowLimit;
+    }
+
+    if(nextHeight == 24101) {
         newDifficulty = bnPowLimit;
     }
 
@@ -387,7 +391,16 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
         }
     }
 
-    if (nHeight >= params.sha256ForkHeight) {
+    if (nHeight >= 24101) {
+        if(nHeight == 1) {
+            return true; 
+        }
+        LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
+        LogPrintf("🧮 Computed hash: %s\n", hash.ToString());
+        LogPrintf("🎯 Target:        %s\n", bnTarget.ToString());
+        LogPrintf("📏 Comparison:    hash <= target ? %s\n", (UintToArith256(hash) <= bnTarget) ? "✅ YES" : "❌ NO");
+        return CheckYespower(block, bnTarget, nHeight);
+    } else if (nHeight >= params.sha256ForkHeight) {
         LogPrintf("🔥 Using SHA256 at height %d\n", nHeight);
         
         // DO NOT RECOMPUTE THE RESULT
