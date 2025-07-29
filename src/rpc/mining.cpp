@@ -982,6 +982,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("extranonce_marker", "f000000ff111111f");
     int nHeight = pindexPrev->nHeight + 1;
     const CChainParams& chainparams = Params();
+    bool burn_fees = nHeight <= consensusParams.nFeeBurnEndHeight;
     CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
     CAmount governanceReward = blockReward / 10;  // 10% governance
     CAmount operatorReward   = 0;
@@ -993,9 +994,10 @@ static RPCHelpMan getblocktemplate()
     for (const CAmount& fee : pblocktemplate->vTxFees)
         nFees += fee;
     // Miner gets remainder (subsidy - governance - operator + fees)
-    CAmount minerReward = blockReward - governanceReward - operatorReward + nFees;
+    if (!burn_fees) blockReward += nFees;
+    CAmount minerReward = blockReward - governanceReward - operatorReward;
     // Provide info to the template
-    result.pushKV("coinbasevalue", blockReward + nFees);
+    result.pushKV("coinbasevalue", blockReward);
     result.pushKV("minerReward", minerReward);
     result.pushKV("governanceAddress", chainparams.GovernanceWallet());
     result.pushKV("governanceReward", governanceReward);
