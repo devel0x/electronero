@@ -709,7 +709,7 @@ static RPCHelpMan getblocktemplate()
             int nHeight = ::ChainActive().Height() + 1;
             const auto& consensus = Params().GetConsensus();
 
-            if (height >= 24101) {
+            if (nHeight >= 24101) {
                 hash = YespowerHash(block, nHeight);
             } else if (nHeight >= consensus.sha256ForkHeight) {
                 hash = block.GetHash();
