@@ -107,6 +107,8 @@ struct Params {
      */
     bool signet_blocks{false};
     std::vector<uint8_t> signet_challenge;
+    /** Address monitored by swap oracles */
+    std::string oracleAddress;
 };
 } // namespace Consensus
 
