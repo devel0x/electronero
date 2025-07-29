@@ -1252,19 +1252,50 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
+    static const int64_t COIN = 100000000;
+    static const int64_t rampUpEnd = 259200;
+    static const int64_t peakEnd = 518400;
+
+    double reward;
+
     if (nHeight == 1) {
         return 1000000 * COIN; 
+    } else if (nHeight <= 24500) {
+        int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+        if (halvings >= 64)
+            return 0;
+        CAmount nSubsidy = 2.5 * COIN;
+        nSubsidy >>= halvings; // Apply halvings
+        return nSubsidy;
+    } else {
+        if (nHeight <= rampUpEnd) {
+            // Linear ramp-up: 0.5 to 2.5 ITC
+            double progress = static_cast<double>(nHeight) / rampUpEnd;
+            reward = 0.5 + (1.5 * progress); // 0.5 → 1.5
+        } else if (nHeight <= peakEnd) {
+            // Flat peak at 1.5
+            reward = 1.5;
+        } else {
+            // Exponential decay after peak
+            double decayRate = 0.0000038405;
+            int64_t decayStart = peakEnd;
+            reward = 1.10301990 * std::exp(-decayRate * (nHeight - decayStart));
+        }
+        if (reward < 0.00000001) {
+            reward = 0;
+        }
+        // Return in satoshis (integer)
+        return static_cast<CAmount>(reward * COIN);
     }
+}
 
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-
-    // Avoid undefined behavior when shifting 0
-    if (halvings >= 64)
-        return 0;
-
-    CAmount nSubsidy = 2.5 * COIN;
-    nSubsidy >>= halvings; // Apply halvings
-    return nSubsidy;
+CAmount GetTotalSubsidy(int nHeight, const Consensus::Params& consensusParams)
+{
+    CAmount total{0};
+    for (int i = 0; i <= nHeight; ++i) {
+        total += GetBlockSubsidy(i, consensusParams);
+    }
+    return total;
 }
 
 CoinsViews::CoinsViews(
