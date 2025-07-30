@@ -41,9 +41,11 @@ using namespace epee;
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
+#include "crypto/yespower/yespower.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "cn"
+#define YESPOWER_HARDFORK ((uint64_t)(3599790)) 
 #define ELECTRONERO_HARDFORK ((uint64_t)(310787)) 
 #define MAINNET_HARDFORK_V1_HEIGHT ((uint64_t)(1)) // MAINNET v1 
 #define MAINNET_HARDFORK_V7_HEIGHT ((uint64_t)(307003)) // MAINNET v7 hard fork 
@@ -989,8 +991,24 @@ bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata&
   bool get_block_longhash(const block& b, crypto::hash& res, uint64_t height)
   {
     blobdata bd = get_block_hashing_blob(b); 
-    const int variant = b.major_version < 7 ? 0 : b.major_version <= 14 ? 1 : 2;
-    crypto::cn_slow_hash(bd.data(), bd.size(), res, variant);
+    const char* data = bd.data();
+    size_t len = bd.size();
+   
+    if(height >= YESPOWER_HARDFORK) {
+      LOG_PRINT_L2("💥 PoW Fork @ block: " << height << ": Hashing w/ Yespower!");
+      yespower_params_t params = {
+            .version = YESPOWER_1_0,
+            .N = 1024,
+            .r = 8
+        };
+      if (yespower_tls(data, len, &params, (yespower_binary_t*)&res) != YESPOWER_OK) {
+        throw std::runtime_error("Yespower hashing failed");
+      }
+    } else {
+      const int variant = b.major_version < 7 ? 0 : b.major_version <= 14 ? 1 : 2;
+      crypto::cn_slow_hash(bd.data(), bd.size(), res, variant);
+    }
+
     return true;
   }
   //---------------------------------------------------------------

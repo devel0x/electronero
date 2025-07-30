@@ -45,7 +45,10 @@ set(crypto_sources
   random.c
   skein.c
   slow-hash.c
-  tree-hash.c)
+  tree-hash.c
+  yespower/yespower.c
+  yespower/yespower-opt.c
+  yespower/sha256.c)
 
 set(crypto_headers)
 
@@ -74,6 +77,9 @@ monero_add_library(cncrypto
   ${crypto_sources}
   ${crypto_headers}
   ${crypto_private_headers})
+target_include_directories(cncrypto
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/yespower
+)
 target_link_libraries(cncrypto
   PUBLIC
     epee
