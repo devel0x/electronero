@@ -39,9 +39,11 @@ if (IOS)
     INCLUDE(CmakeLists_IOS.txt)
 endif()
 
-cmake_minimum_required(VERSION 2.8.7)
+cmake_minimum_required(VERSION 3.5)
 
 project(electronero)
+
+add_definitions(-DHAVE_EVP_MD_CTX_NEW)
 
 function (die msg)
   if (NOT WIN32)
@@ -56,6 +58,8 @@ function (die msg)
   message(FATAL_ERROR "${BoldRed}${msg}${ColourReset}")
 endfunction ()
 
+add_definitions(-DBOOST_MPL_CFG_NO_PREPROCESSED_HEADERS)
+add_definitions(-DBOOST_MPL_LIMIT_VECTOR_SIZE=50)
 function (add_c_flag_if_supported flag var)
   string(REPLACE "-" "_" supported ${flag}_c)
   check_c_compiler_flag(${flag} ${supported})
@@ -71,6 +75,8 @@ function (add_cxx_flag_if_supported flag var)
     set(${var} "${${var}} ${flag}" PARENT_SCOPE)
   endif()
 endfunction()
+
+cmake_policy(SET CMP0054 NEW)
 
 function (add_linker_flag_if_supported flag var)
   string(REPLACE "-" "_" supported ${flag}_ld)
@@ -891,3 +897,6 @@ option(INSTALL_VENDORED_LIBUNBOUND "Install libunbound binary built from source 
 
 
 CHECK_C_COMPILER_FLAG(-std=c11 HAVE_C11)
+if(HAVE_C11)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
+endif()

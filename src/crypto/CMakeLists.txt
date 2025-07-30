@@ -46,7 +46,7 @@ set(crypto_sources
   skein.c
   slow-hash.c
   tree-hash.c
-  yespower/yespower.c
+  yespower/sysendian.c
   yespower/yespower-opt.c
   yespower/sha256.c)
 

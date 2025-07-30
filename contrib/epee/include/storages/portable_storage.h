@@ -28,6 +28,9 @@
 
 #pragma once 
 
+#include <type_traits>
+#include <boost/mpl/contains.hpp>
+
 #include "misc_language.h"
 #include "portable_storage_base.h"
 #include "portable_storage_to_bin.h"
@@ -210,7 +213,8 @@ namespace epee
     template<class t_value>
     bool portable_storage::get_value(const std::string& value_name, t_value& val, hsection hparent_section)
     {
-      BOOST_MPL_ASSERT(( boost::mpl::contains<storage_entry::types, t_value> )); 
+      static_assert(boost::mpl::contains<typename boost::mpl::push_front<storage_entry::types, storage_entry>::type, t_value>::type::value, "t_value is not a supported storage_entry type");
+
       //TRY_ENTRY();
       if(!hparent_section) hparent_section = &m_root;
       storage_entry* pentry = find_storage_entry(value_name, hparent_section);
@@ -240,7 +244,8 @@ namespace epee
     template<class t_value>
     bool portable_storage::set_value(const std::string& value_name, const t_value& v, hsection hparent_section)        
     {
-      BOOST_MPL_ASSERT(( boost::mpl::contains<boost::mpl::push_front<storage_entry::types, storage_entry>::type, t_value> )); 
+      static_assert(boost::mpl::contains<typename boost::mpl::push_front<storage_entry::types, storage_entry>::type, t_value>::type::value, "t_value is not a supported storage_entry type");
+
       TRY_ENTRY();
       if(!hparent_section)
         hparent_section = &m_root;
@@ -309,7 +314,8 @@ namespace epee
     template<class t_value>
     harray portable_storage::get_first_value(const std::string& value_name, t_value& target, hsection hparent_section)
     {
-      BOOST_MPL_ASSERT(( boost::mpl::contains<storage_entry::types, t_value> )); 
+      static_assert(boost::mpl::contains<typename boost::mpl::push_front<storage_entry::types, storage_entry>::type, t_value>::type::value, "t_value is not a supported storage_entry type");
+
       //TRY_ENTRY();
       if(!hparent_section) hparent_section = &m_root;
       storage_entry* pentry = find_storage_entry(value_name, hparent_section);
@@ -347,7 +353,8 @@ namespace epee
     template<class t_value>
     bool portable_storage::get_next_value(harray hval_array, t_value& target)
     {
-      BOOST_MPL_ASSERT(( boost::mpl::contains<storage_entry::types, t_value> )); 
+      static_assert(boost::mpl::contains<typename boost::mpl::push_front<storage_entry::types, storage_entry>::type, t_value>::type::value, "t_value is not a supported storage_entry type");
+
       //TRY_ENTRY();
       CHECK_AND_ASSERT(hval_array, false);
       array_entry& ar_entry = *hval_array;

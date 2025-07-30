@@ -990,26 +990,24 @@ bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata&
   //---------------------------------------------------------------
   bool get_block_longhash(const block& b, crypto::hash& res, uint64_t height)
   {
-    blobdata bd = get_block_hashing_blob(b); 
-    const char* data = bd.data();
-    size_t len = bd.size();
-   
-    if(height >= YESPOWER_HARDFORK) {
-      LOG_PRINT_L2("💥 PoW Fork @ block: " << height << ": Hashing w/ Yespower!");
-      yespower_params_t params = {
-            .version = YESPOWER_1_0,
-            .N = 1024,
-            .r = 8
-        };
-      if (yespower_tls(data, len, &params, (yespower_binary_t*)&res) != YESPOWER_OK) {
-        throw std::runtime_error("Yespower hashing failed");
-      }
-    } else {
-      const int variant = b.major_version < 7 ? 0 : b.major_version <= 14 ? 1 : 2;
-      crypto::cn_slow_hash(bd.data(), bd.size(), res, variant);
-    }
+      blobdata bd = get_block_hashing_blob(b);
 
-    return true;
+      if (height >= YESPOWER_HARDFORK) {
+          LOG_PRINT_L2("💥 PoW Fork @ block: " << height << ": Hashing w/ Yespower!");
+          yespower_params_t params = {
+              .version = YESPOWER_1_0,
+              .N = 1024,
+              .r = 8
+          };
+          if (yespower_tls(reinterpret_cast<const uint8_t*>(bd.data()), bd.size(), &params, (yespower_binary_t*)&res) != YESPOWER_OK) {
+              throw std::runtime_error("Yespower hashing failed");
+          }
+      } else {
+          const int variant = b.major_version < 7 ? 0 : b.major_version <= 14 ? 1 : 2;
+          crypto::cn_slow_hash(bd.data(), bd.size(), res, variant);
+      }
+
+      return true;
   }
   //---------------------------------------------------------------
   std::vector<uint64_t> relative_output_offsets_to_absolute(const std::vector<uint64_t>& off)
