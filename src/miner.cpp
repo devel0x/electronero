@@ -464,10 +464,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     pblock->nVersion = defaultVersion;
 
-    // Append SEGWIT bit if active 
-    if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {
-        pblock->nVersion |= VersionBitsMask(chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
-    }
+    // Append SEGWIT bit if active not necessary
+    // if (IsWitnessEnabled(pindexPrev, chainparams.GetConsensus())) {
+    //     pblock->nVersion |= VersionBitsMask(chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
+    // }
 
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
