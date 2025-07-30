@@ -545,6 +545,24 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // Add witness nonce to scriptWitness
     coinbaseTx.vin[0].scriptWitness.stack.push_back(std::vector<unsigned char>(32, 0x00)); // 32-byte reserved nonce
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
+    if (fIncludeWitness) {
+        const uint256 witnessRoot = BlockWitnessMerkleRoot(*pblock, nullptr);
+        static const unsigned char nonce[32] = {0}; // same nonce as in scriptWitness
+
+        // Commitment = SHA256(SHA256(witnessRoot || nonce))
+        CHash256 hash;
+        hash.Write(Span<const unsigned char>(witnessRoot.begin(), 32));
+        hash.Write(Span<const unsigned char>(nonce, 32));
+        uint256 commitment;
+        hash.Finalize(Span<unsigned char>(commitment.begin(), commitment.size()));
+
+        CScript witness_commitment_script = CScript() << OP_RETURN
+            << std::vector<unsigned char>{0xaa, 0x21, 0xa9, 0xed}
+            << std::vector<unsigned char>(commitment.begin(), commitment.end());
+
+        // Append witness commitment to coinbase outputs
+        coinbaseTx.vout.push_back(CTxOut(0, witness_commitment_script));
+    }
     pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
     pblocktemplate->vTxFees[0] = burn_fees ? 0 : -nFees;
 
