@@ -291,6 +291,7 @@ $ interchained-cli all_tokens
 $ interchained-cli token_history 0xtokenid
 $ interchained-cli rescan_tokentx 3000
 $ interchained-cli getgovernancebalance
+$ interchained-cli getburnedfees
 ```
 
 ### Verifying a Message via RPC

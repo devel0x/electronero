@@ -5647,11 +5647,35 @@ static RPCHelpMan getgovernancebalance()
     };
 }
 
+static RPCHelpMan getburnedfees()
+{
+    return RPCHelpMan{
+        "getburnedfees",
+        "\nReturn the total transaction fees that have been burned.\n",
+        {},
+        RPCResult{
+            RPCResult::Type::STR_AMOUNT,
+            "",
+            "Total burned fees in " + CURRENCY_UNIT
+        },
+        RPCExamples{
+            HelpExampleCli("getburnedfees", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            LOCK(cs_main);
+            CAmount burned = Params().GetBurnedFees();
+            return ValueFromAmount(burned);
+        }
+    };
+}
+
 static RPCHelpMan gettotalsubsidy()
 {
     return RPCHelpMan{
         "gettotalsubsidy",
-        "\nReturn the cumulative block subsidy up to the current chain tip.\n",
+        "\nReturn the cumulative block subsidy up to the current chain tip,"
+        " minus any burned transaction fees.\n",
         {},
         RPCResult{
             RPCResult::Type::STR_AMOUNT,
@@ -5666,6 +5690,7 @@ static RPCHelpMan gettotalsubsidy()
             LOCK(cs_main);
             int height = ::ChainActive().Height();
             CAmount total = GetTotalSubsidy(height, Params().GetConsensus());
+            total -= Params().GetBurnedFees();
             return ValueFromAmount(total);
         }
     };
@@ -5952,6 +5977,7 @@ RPCHelpMan tokenmint();
 RPCHelpMan tokentransferownership();
 RPCHelpMan tokentotalsupply();
 RPCHelpMan getgovernancebalance();
+RPCHelpMan getburnedfees();
 RPCHelpMan my_tokens();
 RPCHelpMan all_tokens();
 RPCHelpMan token_history();
@@ -6048,6 +6074,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "token_meta",                       &token_meta,                    {"token"} },
     { "wallet",             "token_tx_memo",                   &token_tx_memo,               {"token","txid"} },
     { "wallet",             "rescan_tokentx",                   &rescan_tokentx,                {"from_height"} },
+    { "wallet",             "getburnedfees",                   &getburnedfees,              {} },
     { "wallet",             "gettotalsubsidy",                 &gettotalsubsidy,           {} },
 };
 // clang-format on
