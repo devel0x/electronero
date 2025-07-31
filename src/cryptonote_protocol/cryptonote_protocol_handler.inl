@@ -196,6 +196,12 @@ namespace cryptonote
       << ENDL;
     LOG_PRINT_L0("Connections: " << ENDL << ss.str());
   }
+  // inline std::string uuid_to_hex(const boost::uuids::uuid& uuid) {
+  //     return epee::to_hex::string({uuid.data, uuid.size()});
+  // }
+  inline std::string uuid_to_hex(const boost::uuids::uuid& uuid) {
+    return epee::to_hex::string(reinterpret_cast<const uint8_t*>(uuid.data), uuid.size());
+  }
   //------------------------------------------------------------------------------------------------------------------------
   // Returns a list of connection_info objects describing each open p2p connection
   //------------------------------------------------------------------------------------------------------------------------
@@ -256,7 +262,7 @@ namespace cryptonote
       cnx.current_download = cntxt.m_current_speed_down / 1024;
       cnx.current_upload = cntxt.m_current_speed_up / 1024;
 
-      cnx.connection_id = epee::to_hex::string({cntxt.m_connection_id.data, cntxt.m_connection_id.size()})
+      cnx.connection_id = uuid_to_hex(cntxt.m_connection_id);
 
       cnx.height = cntxt.m_remote_blockchain_height;
 
