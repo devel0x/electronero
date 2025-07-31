@@ -676,20 +676,26 @@ std::string get_nix_version_display_string()
       return false;
     }
 
-    // resolve to IP
-    boost::asio::io_service io_service;
-    boost::asio::ip::tcp::resolver resolver(io_service);
-    boost::asio::ip::tcp::resolver::query query(u_c.host, "");
-    boost::asio::ip::tcp::resolver::iterator i = resolver.resolve(query);
-    while (i != boost::asio::ip::tcp::resolver::iterator())
+    // resolve to IP using updated Boost.Asio API
+    boost::asio::io_context io_context;
+    boost::asio::ip::tcp::resolver resolver(io_context);
+
+    boost::system::error_code ec;
+    auto results = resolver.resolve(u_c.host, "", ec);
+    if (ec)
     {
-      const boost::asio::ip::tcp::endpoint &ep = *i;
-      if (ep.address().is_loopback())
+      MWARNING("Failed to resolve address '" << address << "': " << ec.message());
+      return false;
+    }
+
+    for (const auto& entry : results)
+    {
+      const boost::asio::ip::address& ip = entry.endpoint().address();
+      if (ip.is_loopback())
       {
         MDEBUG("Address '" << address << "' is local");
         return true;
       }
-      ++i;
     }
 
     MDEBUG("Address '" << address << "' is not local");
