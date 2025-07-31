@@ -523,7 +523,7 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
 
   // create general purpose async service queue
 
-  m_async_work_idle = boost::asio::make_work_guard(m_async_service);
+  m_async_work_idle = std::make_unique<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(boost::asio::make_work_guard(m_async_service));
   // we only need 1
   m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
 /// off for now, until we remake blocks.dat
@@ -4145,7 +4145,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
       if(m_db_sync_mode == db_async)
       {
         m_sync_counter = 0;
-        m_async_service.dispatch(boost::bind(&Blockchain::store_blockchain, this));
+        boost::asio::post(m_async_service, [this]() { store_blockchain(); });
       }
       else if(m_db_sync_mode == db_sync)
       {
