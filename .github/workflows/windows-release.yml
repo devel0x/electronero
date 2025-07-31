@@ -1,0 +1,56 @@
+name: Build Electronero for Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Install dependencies (MSYS2)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-icu
+            mingw-w64-x86_64-libbacktrace
+            mingw-w64-x86_64-cppzmq
+
+      - name: Build Electronero
+        shell: msys2 {0}
+        run: |
+          cd build || mkdir build && cd build
+          cmake .. \
+            -DBOOST_ROOT=/mingw64 \
+            -DSTATIC=ON \
+            -DOPENSSL_ROOT_DIR=/mingw64 \
+            -DICU_ROOT=/mingw64 \
+            -DCMAKE_EXE_LINKER_FLAGS="-lcrypt32 -lws2_32"
+          make -j$(nproc)
+
+      - name: Upload all wallet and daemon binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: electronero-win64-binaries
+          path: |
+            build/bin/electronerod.exe
+            build/bin/electronero-wallet-cli.exe
+            build/bin/electronero-wallet-rpc.exe
+            build/bin/electronero-blockchain-import.exe
+            build/bin/electronero-blockchain-export.exe
