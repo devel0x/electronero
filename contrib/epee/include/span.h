@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <memory>
 #include <type_traits>
+#include "memwipe.h" 
 
 namespace epee
 {
@@ -153,7 +154,7 @@ namespace epee
     return {reinterpret_cast<std::uint8_t*>(src.data()), src.size() * sizeof(value_type)};
   }
 
-  //! \return `span<const std::uint8_t>` which represents the bytes at `&src`.
+  // ✅ This handles normal types
   template<typename T>
   span<const std::uint8_t> as_byte_span(const T& src) noexcept
   {
@@ -161,6 +162,13 @@ namespace epee
     static_assert(std::is_standard_layout_v<T>, "type must have standard layout");
     static_assert(std::has_unique_object_representations_v<T>, "type must be trivially copyable with no padding");
     return {reinterpret_cast<const std::uint8_t*>(std::addressof(src)), sizeof(T)};
+  }
+
+  // ✅ This handles tools::scrubbed<T> types
+  template<typename T>
+  span<const std::uint8_t> as_byte_span(const tools::scrubbed<T>& obj) noexcept
+  {
+    return as_byte_span(static_cast<const T&>(obj));
   }
 
   //! \return `span<std::uint8_t>` which represents the bytes at `&src`.

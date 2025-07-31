@@ -30,8 +30,15 @@
 
 #pragma once 
 
+
+#include "syncobj.h"
+#include <boost/thread/recursive_mutex.hpp>
+#include <boost/thread/thread.hpp>
+#include <boost/thread/condition_variable.hpp>
+#include <boost/thread/mutex.hpp> 
 #include <boost/program_options.hpp>
 #include <boost/logic/tribool_fwd.hpp>
+#include "misc_language.h"
 #include <atomic>
 #include "cryptonote_basic.h"
 #include "difficulty.h"

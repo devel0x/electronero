@@ -31,10 +31,12 @@
 #include "include_base_utils.h"
 using namespace epee;
 
+#include <boost/lexical_cast.hpp>
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 #include "wipeable_string.h"
 #include "string_tools.h"
+#include "string_tools_lexical.h"
 #include "serialization/string.h"
 #include "cryptonote_format_utils.h"
 #include "cryptonote_config.h"

@@ -71,3 +71,7 @@ target_link_libraries(cryptonote_core
   PRIVATE
     ${Blocks}
     ${EXTRA_LIBRARIES})
+
+target_include_directories(cryptonote_core PUBLIC
+    ${CMAKE_SOURCE_DIR}/contrib/epee/include
+)

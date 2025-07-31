@@ -112,11 +112,11 @@ namespace cryptonote
         epee::net_utils::http::login login;
         login.username = bootstrap_daemon_login.substr(0, loc);
         login.password = bootstrap_daemon_login.substr(loc + 1);
-        m_http_client.set_server(m_bootstrap_daemon_address, login, false);
+        m_http_client.set_server(m_bootstrap_daemon_address, login, epee::net_utils::ssl_support_t::e_ssl_support_disabled);
       }
       else
       {
-        m_http_client.set_server(m_bootstrap_daemon_address, boost::none, false);
+        m_http_client.set_server(m_bootstrap_daemon_address, boost::none, epee::net_utils::ssl_support_t::e_ssl_support_disabled);
       }
       m_should_use_bootstrap_daemon = true;
     }
@@ -133,7 +133,15 @@ namespace cryptonote
 
     auto rng = [](size_t len, uint8_t *ptr){ return crypto::rand(len, ptr); };
     return epee::http_server_impl_base<core_rpc_server, connection_context>::init(
-      rng, std::move(port), std::move(rpc_config->bind_ip), std::move(rpc_config->access_control_origins), std::move(http_login)
+      rng,
+      std::move(port),
+      std::move(rpc_config->bind_ip),
+      "::",                          // bind_ipv6_address
+      false,                         // use_ipv6
+      true,                          // require_ipv4
+      std::move(rpc_config->access_control_origins),
+      std::move(http_login),
+      epee::net_utils::ssl_support_t::e_ssl_support_disabled
     );
   }
   //------------------------------------------------------------------------------------------------------------------------------

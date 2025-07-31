@@ -129,10 +129,17 @@
 #define P2P_DEFAULT_PEERS_IN_HANDSHAKE                  250
 #define P2P_DEFAULT_CONNECTION_TIMEOUT                  5000       //5 seconds
 #define P2P_DEFAULT_PING_CONNECTION_TIMEOUT             2000       //2 seconds
+#define P2P_DEFAULT_SOCKS_CONNECT_TIMEOUT               45         // seconds
 #define P2P_DEFAULT_INVOKE_TIMEOUT                      60*2*1000  //2 minutes
 #define P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT            5000       //5 seconds
 #define P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT       70
 #define P2P_DEFAULT_ANCHOR_CONNECTIONS_COUNT            2
+
+#define DEFAULT_RPC_MAX_CONNECTIONS_PER_PUBLIC_IP       3
+#define DEFAULT_RPC_MAX_CONNECTIONS_PER_PRIVATE_IP      25
+#define DEFAULT_RPC_MAX_CONNECTIONS                     100
+#define DEFAULT_RPC_SOFT_LIMIT_SIZE                     25 * 1024 * 1024 // 25 MiB
+#define MAX_RPC_CONTENT_LENGTH                          1048576 // 1 MB
 
 #define P2P_FAILED_ADDR_FORGET_SECONDS                  (60*60)     //1 hour
 #define P2P_IP_BLOCKTIME                                (60*60*24)  //24 hour
@@ -174,6 +181,13 @@
 #define MAX_MIXIN                                       100    // maximum mixin allowed
 #define DEFAULT_MIXIN                                   12     // default mixin
 #define PER_KB_FEE_QUANTIZATION_DECIMALS                10
+
+#define CRYPTONOTE_PRUNING_STRIPE_SIZE                  4096 // the smaller, the smoother the increase
+#define CRYPTONOTE_PRUNING_LOG_STRIPES                  3 // the higher, the more space saved
+#define CRYPTONOTE_PRUNING_TIP_BLOCKS                   5500 // the smaller, the more space saved
+
+#define P2P_DEFAULT_LIMIT_RATE_UP                       8192       // kB/s
+#define P2P_DEFAULT_LIMIT_RATE_DOWN                     32768       // kB/s
 
 #define HASH_OF_HASHES_STEP                             256
 

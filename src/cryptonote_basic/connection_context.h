@@ -33,9 +33,11 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-copy"
 
 #include <unordered_set>
+#include <cstdint>
 #include <atomic>
 #include "net/net_utils_base.h"
-#include "copyable_atomic.h"
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include "crypto/hash.h"
 
 namespace cryptonote
 {
@@ -57,14 +59,44 @@ namespace cryptonote
       state_idle,
       state_normal
     };
+     /*
+      This class was originally from the EPEE module. It is identical in function to std::atomic<uint32_t> except
+      that it has copy-construction and copy-assignment defined, which means that earliers devs didn't have to write
+      custom copy-contructors and copy-assingment operators for the outer class, cryptonote_connection_context.
+      cryptonote_connection_context should probably be refactored because it is both trying to be POD-like while
+      also (very loosely) controlling access to its atomic members.
+    */
+    class copyable_atomic: public std::atomic<uint32_t>
+    {
+    public:
+      copyable_atomic()
+      {};
+      copyable_atomic(uint32_t value)
+      { store(value); }
+      copyable_atomic(const copyable_atomic& a):std::atomic<uint32_t>(a.load())
+      {}
+      copyable_atomic& operator= (const copyable_atomic& a)
+      {
+        store(a.load());
+        return *this;
+      }
+      uint32_t operator++()
+      {
+        return std::atomic<uint32_t>::operator++();
+      }
+      uint32_t operator++(int fake)
+      {
+        return std::atomic<uint32_t>::operator++(fake);
+      }
+    };
 
     state m_state;
     std::list<crypto::hash> m_needed_objects;
     std::unordered_set<crypto::hash> m_requested_objects;
     uint64_t m_remote_blockchain_height;
     uint64_t m_last_response_height;
+    copyable_atomic m_callback_request_count;
     boost::posix_time::ptime m_last_request_time;
-    epee::copyable_atomic m_callback_request_count;
     crypto::hash m_last_known_hash;
   };
 

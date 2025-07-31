@@ -77,3 +77,7 @@ target_link_libraries(cryptonote_basic
     ${Boost_THREAD_LIBRARY}
   PRIVATE
     ${EXTRA_LIBRARIES})
+
+target_include_directories(cryptonote_basic PUBLIC
+    ${CMAKE_SOURCE_DIR}/contrib/epee/include
+)
