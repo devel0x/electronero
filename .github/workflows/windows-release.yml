@@ -31,6 +31,7 @@ jobs:
             mingw-w64-x86_64-icu
             mingw-w64-x86_64-libbacktrace
             mingw-w64-x86_64-cppzmq
+            mingw-w64-x86_64-zeromq
 
       - name: Build Electronero
         shell: msys2 {0}
