@@ -42,8 +42,10 @@ jobs:
             -DOPENSSL_ROOT_DIR=/mingw64 \
             -DICU_ROOT=/mingw64 \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DCMAKE_EXE_LINKER_FLAGS="-lcrypt32 -lws2_32"
-          make -j$(nproc)
+            -DCMAKE_EXE_LINKER_FLAGS="-lcrypt32 -lws2_32" \
+            -DUSE_STATIC_LIBUNBOUND=ON \
+            -DTHREADS_PTHREAD_ARG=OFF
+          ninja -j$(nproc)
 
       - name: Upload all wallet and daemon binaries
         uses: actions/upload-artifact@v4
