@@ -31,6 +31,9 @@
 // IP blocking adapted from Boolberry
 
 #include <algorithm>
+#include <boost/asio.hpp>
+#include <boost/system/error_code.hpp>
+
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/bind.hpp>
@@ -326,38 +329,40 @@ namespace nodetool
     return true;
   }
   //-----------------------------------------------------------------------------------
-  inline void append_net_address(
-      std::vector<epee::net_utils::network_address> & seed_nodes
-    , std::string const & addr
-    )
+  inline void append_net_address(std::vector<epee::net_utils::network_address>& seed_nodes, const std::string& addr) 
   {
     using namespace boost::asio;
+    using boost::system::error_code;
 
-    size_t pos = addr.find_last_of(':');
-    CHECK_AND_ASSERT_MES_NO_RET(std::string::npos != pos && addr.length() - 1 != pos && 0 != pos, "Failed to parse seed address from string: '" << addr << '\'');
-    std::string host = addr.substr(0, pos);
-    std::string port = addr.substr(pos + 1);
+    const size_t pos = addr.find_last_of(':');
+    CHECK_AND_ASSERT_MES_NO_RET(
+      pos != std::string::npos && pos + 1 < addr.size(),
+      "Failed to parse seed address from string: '" << addr << '\''
+    );
 
-    io_service io_srv;
-    ip::tcp::resolver resolver(io_srv);
-    ip::tcp::resolver::query query(host, port, boost::asio::ip::tcp::resolver::query::canonical_name);
-    boost::system::error_code ec;
-    ip::tcp::resolver::iterator i = resolver.resolve(query, ec);
-    CHECK_AND_ASSERT_MES_NO_RET(!ec, "Failed to resolve host name '" << host << "': " << ec.message() << ':' << ec.value());
+    const std::string host = addr.substr(0, pos);
+    const std::string port = addr.substr(pos + 1);
 
-    ip::tcp::resolver::iterator iend;
-    for (; i != iend; ++i)
-    {
-      ip::tcp::endpoint endpoint = *i;
-      if (endpoint.address().is_v4())
-      {
-        epee::net_utils::network_address na{epee::net_utils::ipv4_network_address{boost::asio::detail::socket_ops::host_to_network_long(endpoint.address().to_v4().to_ulong()), endpoint.port()}};
+    io_context io_ctx;
+    ip::tcp::resolver resolver(io_ctx);
+    error_code ec;
+
+    auto results = resolver.resolve(host, port, ec);
+    CHECK_AND_ASSERT_MES_NO_RET(!ec, "Failed to resolve host '" << host << "': " << ec.message());
+
+    for (const auto& entry : results) {
+      const auto& endpoint = entry.endpoint();
+
+      if (endpoint.address().is_v4()) {
+        const uint32_t ip = endpoint.address().to_v4().to_uint();  // host byte order
+        const uint16_t port_num = endpoint.port();
+        epee::net_utils::network_address na{
+          epee::net_utils::ipv4_network_address{ip, port_num}
+        };
         seed_nodes.push_back(na);
         MINFO("Added seed node: " << na.str());
-      }
-      else
-      {
-        MWARNING("IPv6 unsupported, skip '" << host << "' -> " << endpoint.address().to_v6().to_string(ec));
+      } else {
+        MWARNING("IPv6 unsupported, skipping '" << host << "' -> " << endpoint.address().to_string());
         throw std::runtime_error("IPv6 unsupported");
       }
     }
