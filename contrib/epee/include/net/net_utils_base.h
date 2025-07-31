@@ -30,7 +30,8 @@
 #define _NET_UTILS_BASE_H_
 
 #include <boost/uuid/uuid.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
+#define io_service io_context
 #include <typeinfo>
 #include <type_traits>
 #include "serialization/keyvalue_serialization.h"
@@ -284,7 +285,7 @@ namespace net_utils
     virtual bool send_done()=0;
     virtual bool call_run_once_service_io()=0;
     virtual bool request_callback()=0;
-    virtual boost::asio::io_service& get_io_service()=0;
+    virtual boost::asio::io_context& get_io_service() = 0;
     //protect from deletion connection object(with protocol instance) during external call "invoke"
     virtual bool add_ref()=0;
     virtual bool release()=0;
