@@ -58,6 +58,11 @@ function (die msg)
   message(FATAL_ERROR "${BoldRed}${msg}${ColourReset}")
 endfunction ()
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_definitions(-DBOOST_TIMER_ENABLE_DEPRECATED)
 add_definitions(-DBOOST_MPL_CFG_NO_PREPROCESSED_HEADERS)
 add_definitions(-DBOOST_MPL_LIMIT_VECTOR_SIZE=50)
 function (add_c_flag_if_supported flag var)
