@@ -81,9 +81,10 @@ public: \
 #define KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(varialble, val_name) \
   epee::serialization::selector<is_store>::serialize_t_val_as_blob(this_ref.varialble, stg, hparent_section, val_name); 
 
-#define KV_SERIALIZE_VAL_POD_AS_BLOB_N(varialble, val_name) \
-  static_assert(std::is_pod<decltype(this_ref.varialble)>::value, "t_type must be a POD type."); \
-  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(varialble, val_name)
+#define KV_SERIALIZE_VAL_POD_AS_BLOB_N(variable, val_name) \
+  static_assert(std::is_trivially_copyable_v<decltype(this_ref.variable)>, "t_type must be a trivially copyable type."); \
+  static_assert(std::is_standard_layout_v<decltype(this_ref.variable)>, "t_type must be a standard layout type."); \
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(variable, val_name)
 
 #define KV_SERIALIZE_CONTAINER_POD_AS_BLOB_N(varialble, val_name) \
   epee::serialization::selector<is_store>::serialize_stl_container_pod_val_as_blob(this_ref.varialble, stg, hparent_section, val_name);
