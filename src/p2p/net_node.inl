@@ -33,7 +33,7 @@
 #include <algorithm>
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
-
+#include "net/net_utils_base.h"
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/bind.hpp>
