@@ -34,40 +34,49 @@
 
 namespace epee
 {
+
+template<bool is_store, class this_type, class t_storage>
+bool do_serialize_map(this_type& this_ref, t_storage& stg, typename t_storage::hsection hparent_section)
+{
+  return this_ref.template serialize_map<is_store>(this_ref, stg, hparent_section);
+}
   /************************************************************************/
   /* Serialize map declarations                                           */
   /************************************************************************/
 #define BEGIN_KV_SERIALIZE_MAP() \
 public: \
   template<class t_storage> \
-  bool store( t_storage& st, typename t_storage::hsection hparent_section = nullptr) const\
-  {\
-    return serialize_map<true>(*this, st, hparent_section);\
-  }\
+  bool store(t_storage& st, typename t_storage::hsection hparent_section = nullptr) const \
+  { \
+    typedef typename boost::remove_const<decltype(*this)>::type this_type; \
+    return epee::do_serialize_map<true, this_type>(*this, st, hparent_section); \
+  } \
   template<class t_storage> \
-  bool _load( t_storage& stg, typename t_storage::hsection hparent_section = nullptr)\
-  {\
-    return serialize_map<false>(*this, stg, hparent_section);\
-  }\
+  bool _load(t_storage& stg, typename t_storage::hsection hparent_section = nullptr) \
+  { \
+    typedef typename boost::remove_const<decltype(*this)>::type this_type; \
+    return epee::do_serialize_map<false, this_type>(*this, stg, hparent_section); \
+  } \
   template<class t_storage> \
-  bool load( t_storage& stg, typename t_storage::hsection hparent_section = nullptr)\
-  {\
-    try{\
-    return serialize_map<false>(*this, stg, hparent_section);\
-    }\
-    catch(const std::exception& err) \
-    { \
+  bool load(t_storage& stg, typename t_storage::hsection hparent_section = nullptr) \
+  { \
+    try { \
+      typedef typename boost::remove_const<decltype(*this)>::type this_type; \
+      return epee::do_serialize_map<false, this_type>(*this, stg, hparent_section); \
+    } catch (const std::exception& err) { \
       (void)(err); \
-      LOG_ERROR("Exception on unserializing: " << err.what());\
+      LOG_ERROR("Exception on unserializing: " << err.what()); \
       return false; \
-    }\
-  }\
+    } \
+  } \
   template<bool is_store, class this_type, class t_storage> \
-  static bool serialize_map(this_type& this_ref,  t_storage& stg, typename t_storage::hsection hparent_section) \
-  { 
-
-#define KV_SERIALIZE_N(varialble, val_name) \
-  epee::serialization::selector<is_store>::serialize(this_ref.varialble, stg, hparent_section, val_name);
+  friend bool epee::do_serialize_map(this_type& this_ref, t_storage& stg, typename t_storage::hsection hparent_section); \
+  template<bool is_store, class this_type, class t_storage> \
+  bool serialize_map(this_type& this_ref, t_storage& stg, typename t_storage::hsection hparent_section) const \
+  {
+ 
+#define KV_SERIALIZE_N(variable, val_name) \
+  epee::serialization::selector<is_store>::serialize(this_ref.variable, stg, hparent_section, val_name);
 
   template<typename T> inline void serialize_default(const T &t, T v) { }
   template<typename T> inline void serialize_default(T &t, T v) { t = v; }
@@ -78,22 +87,40 @@ public: \
       epee::serialize_default(this_ref.variable, default_value); \
   } while (0);
 
-#define KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(varialble, val_name) \
-  epee::serialization::selector<is_store>::serialize_t_val_as_blob(this_ref.varialble, stg, hparent_section, val_name); 
+#define KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(variable, val_name) \
+  epee::serialization::selector<is_store>::serialize_t_val_as_blob(this_ref.variable, stg, hparent_section, val_name); 
 
-#define KV_SERIALIZE_VAL_POD_AS_BLOB_N(varialble, val_name) \
-  static_assert(std::is_pod<decltype(this_ref.varialble)>::value, "t_type must be a POD type."); \
-  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(varialble, val_name)
+#define KV_SERIALIZE_VAL_POD_AS_BLOB_N(variable, val_name) \
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(variable, val_name)
 
-#define KV_SERIALIZE_CONTAINER_POD_AS_BLOB_N(varialble, val_name) \
-  epee::serialization::selector<is_store>::serialize_stl_container_pod_val_as_blob(this_ref.varialble, stg, hparent_section, val_name);
+#define KV_SERIALIZE_CONTAINER_POD_AS_BLOB_N(variable, val_name) \
+  epee::serialization::selector<is_store>::serialize_stl_container_pod_val_as_blob(this_ref.variable, stg, hparent_section, val_name);
 
 #define END_KV_SERIALIZE_MAP() return true;}
+ 
+#define BEGIN_KV_SERIALIZE_MAP_ADAPTIVE() \
+public: \
+  template<class t_storage> \
+  bool store(t_storage& st, typename t_storage::hsection hparent_section = nullptr) const { \
+    typedef typename boost::remove_const<decltype(*this)>::type this_type; \
+    return serialize_map<true, this_type>(*this, st, hparent_section); \
+  }\
+  template<class t_storage> \
+  bool load(t_storage& st, typename t_storage::hsection hparent_section = nullptr) { \
+    typedef typename boost::remove_const<decltype(*this)>::type this_type; \
+    return serialize_map<false, this_type>(*this, st, hparent_section); \
+  }\
+  template<bool is_store, class this_type, class t_storage> \
+  static bool serialize_map(typename std::conditional<is_store, const this_type&, this_type&>::type this_ref, \
+                            t_storage& stg, typename t_storage::hsection hparent_section) \
+  {
 
-#define KV_SERIALIZE(varialble)                           KV_SERIALIZE_N(varialble, #varialble)
-#define KV_SERIALIZE_VAL_POD_AS_BLOB(varialble)           KV_SERIALIZE_VAL_POD_AS_BLOB_N(varialble, #varialble)
-#define KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(varialble)     KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(varialble, #varialble) //skip is_pod compile time check
-#define KV_SERIALIZE_CONTAINER_POD_AS_BLOB(varialble)     KV_SERIALIZE_CONTAINER_POD_AS_BLOB_N(varialble, #varialble)
+#define END_KV_SERIALIZE_MAP_ADAPTIVE() return true;}
+
+#define KV_SERIALIZE(variable)                           KV_SERIALIZE_N(variable, #variable)
+#define KV_SERIALIZE_VAL_POD_AS_BLOB(variable)           KV_SERIALIZE_VAL_POD_AS_BLOB_N(variable, #variable)
+#define KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(variable)     KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE_N(variable, #variable) //skip is_pod compile time check
+#define KV_SERIALIZE_CONTAINER_POD_AS_BLOB(variable)     KV_SERIALIZE_CONTAINER_POD_AS_BLOB_N(variable, #variable)
 #define KV_SERIALIZE_OPT(variable,default_value)          KV_SERIALIZE_OPT_N(variable, #variable, default_value)
 
 }

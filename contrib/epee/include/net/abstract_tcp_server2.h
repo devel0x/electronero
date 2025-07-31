@@ -288,7 +288,9 @@ namespace net_utils
     template<class t_handler>
     bool async_call(t_handler t_callback)
     {
-      io_service_.post(t_callback);
+      // io_service_.post(t_callback);
+
+      boost::asio::post(get_io_service(), t_callback);
       return true;
     }
 

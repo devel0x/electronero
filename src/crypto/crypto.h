@@ -30,6 +30,9 @@
 
 #pragma once
 
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <cstddef>
 #include <iostream>
 #include <boost/thread/mutex.hpp>
@@ -159,12 +162,19 @@ namespace crypto {
   /* Generate a value filled with random bytes.
    */
   template<typename T>
-  typename std::enable_if<std::is_pod<T>::value, T>::type rand() {
+  T rand() {
+    static_assert(std::is_standard_layout_v<T>, "cannot write random bytes into non-standard layout type");
+    static_assert(std::is_trivially_copyable_v<T>, "cannot write random bytes into non-trivially copyable type");
     typename std::remove_cv<T>::type res;
     boost::lock_guard<boost::mutex> lock(random_lock);
-    generate_random_bytes_not_thread_safe(sizeof(T), &res);
+    generate_random_bytes_not_thread_safe(sizeof(T), (uint8_t*)&res);
     return res;
   }
+
+  // inline boost::uuids::uuid rand() {
+  //   static boost::uuids::random_generator uuid_gen;
+  //   return uuid_gen();
+  // }
 
   /* Generate a new key pair
    */
