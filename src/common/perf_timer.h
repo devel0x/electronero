@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <memory>
 #include "misc_log_ex.h"
+#include <cstdint>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "perf"
