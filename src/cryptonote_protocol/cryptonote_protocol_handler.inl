@@ -256,7 +256,7 @@ namespace cryptonote
       cnx.current_download = cntxt.m_current_speed_down / 1024;
       cnx.current_upload = cntxt.m_current_speed_up / 1024;
 
-      cnx.connection_id = epee::to_hex::string(cntxt.m_connection_id.begin(), cntxt.m_connection_id.size());
+      cnx.connection_id = epee::string_tools::pod_to_hex(cntxt.m_connection_id);
 
       cnx.height = cntxt.m_remote_blockchain_height;
 
