@@ -32,7 +32,8 @@
 
 #include <atomic>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 
 #include "include_base_utils.h"
 #include "string_tools.h"

@@ -523,7 +523,7 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
 
   // create general purpose async service queue
 
-  m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
+  m_async_work_idle = boost::asio::make_work_guard(m_async_service);
   // we only need 1
   m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
 /// off for now, until we remake blocks.dat

@@ -30,7 +30,8 @@
 
 #pragma once
 #include <boost/serialization/library_version_type.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/serialization/list.hpp>
 #define BOOST_SERIALIZATION_VERSION_HPP
 #include <boost/serialization/version.hpp>
@@ -1014,9 +1015,9 @@ namespace cryptonote
     crypto::hash m_difficulty_for_next_block_top_hash;
     difficulty_type m_difficulty_for_next_block;
 
-    boost::asio::io_service m_async_service;
+    boost::asio::io_context m_async_service;
     boost::thread_group m_async_pool;
-    std::unique_ptr<boost::asio::io_service::work> m_async_work_idle;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> m_async_work_idle;
 
     // all alternative chains
     blocks_ext_by_hash m_alternative_chains; // crypto::hash -> block_extended_info
