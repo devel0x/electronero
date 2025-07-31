@@ -17,16 +17,6 @@ jobs:
       - name: Initialize submodules
         run: |
           git submodule update --init --recursive
-          
-      - name: Cache MSYS2 packages
-        uses: actions/cache@v3
-        with:
-          path: |
-            C:/msys64/var/cache/pacman/pkg
-            C:/msys64/var/lib/pacman/local
-          key: msys2-${{ runner.os }}-${{ hashFiles('.github/workflows/*') }}
-          restore-keys: |
-            msys2-${{ runner.os }}-
 
       - name: Install dependencies (MSYS2)
         uses: msys2/setup-msys2@v2
@@ -44,6 +34,16 @@ jobs:
             mingw-w64-x86_64-zeromq
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-libwinpthread
+                      
+      - name: Cache MSYS2 packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            C:/msys64/var/cache/pacman/pkg
+            C:/msys64/var/lib/pacman/local
+          key: msys2-${{ runner.os }}-${{ hashFiles('.github/workflows/*') }}
+          restore-keys: |
+            msys2-${{ runner.os }}-
 
       - name: Build Electronero
         shell: msys2 {0}
