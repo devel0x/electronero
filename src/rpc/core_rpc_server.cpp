@@ -2079,7 +2079,12 @@ namespace cryptonote
     const cryptonote::block_queue &block_queue = m_p2p.get_payload_object().get_block_queue();
     block_queue.foreach([&](const cryptonote::block_queue::span &span) {
       // const std::string span_connection_id = epee::string_tools::pod_to_hex(span.connection_id);
-      const std::string span_connection_id = epee::to_hex::string(reinterpret_cast<const uint8_t*>(&span.connection_id), sizeof(span.connection_id));
+      const std::string span_connection_id = epee::to_hex::string(
+          epee::span<const uint8_t>(
+              reinterpret_cast<const uint8_t*>(&span.connection_id),
+              sizeof(span.connection_id)
+          )
+      );
       uint32_t speed = (uint32_t)(100.0f * block_queue.get_speed(span.connection_id) + 0.5f);
       std::string address = "";
       for (const auto &c: m_p2p.get_payload_object().get_connections())
