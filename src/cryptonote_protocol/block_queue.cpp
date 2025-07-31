@@ -31,6 +31,8 @@
 #include <vector>
 #include <unordered_map>
 #include <boost/uuid/nil_generator.hpp>
+#include <boost/version.hpp>
+#include <boost/uuid/uuid.hpp>
 #include "string_tools.h"
 #include "cryptonote_protocol_defs.h"
 #include "block_queue.h"
@@ -38,6 +40,7 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "cn.block_queue"
 
+#if BOOST_VERSION < 107000
 namespace std {
   static_assert(sizeof(size_t) <= sizeof(boost::uuids::uuid), "boost::uuids::uuid too small");
   template<> struct hash<boost::uuids::uuid> {
@@ -46,6 +49,7 @@ namespace std {
     }
   };
 }
+#endif
 
 namespace cryptonote
 {
