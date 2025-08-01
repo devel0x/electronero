@@ -44,6 +44,8 @@
 
 #pragma once
 
+#include <map>
+#include <memory> 
 #include "crypto/crypto.h"
 #include "crypto/chacha.h"
 #include "ringct/rctTypes.h"
