@@ -107,6 +107,8 @@ target_link_libraries(daemon
     serialization
     daemon_rpc_server
     epee
+    token
+    ${Boost_SERIALIZATION_LIBRARY}
     ${EPEE_READLINE}
     version
     ${Boost_CHRONO_LIBRARY}

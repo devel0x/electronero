@@ -103,6 +103,7 @@ target_link_libraries(wallet_rpc_server
   PRIVATE
     wallet
     token
+    ${Boost_SERIALIZATION_LIBRARY}
     epee
     rpc_base
     cryptonote_core

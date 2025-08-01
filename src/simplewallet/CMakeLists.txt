@@ -49,6 +49,7 @@ target_link_libraries(simplewallet
     common
     mnemonics
     token
+    ${Boost_SERIALIZATION_LIBRARY}
     epee
     ${EPEE_READLINE}
     version
