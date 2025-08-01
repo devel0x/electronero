@@ -20,6 +20,9 @@ cscope.files
 cscope.out
 cscope.in.out
 cscope.po.out
+build-801
+/build-801
+build-801/
 
 external/miniupnpc/Makefile
 miniupnpcstrings.h
