@@ -17,6 +17,35 @@ jobs:
       - name: Initialize submodules
         run: |
           git submodule update --init --recursive
+      
+      - name: Dump Environment Info
+        run: |
+          echo "🛠️ Compiler Versions:"
+          g++ --version || echo "No g++"
+          clang++ --version || echo "No clang++"
+          cmake --version
+          ninja --version || echo "No ninja"
+          python --version
+          echo ""
+
+          echo "📦 Environment Variables:"
+          echo "CXX: $CXX"
+          echo "CC: $CC"
+          echo "PATH: $PATH"
+          echo "CMAKE_GENERATOR: $CMAKE_GENERATOR"
+
+          echo ""
+          echo "🏗️ Compiler paths:"
+          which g++
+          which clang++
+          which cmake
+          which ninja || true
+          which python
+
+          echo ""
+          echo "💻 System Info:"
+          uname -a
+          env
 
       - name: Install dependencies (MSYS2)
         uses: msys2/setup-msys2@v2
