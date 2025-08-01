@@ -89,8 +89,6 @@ set(blockchain_usage_private_headers)
 monero_private_headers(blockchain_usage
 	  ${blockchain_usage_private_headers})
 
-
-
 monero_add_executable(blockchain_import
   ${blockchain_import_sources}
   ${blockchain_import_private_headers}
@@ -108,6 +106,14 @@ target_link_libraries(blockchain_import
     ${Boost_THREAD_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
+
+if(MINGW OR WIN32)
+  # Add the directory containing crypt32.dll to your link path
+  link_directories(C:/Windows/System32)
+  target_link_libraries(blockchain_import PRIVATE crypt32)
+  target_link_libraries(blockchain_import PRIVATE C:/Windows/System32/crypt32.dll)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
+endif(MINGW OR WIN32)
 
 if(ARCH_WIDTH)
   target_compile_definitions(blockchain_import
@@ -136,6 +142,14 @@ target_link_libraries(blockchain_export
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
 
+if(MINGW OR WIN32)
+  # Add the directory containing crypt32.dll to your link path
+  link_directories(C:/Windows/System32)
+  target_link_libraries(blockchain_export PRIVATE crypt32)
+  target_link_libraries(blockchain_export PRIVATE C:/Windows/System32/crypt32.dll)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
+endif(MINGW OR WIN32)
+
 set_property(TARGET blockchain_export
 	PROPERTY
 	OUTPUT_NAME "electronero-blockchain-export")
@@ -159,11 +173,18 @@ target_link_libraries(blockchain_blackball
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
 
+if(MINGW OR WIN32)
+  # Add the directory containing crypt32.dll to your link path
+  link_directories(C:/Windows/System32)
+  target_link_libraries(blockchain_blackball PRIVATE crypt32)
+  target_link_libraries(blockchain_blackball PRIVATE C:/Windows/System32/crypt32.dll)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
+endif(MINGW OR WIN32)
+
 set_property(TARGET blockchain_blackball
 	PROPERTY
 	OUTPUT_NAME "electronero-blockchain-blackball")
 install(TARGETS blockchain_blackball DESTINATION bin)
-
 
 monero_add_executable(blockchain_usage
   ${blockchain_usage_sources}
@@ -181,6 +202,14 @@ target_link_libraries(blockchain_usage
     ${Boost_THREAD_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
+
+if(MINGW OR WIN32)
+  # Add the directory containing crypt32.dll to your link path
+  link_directories(C:/Windows/System32)
+  target_link_libraries(blockchain_usage PRIVATE crypt32)
+  target_link_libraries(blockchain_usage PRIVATE C:/Windows/System32/crypt32.dll)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
+endif(MINGW OR WIN32)
 
 set_property(TARGET blockchain_usage
 	PROPERTY
