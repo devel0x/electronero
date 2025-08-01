@@ -61,7 +61,7 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "blockchain"
 
-
+#define YESPOWER_HARDFORK ((uint64_t)(3599790)) 
 #define ELECTRONERO_HARDFORK ((uint64_t)(310787)) 
 #define MAINNET_HARDFORK_V1_HEIGHT ((uint64_t)(1)) // MAINNET v1 
 #define MAINNET_HARDFORK_V7_HEIGHT ((uint64_t)(307003)) // MAINNET v7 hard fork 
@@ -185,7 +185,9 @@ static const struct {
   // Version 25
   { 25, MAINNET_HARDFORK_V25_HEIGHT, 0, 1640962704 },
   // Version 26
-  { 26, MAINNET_HARDFORK_V26_HEIGHT, 0, 1751404627 }
+  { 26, MAINNET_HARDFORK_V26_HEIGHT, 0, 1751404627 },
+  // Version 27
+  { 27, YESPOWER_HARDFORK, 0, 1754086469 }
 	
 };
 static const uint64_t mainnet_hard_fork_version_1_till = MAINNET_HARDFORK_V7_HEIGHT-1;
@@ -4895,3 +4897,4 @@ bool Blockchain::for_all_outputs(uint64_t amount, std::function<bool(uint64_t he
 namespace cryptonote {
 template bool Blockchain::get_transactions(const std::vector<crypto::hash>&, std::list<transaction>&, std::list<crypto::hash>&) const;
 }
+
