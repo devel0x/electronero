@@ -62,6 +62,10 @@ namespace epee
 {
 namespace string_tools
 {
+  inline std::string uuid_to_hex(const boost::uuids::uuid& uuid) 
+  {
+    return to_hex::string(reinterpret_cast<const uint8_t*>(uuid.data().data()), uuid.size());
+  }
 	//----------------------------------------------------------------------------
 	inline std::string get_str_from_guid_a(const boost::uuids::uuid& rid)
 	{
