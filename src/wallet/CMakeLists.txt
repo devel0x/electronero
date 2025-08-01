@@ -97,7 +97,7 @@ if(MINGW OR WIN32)
 
   # Add crypt32 to the linker flags for both targets
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
-endif(MINGW)
+endif(MINGW OR WIN32)
 
 target_link_libraries(wallet_rpc_server
   PRIVATE

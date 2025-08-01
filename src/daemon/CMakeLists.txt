@@ -80,6 +80,20 @@ monero_add_executable(daemon
   ${daemon_private_headers}
   ${blocksdat}
 )
+# If using MinGW or Windows
+if(MINGW OR WIN32)
+  # Add the directory containing crypt32.dll to your link path
+  link_directories(C:/Windows/System32)
+
+  # Link crypt32 to wallet_rpc_server and wallet (if needed)
+  target_link_libraries(daemon PRIVATE crypt32)
+
+  # Optional: Link directly to the .dll if needed (e.g., if the static library is not available)
+  target_link_libraries(daemon PRIVATE C:/Windows/System32/crypt32.dll)
+
+  # Add crypt32 to the linker flags for this target
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lcrypt32")
+endif(MINGW OR WIN32)
 target_link_libraries(daemon
   PRIVATE
     rpc
