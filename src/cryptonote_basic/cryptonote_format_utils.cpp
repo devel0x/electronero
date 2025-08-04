@@ -45,7 +45,7 @@ using namespace epee;
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "cn"
-#define YESPOWER_HARDFORK ((uint64_t)(3602875)) 
+#define YESPOWER_HARDFORK ((uint64_t)(3607300)) 
 #define ELECTRONERO_HARDFORK ((uint64_t)(310787)) 
 #define MAINNET_HARDFORK_V1_HEIGHT ((uint64_t)(1)) // MAINNET v1 
 #define MAINNET_HARDFORK_V7_HEIGHT ((uint64_t)(307003)) // MAINNET v7 hard fork 
@@ -1124,4 +1124,5 @@ bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata&
     return key;
   }
 }
+
 
