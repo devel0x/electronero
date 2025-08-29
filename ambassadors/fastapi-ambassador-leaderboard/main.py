@@ -568,24 +568,34 @@ async def admin_post_verify(
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
+    pipe = redis_client.pipeline()
+
     if verify_all:
-        posts = await _all_posts()
-        pipe = redis_client.pipeline()
+        # Verify all posts for all users
+        posts = await _all_posts()  # {email: [url, ...]}
         for eml, urls in posts.items():
-            unverified = [p["url"] for p in urls if not p["verified"]]
-            if unverified:
-                pipe.sadd(f"posts_verified:{eml}", *unverified)
-        await pipe.execute()
+            for u in urls:
+                if u:
+                    pipe.sadd(f"posts_verified:{eml}", u)
+
     else:
+        # Collect selected items
         items = list(selected)
         if email and url:
-            items.append(f"{email}||{url}")
-        pipe = redis_client.pipeline()
+            items.append(f"{email.strip().lower()}||{url.strip()}")
+
         for item in items:
+            if not item or "||" not in item:
+                continue
             eml, u = item.split("||", 1)
-            pipe.sadd(f"posts_verified:{eml}", u)
-        if pipe.command_stack:
-            await pipe.execute()
+            eml = eml.strip().lower()
+            u = u.strip()
+            if eml and u:
+                pipe.sadd(f"posts_verified:{eml}", u)
+
+    if pipe.command_stack:
+        await pipe.execute()
+
     return RedirectResponse("/admin", status_code=303)
 
 
