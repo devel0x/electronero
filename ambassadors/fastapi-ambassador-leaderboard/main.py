@@ -6,6 +6,7 @@ import secrets
 import hashlib
 import subprocess
 from datetime import datetime
+
 from pathlib import Path
 from typing import Any, Dict
 
@@ -17,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
 
+
 # Load environment variables
 load_dotenv()
 
@@ -27,6 +29,7 @@ AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+
 
 EXPECTED_COLUMNS = [
     "name",
@@ -54,6 +57,13 @@ def _load_registrations() -> set[str]:
 
 
 REGISTERED_EMAILS = _load_registrations()
+cache: Dict[str, Any] = {
+    "columns": [],
+    "rows": [],
+    "cached_at": None,
+    "source": "",
+    "pool_balance": 0.0,
+}
 
 
 def _get_pool_balance() -> float:
@@ -153,7 +163,6 @@ BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
