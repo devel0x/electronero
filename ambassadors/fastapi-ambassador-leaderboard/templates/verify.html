@@ -25,6 +25,9 @@
 <div class="container py-4">
     <div class="glass-card p-3 mx-auto" style="max-width:600px;">
         <h1 class="h4">Submit Post URL</h1>
+        {% if error %}
+        <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
         <form method="post" class="d-flex gap-2 mb-3">
             <input type="url" name="url" class="form-control" placeholder="https://x.com/..." required>
             <button class="btn btn-primary" type="submit">Submit</button>

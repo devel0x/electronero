@@ -23,7 +23,16 @@
         <h1 class="h5">Wallet Addresses</h1>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
-            <li class="list-group-item bg-transparent text-light">{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</li>
+            <li class="list-group-item bg-transparent text-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</span>
+                    <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
+                        <input type="hidden" name="email" value="{{ w.email }}">
+                        <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                        <button class="btn btn-primary btn-sm">Update</button>
+                    </form>
+                </div>
+            </li>
             {% endfor %}
             {% if not wallets %}
             <li class="list-group-item bg-transparent text-muted">No wallets</li>
@@ -32,12 +41,33 @@
     </div>
     <div class="glass-card p-3">
         <h1 class="h5">Submitted Posts</h1>
+        <form id="posts-bulk-form" method="post" action="/admin/posts/verify"></form>
+        <div class="d-flex gap-2 mb-2">
+            <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
+            <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
+        </div>
         {% for email, urls in posts.items() %}
         <div class="mb-3">
             <h2 class="h6">{{ email }}</h2>
             <ul class="list-group list-group-flush">
-                {% for u in urls %}
-                <li class="list-group-item bg-transparent"><a href="{{ u }}" target="_blank">{{ u }}</a></li>
+                {% for p in urls %}
+                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        {% if not p.verified %}
+                        <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
+                        {% endif %}
+                        <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+                    </div>
+                    {% if p.verified %}
+                    <span class="badge bg-success">Verified</span>
+                    {% else %}
+                    <form method="post" action="/admin/posts/verify">
+                        <input type="hidden" name="email" value="{{ email }}">
+                        <input type="hidden" name="url" value="{{ p.url }}">
+                        <button class="btn btn-success btn-sm">Verify</button>
+                    </form>
+                    {% endif %}
+                </li>
                 {% endfor %}
                 {% if not urls %}
                 <li class="list-group-item bg-transparent text-muted">No posts</li>
@@ -45,6 +75,9 @@
             </ul>
         </div>
         {% endfor %}
+        {% if not posts %}
+        <p class="text-muted">No posts</p>
+        {% endif %}
     </div>
     <div class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>
