@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+import json
 import os
+import secrets
+import hashlib
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
+
 from pathlib import Path
 from typing import Any, Dict
 
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Form, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from redis.asyncio import Redis
+
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +26,10 @@ SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
+REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
+SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+
 
 EXPECTED_COLUMNS = [
     "name",
@@ -31,6 +41,22 @@ EXPECTED_COLUMNS = [
     "tier",
 ]
 
+redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
+CACHE_KEY = "leaderboard_cache"
+
+
+def _load_registrations() -> set[str]:
+    try:
+        df = pd.read_csv(REGISTRATIONS_CSV)
+        df.columns = [c.strip().lower() for c in df.columns]
+        if "ambassadors" in df.columns:
+            return set(str(e).strip().lower() for e in df["ambassadors"].dropna())
+    except Exception:
+        return set()
+    return set()
+
+
+REGISTERED_EMAILS = _load_registrations()
 cache: Dict[str, Any] = {
     "columns": [],
     "rows": [],
@@ -56,8 +82,8 @@ def _get_pool_balance() -> float:
         return 0.0
 
 
-def _load_csv() -> None:
-    """Load CSV data from Google Sheets or local file into cache."""
+async def _load_csv() -> Dict[str, Any]:
+    """Load CSV data from Google Sheets or local file and cache in Redis."""
     path = SHEET_CSV_URL or CSV_PATH
     source = "google_sheet" if SHEET_CSV_URL else "local_csv"
 
@@ -106,23 +132,31 @@ def _load_csv() -> None:
     df = df.fillna("")
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
 
-    cache["columns"] = list(df.columns)
-    cache["rows"] = df.astype(str).to_dict(orient="records")
-    cache["cached_at"] = datetime.utcnow()
-    cache["source"] = source
-    cache["pool_balance"] = pool_balance
+    data = {
+        "columns": list(df.columns),
+        "rows": df.astype(str).to_dict(orient="records"),
+        "cached_at": datetime.utcnow().isoformat(),
+        "source": source,
+        "pool_balance": pool_balance,
+    }
+    await redis_client.set(CACHE_KEY, json.dumps(data), ex=CACHE_TTL_SECONDS)
+    return data
 
 
-def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
-    now = datetime.utcnow()
-    cached_at: datetime | None = cache.get("cached_at")
-    if (
-        force_refresh
-        or cached_at is None
-        or now - cached_at > timedelta(seconds=CACHE_TTL_SECONDS)
-    ):
-        _load_csv()
-    return cache
+async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
+    raw = await redis_client.get(CACHE_KEY)
+    if force_refresh or raw is None:
+        data = await _load_csv()
+    else:
+        data = json.loads(raw)
+    return data
+
+
+async def _current_email(request: Request) -> str | None:
+    token = request.cookies.get("session")
+    if not token:
+        return None
+    return await redis_client.get(f"session:{token}")
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -130,10 +164,83 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+@app.get("/login")
+async def login_form(request: Request, msg: str | None = None) -> Any:
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "error": "", "msg": msg or ""}
+    )
+
+
+@app.post("/login")
+async def login(
+    request: Request, email: str = Form(...), password: str = Form(...)
+) -> Any:
+    email_norm = email.strip().lower()
+    if email_norm not in REGISTERED_EMAILS:
+        return templates.TemplateResponse(
+            "login.html", {"request": request, "error": "Email not registered", "msg": ""}
+        )
+    stored = await redis_client.hgetall(f"user:{email_norm}")
+    if not stored or stored.get("password") != _hash_password(password):
+        return templates.TemplateResponse(
+            "login.html", {"request": request, "error": "Invalid credentials", "msg": ""}
+        )
+    token = secrets.token_urlsafe(32)
+    await redis_client.set(f"session:{token}", email_norm, ex=SESSION_TTL_SECONDS)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie("session", token, httponly=True, max_age=SESSION_TTL_SECONDS)
+    return response
+
+
+@app.get("/register")
+async def register_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "error": ""}
+    )
+
+
+@app.post("/register")
+async def register(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    wallet: str = Form(...),
+) -> Any:
+    email_norm = email.strip().lower()
+    if email_norm not in REGISTERED_EMAILS:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "Email not permitted"},
+        )
+    await redis_client.hset(
+        f"user:{email_norm}",
+        mapping={"password": _hash_password(password), "wallet": wallet.strip()},
+    )
+    return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+
+
+@app.get("/logout")
+async def logout(request: Request) -> RedirectResponse:
+    token = request.cookies.get("session")
+    if token:
+        await redis_client.delete(f"session:{token}")
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie("session")
+    return response
+
 
 @app.get("/")
 async def index(request: Request) -> Any:
-    data = _get_cached_data()
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    user = await redis_client.hgetall(f"user:{email}")
+    wallet = user.get("wallet") if user else ""
+    data = await _get_cached_data()
     return templates.TemplateResponse(
         "index.html",
         {
@@ -142,23 +249,26 @@ async def index(request: Request) -> Any:
             "rows": data["rows"],
             "source": data["source"],
             "ttl": CACHE_TTL_SECONDS,
-            "last_updated": data["cached_at"].isoformat() if data["cached_at"] else "",
+            "last_updated": data["cached_at"],
             "project_name": "Interchained × Elara – Ambassadors",
             "pool_balance": data["pool_balance"],
+            "wallet": wallet,
         },
     )
 
 
 @app.get("/api/leaderboard.json")
-async def api_leaderboard(refresh: bool = Query(False)) -> JSONResponse:
-    data = _get_cached_data(force_refresh=refresh)
+async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSONResponse:
+    if not await _current_email(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    data = await _get_cached_data(force_refresh=refresh)
     return JSONResponse(
         {
             "ok": True,
             "columns": data["columns"],
             "rows": data["rows"],
             "source": data["source"],
-            "cached_at": data["cached_at"].isoformat() if data["cached_at"] else "",
+            "cached_at": data["cached_at"],
             "ttl": CACHE_TTL_SECONDS,
             "pool_balance": data["pool_balance"],
         }
@@ -168,7 +278,7 @@ async def api_leaderboard(refresh: bool = Query(False)) -> JSONResponse:
 @app.get("/health")
 async def health() -> JSONResponse:
     try:
-        _get_cached_data()
+        await _get_cached_data()
         return JSONResponse({"ok": True})
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)})
