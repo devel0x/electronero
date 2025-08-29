@@ -23,7 +23,16 @@
         <h1 class="h5">Wallet Addresses</h1>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
-            <li class="list-group-item bg-transparent text-light">{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</li>
+            <li class="list-group-item bg-transparent text-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</span>
+                    <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
+                        <input type="hidden" name="email" value="{{ w.email }}">
+                        <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                        <button class="btn btn-primary btn-sm">Update</button>
+                    </form>
+                </div>
+            </li>
             {% endfor %}
             {% if not wallets %}
             <li class="list-group-item bg-transparent text-muted">No wallets</li>
@@ -36,8 +45,19 @@
         <div class="mb-3">
             <h2 class="h6">{{ email }}</h2>
             <ul class="list-group list-group-flush">
-                {% for u in urls %}
-                <li class="list-group-item bg-transparent"><a href="{{ u }}" target="_blank">{{ u }}</a></li>
+                {% for p in urls %}
+                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                    <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+                    {% if p.verified %}
+                    <span class="badge bg-success">Verified</span>
+                    {% else %}
+                    <form method="post" action="/admin/posts/verify">
+                        <input type="hidden" name="email" value="{{ email }}">
+                        <input type="hidden" name="url" value="{{ p.url }}">
+                        <button class="btn btn-success btn-sm">Verify</button>
+                    </form>
+                    {% endif %}
+                </li>
                 {% endfor %}
                 {% if not urls %}
                 <li class="list-group-item bg-transparent text-muted">No posts</li>
