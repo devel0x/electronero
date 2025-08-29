@@ -335,12 +335,14 @@ async def _all_wallets() -> list[dict[str, str]]:
     return wallets
 
 
-async def _all_posts() -> dict[str, list[str]]:
-    posts: dict[str, list[str]] = {}
+async def _all_posts() -> dict[str, list[dict[str, Any]]]:
+    posts: dict[str, list[dict[str, Any]]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
         email = key.split(":", 1)[1]
-        posts[email] = await redis_client.lrange(key, 0, -1)
+        urls = await redis_client.lrange(key, 0, -1)
+        verified = await redis_client.smembers(f"posts_verified:{email}")
+        posts[email] = [{"url": u, "verified": u in verified} for u in urls]
     return posts
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
@@ -553,6 +555,50 @@ async def api_admin_posts(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     posts = await _all_posts()
     return JSONResponse({"ok": True, "posts": posts})
+
+
+@app.post("/admin/posts/verify")
+async def admin_post_verify(
+    request: Request,
+    selected: list[str] = Form([]),
+    email: str | None = Form(None),
+    url: str | None = Form(None),
+    verify_all: str | None = Form(None),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    if verify_all:
+        posts = await _all_posts()
+        pipe = redis_client.pipeline()
+        for eml, urls in posts.items():
+            unverified = [p["url"] for p in urls if not p["verified"]]
+            if unverified:
+                pipe.sadd(f"posts_verified:{eml}", *unverified)
+        await pipe.execute()
+    else:
+        items = list(selected)
+        if email and url:
+            items.append(f"{email}||{url}")
+        pipe = redis_client.pipeline()
+        for item in items:
+            eml, u = item.split("||", 1)
+            pipe.sadd(f"posts_verified:{eml}", u)
+        if pipe.command_stack:
+            await pipe.execute()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/telegram/update")
+async def admin_telegram_update(
+    request: Request, email: str = Form(...), telegram: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    await redis_client.hset(
+        f"user:{email}", "telegram", _normalize_telegram(telegram)
+    )
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/tasks/verify")
