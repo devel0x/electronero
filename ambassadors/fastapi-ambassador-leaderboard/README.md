@@ -6,6 +6,8 @@ The application is protected by an email/password login screen. Only addresses l
 
 Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts.
 
+The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
+
 ## Requirements
 - Python 3.11+
 - Pinned Python dependencies are listed in `requirements.txt`.
@@ -39,7 +41,12 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /api/leaderboard.json` – JSON representation of the leaderboard. Add `?refresh=true` to bypass cache.
 - `GET /health` – simple health check.
 - `GET /verify` – page for ambassadors to submit post URLs.
+- `GET /tasks` – task checklist for ambassadors with apply buttons.
 - `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts.
+- `POST /tasks/apply` – apply to a task (authenticated users).
+- `POST /admin/tasks/verify` – mark a user's task application as verified (admin).
+- `POST /admin/tasks/destroy` – remove a user's task application (admin).
+- `GET /api/admin/tasks` – JSON dictionary of task applications grouped by user (admin only).
 - `GET /api/admin/wallets` – JSON list of all registered emails, wallets, Telegram handles, and pending rewards (admin only).
 - `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
 
