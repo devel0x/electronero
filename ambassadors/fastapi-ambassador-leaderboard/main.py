@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os, json, shutil, shlex, subprocess
 import secrets
 import hashlib
@@ -27,46 +28,16 @@ AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 
 # Task definitions for the checklist panel
 TASK_LIST = [
-    (
-        "community_building",
-        "\ud83d\udd39 Community Building \u2013 Invite new members, welcome them, keep chats active.",
-    ),
-    (
-        "content_engagement",
-        "\ud83d\udd39 Content Engagement \u2013 Post, RT, comment, and boost Interchained/Elara content.",
-    ),
-    (
-        "graphics_media",
-        "\ud83d\udd39 Graphics & Media \u2013 Memes, banners, infographics, reels, videos, GIFs.",
-    ),
-    (
-        "copywriting",
-        "\ud83d\udd39 Copywriting \u2013 Threads, blogs, captions that explain ITC/Elara.",
-    ),
-    (
-        "education",
-        "\ud83d\udd39 Education \u2013 Mini explainers, tutorials, how-to guides.",
-    ),
-    (
-        "spaces_amas",
-        "\ud83d\udd39 Spaces & AMAs \u2013 Organize or co-host community calls and events.",
-    ),
-    (
-        "moderation_support",
-        "\ud83d\udd39 Moderation & Support \u2013 Help in TG/Discord, answer questions, guide newcomers.",
-    ),
-    (
-        "regional_growth",
-        "\ud83d\udd39 Regional Growth \u2013 Promote in your language/region, start local groups.",
-    ),
-    (
-        "creative_campaigns",
-        "\ud83d\udd39 Creative Campaigns \u2013 Launch challenges, hashtags, or contests.",
-    ),
-    (
-        "advisory_outreach",
-        "\ud83d\udd39 Advisory & Partnership Outreach \u2013 Introduce new partners, projects, or influencers. Advise on negotiations and decisions.",
-    ),
+    ("community_building", "\U0001F539 Community Building – Invite new members, welcome them, keep chats active."),
+    ("content_engagement", "\U0001F539 Content Engagement – Post, RT, comment, and boost Interchained/Elara content."),
+    ("graphics_media", "\U0001F539 Graphics & Media – Memes, banners, infographics, reels, videos, GIFs."),
+    ("copywriting", "\U0001F539 Copywriting – Threads, blogs, captions that explain ITC/Elara."),
+    ("education", "\U0001F539 Education – Mini explainers, tutorials, how-to guides."),
+    ("spaces_amas", "\U0001F539 Spaces & AMAs – Organize or co-host community calls and events."),
+    ("moderation_support", "\U0001F539 Moderation & Support – Help in TG/Discord, answer questions, guide newcomers."),
+    ("regional_growth", "\U0001F539 Regional Growth – Promote in your language/region, start local groups."),
+    ("creative_campaigns", "\U0001F539 Creative Campaigns – Launch challenges, hashtags, or contests."),
+    ("advisory_outreach", "\U0001F539 Advisory & Partnership Outreach – Introduce new partners, projects, or influencers. Advise on negotiations and decisions."),
 ]
 
 TASK_LABELS = {tid: desc for tid, desc in TASK_LIST}
@@ -97,6 +68,24 @@ EXPECTED_COLUMNS = [
 redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
 CACHE_KEY = "leaderboard_cache"
 
+# Remove/normalize invalid surrogate code points from Python strings.
+_SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
+
+def _safe_text(x: Any) -> str:
+    s = str(x)
+    if not _SURROGATE_RE.search(s):
+        return s
+    s = _SURROGATE_RE.sub("�", s)  # replacement char
+    return s.encode("utf-8", "replace").decode("utf-8")
+
+def _sanitize_obj(o: Any):
+    if isinstance(o, str):
+        return _safe_text(o)
+    if isinstance(o, dict):
+        return {k: _sanitize_obj(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_sanitize_obj(v) for v in o]
+    return o
 
 def _load_registrations() -> set[str]:
     try:
