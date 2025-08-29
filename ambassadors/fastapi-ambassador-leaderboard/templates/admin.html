@@ -41,13 +41,23 @@
     </div>
     <div class="glass-card p-3">
         <h1 class="h5">Submitted Posts</h1>
+        <form id="posts-bulk-form" method="post" action="/admin/posts/verify"></form>
+        <div class="d-flex gap-2 mb-2">
+            <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
+            <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
+        </div>
         {% for email, urls in posts.items() %}
         <div class="mb-3">
             <h2 class="h6">{{ email }}</h2>
             <ul class="list-group list-group-flush">
                 {% for p in urls %}
                 <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
-                    <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if not p.verified %}
+                        <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
+                        {% endif %}
+                        <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+                    </div>
                     {% if p.verified %}
                     <span class="badge bg-success">Verified</span>
                     {% else %}
@@ -65,6 +75,9 @@
             </ul>
         </div>
         {% endfor %}
+        {% if not posts %}
+        <p class="text-muted">No posts</p>
+        {% endif %}
     </div>
     <div class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>
