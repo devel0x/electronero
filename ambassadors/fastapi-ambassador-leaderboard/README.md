@@ -2,7 +2,9 @@
 
 This project is a small FastAPI application that serves an ambassador leaderboard for the Interchained × Elara program. It reads data from a CSV file or a Google Sheet published as CSV, ranks ambassadors by points, and presents both an HTML interface and a JSON API. Pending rewards for each ambassador are calculated by splitting the balance of a configured ITC ambassador pool address in proportion to the ambassadors' points.
 
-The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password and wallet address; credentials and wallet data are stored in Redis alongside sessions and leaderboard cache data.
+The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
+
+Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts.
 
 ## Requirements
 - Python 3.11+
@@ -27,7 +29,7 @@ The application is protected by an email/password login screen. Only addresses l
    ```bash
    uvicorn main:app --reload
    ```
-   Visit <http://127.0.0.1:8000>, register your email, password, and wallet address, then log in to view the leaderboard.
+    Visit <http://127.0.0.1:8000>, register your email, password, Telegram username, and wallet address, then log in to view the leaderboard.
 
 ## Building
 There is no special build step for this app. Installing the dependencies and running the FastAPI server is sufficient. For deployment you can use any ASGI server such as `uvicorn` or `gunicorn` with `uvicorn.workers.UvicornWorker`.
@@ -36,6 +38,10 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /` – HTML leaderboard page.
 - `GET /api/leaderboard.json` – JSON representation of the leaderboard. Add `?refresh=true` to bypass cache.
 - `GET /health` – simple health check.
+- `GET /verify` – page for ambassadors to submit post URLs.
+- `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts.
+- `GET /api/admin/wallets` – JSON list of all registered emails, wallets, Telegram handles, and pending rewards (admin only).
+- `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
 
 If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app tracks the pool's balance and displays each ambassador's pending reward in both the HTML table and the JSON API response.
 

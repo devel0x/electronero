@@ -96,6 +96,9 @@
               <input id="password" type="password" name="password" class="form-control" placeholder="Password" autocomplete="new-password" minlength="8" required />
             </div>
             <div class="mb-3">
+                <input type="text" name="telegram" class="form-control" placeholder="Telegram Username" required>
+            </div>
+            <div class="mb-3">
               <label for="wallet" class="form-label small">Wallet Address</label>
               <input id="wallet" type="text" name="wallet" class="form-control" placeholder="itc1q..." value="{{ wallet or '' }}"
                      pattern="^itc1[ac-hj-np-z02-9]{11,87}$" title="Enter a valid ITC bech32 address (starts with itc1)" required />
