@@ -115,9 +115,9 @@ def _daemon_ready() -> bool:
 def _get_pool_balance() -> float:
     addr = AMBASSADOR_POOL_ADDRESS
     if not addr:
-        return 0.0
+        return 250.0
     if not _daemon_ready():
-        return 0.0
+        return 250.0
     try:
         cp = _run_cli("scantxoutset", "start", f'["addr({addr})"]')
         data = json.loads(cp.stdout)
@@ -138,7 +138,7 @@ def _get_pool_balance() -> float:
         return float(cp.stdout.strip())
     except Exception as e:
         print(f"[pool_balance] getreceivedbyaddress error: {e}")
-    return 0.0
+    return 250.0
 
 async def _load_csv() -> Dict[str, Any]:
     """Load CSV data from Google Sheets or local file and cache in Redis."""
