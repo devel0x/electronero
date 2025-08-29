@@ -572,20 +572,30 @@ async def admin_post_verify(
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
+    def _clean_url(v) -> str:
+        # force plain UTF-8 string without surrogates/odd bytes
+        return str(v).strip().encode("utf-8", "ignore").decode("utf-8", "ignore")
+
     pipe = redis_client.pipeline()
 
     if verify_all:
-        # Verify all posts for all users
-        posts = await _all_posts()  # {email: [url, ...]}
-        for eml, urls in posts.items():
-            for u in urls:
-                if not u:
-                    continue
-                safe_u = str(u).encode("utf-8", "ignore").decode("utf-8", "ignore")
-                pipe.sadd(f"posts_verified:{eml.strip().lower()}", safe_u)
+        # Works with BOTH shapes:
+        #   { email: [ {"url": "...", "verified": bool}, ... ] }
+        #   { email: [ "https://...", ... ] }
+        posts = await _all_posts()
+        for eml, entries in posts.items():
+            eml_key = eml.strip().lower()
+            for entry in entries:
+                if isinstance(entry, dict):
+                    u = entry.get("url", "")
+                else:
+                    u = entry
+                u = _clean_url(u)
+                if u:
+                    pipe.sadd(f"posts_verified:{eml_key}", u)
 
     else:
-        # Collect selected items
+        # Selected checkboxes and/or single email+url
         items = list(selected)
         if email and url:
             items.append(f"{email.strip().lower()}||{url.strip()}")
@@ -594,11 +604,10 @@ async def admin_post_verify(
             if not item or "||" not in item:
                 continue
             eml, u = item.split("||", 1)
-            eml = eml.strip().lower()
-            u = u.strip()
-            if eml and u:
-                safe_u = str(u).encode("utf-8", "ignore").decode("utf-8", "ignore")
-                pipe.sadd(f"posts_verified:{eml}", safe_u)
+            eml_key = eml.strip().lower()
+            u = _clean_url(u)
+            if eml_key and u:
+                pipe.sadd(f"posts_verified:{eml_key}", u)
 
     if pipe.command_stack:
         await pipe.execute()
