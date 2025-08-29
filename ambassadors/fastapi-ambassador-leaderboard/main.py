@@ -24,6 +24,53 @@ SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
+
+# Task definitions for the checklist panel
+TASK_LIST = [
+    (
+        "community_building",
+        "\ud83d\udd39 Community Building \u2013 Invite new members, welcome them, keep chats active.",
+    ),
+    (
+        "content_engagement",
+        "\ud83d\udd39 Content Engagement \u2013 Post, RT, comment, and boost Interchained/Elara content.",
+    ),
+    (
+        "graphics_media",
+        "\ud83d\udd39 Graphics & Media \u2013 Memes, banners, infographics, reels, videos, GIFs.",
+    ),
+    (
+        "copywriting",
+        "\ud83d\udd39 Copywriting \u2013 Threads, blogs, captions that explain ITC/Elara.",
+    ),
+    (
+        "education",
+        "\ud83d\udd39 Education \u2013 Mini explainers, tutorials, how-to guides.",
+    ),
+    (
+        "spaces_amas",
+        "\ud83d\udd39 Spaces & AMAs \u2013 Organize or co-host community calls and events.",
+    ),
+    (
+        "moderation_support",
+        "\ud83d\udd39 Moderation & Support \u2013 Help in TG/Discord, answer questions, guide newcomers.",
+    ),
+    (
+        "regional_growth",
+        "\ud83d\udd39 Regional Growth \u2013 Promote in your language/region, start local groups.",
+    ),
+    (
+        "creative_campaigns",
+        "\ud83d\udd39 Creative Campaigns \u2013 Launch challenges, hashtags, or contests.",
+    ),
+    (
+        "advisory_outreach",
+        "\ud83d\udd39 Advisory & Partnership Outreach \u2013 Introduce new partners, projects, or influencers. Advise on negotiations and decisions.",
+    ),
+]
+
+TASK_LABELS = {tid: desc for tid, desc in TASK_LIST}
+
 ADMIN_PASSWORD: str | None = os.getenv("ADMIN_PASSWORD")
 
 INTERCHAINED_CLI = os.getenv("INTERCHAINED_CLI", "interchained-cli")
@@ -307,6 +354,14 @@ async def _all_posts() -> dict[str, list[str]]:
         posts[email] = await redis_client.lrange(key, 0, -1)
     return posts
 
+async def _all_tasks() -> dict[str, dict[str, str]]:
+    tasks: dict[str, dict[str, str]] = {}
+    keys = await redis_client.keys("tasks:*")
+    for key in keys:
+        email = key.split(":", 1)[1]
+        tasks[email] = await redis_client.hgetall(key)
+    return tasks
+
 BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -399,6 +454,31 @@ async def logout(request: Request) -> RedirectResponse:
     return response
 
 
+@app.get("/tasks")
+async def tasks_page(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    statuses = await redis_client.hgetall(f"tasks:{email}")
+    return templates.TemplateResponse(
+        "tasks.html",
+        {
+            "request": request,
+            "tasks": TASK_LIST,
+            "statuses": statuses,
+        },
+    )
+
+
+@app.post("/tasks/apply")
+async def tasks_apply(request: Request, task_id: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    await redis_client.hset(f"tasks:{email}", task_id, "applied")
+    return RedirectResponse("/tasks", status_code=303)
+
+
 @app.get("/verify")
 async def verify_form(request: Request) -> Any:
     email = await _current_email(request)
@@ -457,8 +537,16 @@ async def admin_panel(request: Request) -> Any:
         return RedirectResponse("/admin/login")
     wallets = await _all_wallets()
     posts = await _all_posts()
+    tasks = await _all_tasks()
     return templates.TemplateResponse(
-        "admin.html", {"request": request, "wallets": wallets, "posts": posts}
+        "admin.html",
+        {
+            "request": request,
+            "wallets": wallets,
+            "posts": posts,
+            "tasks": tasks,
+            "task_labels": TASK_LABELS,
+        },
     )
 
 
@@ -476,6 +564,34 @@ async def api_admin_posts(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     posts = await _all_posts()
     return JSONResponse({"ok": True, "posts": posts})
+
+
+@app.post("/admin/tasks/verify")
+async def admin_task_verify(
+    request: Request, email: str = Form(...), task_id: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    await redis_client.hset(f"tasks:{email}", task_id, "verified")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/tasks/destroy")
+async def admin_task_destroy(
+    request: Request, email: str = Form(...), task_id: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    await redis_client.hdel(f"tasks:{email}", task_id)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.get("/api/admin/tasks")
+async def api_admin_tasks(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    tasks = await _all_tasks()
+    return JSONResponse({"ok": True, "tasks": tasks})
 
 
 @app.get("/")
@@ -528,12 +644,12 @@ async def health() -> JSONResponse:
             "ok": True,
             "source": data["source"],
             "pool_balance": data["pool_balance"],
-            "cli": _which_cli(),                       # resolved full path or None
-            "env_cli": os.getenv("INTERCHAINED_CLI"),  # raw env value
+#             "cli": _which_cli(),                       
+#             "env_cli": os.getenv("INTERCHAINED_CLI"),  
             "daemon_ready": _daemon_ready(),
             "address": AMBASSADOR_POOL_ADDRESS,
         })
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)})
-    
-__all__ = ["app"]
+
+      __all__ = ["app"]
