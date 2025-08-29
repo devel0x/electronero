@@ -35,6 +35,10 @@ class PayoutAddress(BaseModel):
     user_id: int
     address: str
 
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    password: Optional[str] = None
+
 class UserResponse(BaseModel):
     id: int
     username: str
