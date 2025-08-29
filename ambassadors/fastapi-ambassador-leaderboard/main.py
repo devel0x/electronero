@@ -358,7 +358,7 @@ async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSO
 @app.get("/health")
 async def health() -> JSONResponse:
     try:
-        data = _get_cached_data()
+        data = await _get_cached_data()
         return JSONResponse({
             "ok": True,
             "source": data["source"],
