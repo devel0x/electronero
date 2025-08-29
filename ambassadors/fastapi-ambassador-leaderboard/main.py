@@ -339,10 +339,14 @@ async def _all_posts() -> dict[str, list[dict[str, Any]]]:
     posts: dict[str, list[dict[str, Any]]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
-        email = key.split(":", 1)[1]
+        email = key.split(":", 1)[1].strip().lower()
         urls = await redis_client.lrange(key, 0, -1)
         verified = await redis_client.smembers(f"posts_verified:{email}")
-        posts[email] = [{"url": u, "verified": u in verified} for u in urls]
+        safe_verified = {str(v).strip() for v in verified}
+        posts[email] = [
+            {"url": str(u).strip(), "verified": str(u).strip() in safe_verified}
+            for u in urls if u
+        ]
     return posts
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
@@ -575,8 +579,10 @@ async def admin_post_verify(
         posts = await _all_posts()  # {email: [url, ...]}
         for eml, urls in posts.items():
             for u in urls:
-                if u:
-                    pipe.sadd(f"posts_verified:{eml}", u)
+                if not u:
+                    continue
+                safe_u = str(u).encode("utf-8", "ignore").decode("utf-8", "ignore")
+                pipe.sadd(f"posts_verified:{eml.strip().lower()}", safe_u)
 
     else:
         # Collect selected items
@@ -591,7 +597,8 @@ async def admin_post_verify(
             eml = eml.strip().lower()
             u = u.strip()
             if eml and u:
-                pipe.sadd(f"posts_verified:{eml}", u)
+                safe_u = str(u).encode("utf-8", "ignore").decode("utf-8", "ignore")
+                pipe.sadd(f"posts_verified:{eml}", safe_u)
 
     if pipe.command_stack:
         await pipe.execute()
