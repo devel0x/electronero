@@ -196,42 +196,85 @@
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 
 <script>
-/* ===== Existing logic (unchanged) ===== */
 const ttl = {{ ttl }};
 let autoRefresh = Math.max(ttl, 8) * 1000;
 const columns = {{ columns|tojson }};
 
-function linkify(handle){
-  if(!handle) return '<span class="text-muted">&mdash;</span>';
-  handle = handle.replace(/^@/, '');
-  return `<a href="https://x.com/${handle}" target="_blank">@${handle}</a>`;
+// --- helpers ---
+function cleanHandle(v) {
+  return (v ?? '').toString().trim().replace(/^@/, '');
 }
-function tierBadge(t){
-  if(!t) return '<span class="badge bg-light text-dark"></span>';
-  const l = t.toLowerCase();
-  if(l === 'gold') return '<span class="badge bg-warning text-dark">Gold</span>';
-  if(l === 'silver') return '<span class="badge bg-secondary">Silver</span>';
-  if(l === 'bronze') return '<span class="badge bg-bronze">Bronze</span>';
-  return `<span class="badge bg-light text-dark">${t}</span>`;
+function linkifyX(handle) {
+  const h = cleanHandle(handle);
+  if (!h) return null;
+  const a = document.createElement('a');
+  a.href = `https://x.com/${encodeURIComponent(h)}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '@' + h;
+  return a;
 }
+function linkifyTG(handle) {
+  const h = cleanHandle(handle);
+  if (!h) return null;
+  const a = document.createElement('a');
+  a.href = `https://t.me/${encodeURIComponent(h)}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '@' + h;
+  return a;
+}
+function tierBadgeEl(t) {
+  const span = document.createElement('span');
+  const v = (t ?? '').toString();
+  if (!v) { span.className = 'badge bg-light text-dark'; return span; }
+  const l = v.toLowerCase();
+  if (l === 'gold')   { span.className = 'badge bg-warning text-dark'; span.textContent = 'Gold'; }
+  else if (l === 'silver') { span.className = 'badge bg-secondary'; span.textContent = 'Silver'; }
+  else if (l === 'bronze') { span.className = 'badge bg-bronze'; span.textContent = 'Bronze'; }
+  else { span.className = 'badge bg-light text-dark'; span.textContent = v; }
+  return span;
+}
+
+// --- render ---
 function renderRows(rows){
   const body = document.getElementById('leaderboard-body');
   body.innerHTML = '';
-  for(const r of rows){
-    let tr = document.createElement('tr');
-    for(const c of columns){
-      let val = r[c] ?? '';
-      let html = '';
-      if(c === 'rank') html = `<span class="rank-badge">${val}</span>`;
-      else if(['x_handle','twitter','x'].includes(c)) html = linkify(val);
-      else if(c === 'tier') html = tierBadge(val);
-      else html = val;
+
+  for (const r of rows){
+    const tr = document.createElement('tr');
+
+    for (const c of columns){
       const td = document.createElement('td');
-      td.innerHTML = html;
+      const val = r[c] ?? '';
+
+      if (c === 'rank') {
+        const span = document.createElement('span');
+        span.className = 'rank-badge';
+        span.textContent = val;
+        td.appendChild(span);
+
+      } else if (['x_handle','twitter','x'].includes(c)) {
+        const a = linkifyX(val);
+        if (a) td.appendChild(a); else { td.className = 'text-muted'; td.textContent = '—'; }
+
+      } else if (['telegram','tg'].includes(c)) {
+        const a = linkifyTG(val);
+        if (a) td.appendChild(a); else { td.className = 'text-muted'; td.textContent = '—'; }
+
+      } else if (c === 'tier') {
+        td.appendChild(tierBadgeEl(val));
+
+      } else {
+        // default: plain text
+        td.textContent = (val ?? '').toString();
+      }
+
       tr.appendChild(td);
     }
     body.appendChild(tr);
   }
+
   document.getElementById('row-count').innerText = rows.length;
 }
 document.getElementById('search').addEventListener('input', function(){
