@@ -177,6 +177,35 @@ def set_payout_address(db: Session, user_id: int, address: str) -> models.User |
     return user
 
 
+def update_user(
+    db: Session,
+    user_id: int,
+    email: str | None = None,
+    password: str | None = None,
+) -> models.User | None:
+    user = get_user(db, user_id)
+    if not user:
+        return None
+    if email is not None:
+        user.email = email
+    if password is not None:
+        user.password_hash = pwd_context.hash(password)
+        user.forgot_password = False
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def mark_forgot_password(db: Session, email: str) -> models.User | None:
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        return None
+    user.forgot_password = True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def process_reward_claim(db: Session, claim_id: int, cli_path: str | None = None):
     """Send payment using interchained-cli and record the txid."""
     claim = db.query(models.RewardClaim).filter(models.RewardClaim.id == claim_id).first()

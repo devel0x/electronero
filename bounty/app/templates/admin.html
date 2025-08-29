@@ -17,21 +17,29 @@
         <tr>
             <th>ID</th>
             <th>Username</th>
+            <th>Email</th>
+            <th>Telegram</th>
+            <th>Forgot?</th>
             <th>Points</th>
             <th>Wallet</th>
             <th>IP</th>
             <th>Referrals</th>
             <th>Completed Tasks</th>
+            <th>Actions</th>
         </tr>
         {% for user in users %}
         <tr>
             <td>{{ user.id }}</td>
             <td>{{ user.username }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.telegram_handle or '' }}</td>
+            <td>{% if user.forgot_password %}Forgot Password{% endif %}</td>
             <td>{{ user.points }}</td>
             <td>{{ user.wallet_address or '' }}</td>
             <td>{{ user.ip_address }}</td>
             <td>{{ referral_counts.get(user.id, 0) }}</td>
             <td>{{ task_counts.get(user.id, 0) }}</td>
+            <td><a href="/admin/users/{{ user.id }}">Edit</a></td>
         </tr>
         {% endfor %}
     </table>
