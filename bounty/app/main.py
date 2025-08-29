@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Depends, HTTPException, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 from datetime import datetime
@@ -102,6 +102,32 @@ def login_page(request: Request, lang: str | None = None):
     }
     return templates.TemplateResponse(
         "login.html", {"request": request, "t": strings, "server_port": SERVER_PORT, "links": links}
+    )
+
+
+@app.get("/forgot", response_class=HTMLResponse)
+def forgot_password_page(request: Request, lang: str | None = None):
+    language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
+    strings = translations.get(language, translations["en"])
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    return templates.TemplateResponse("forgot.html", {"request": request, "t": strings, "links": links})
+
+
+@app.post("/forgot", response_class=HTMLResponse)
+def forgot_password(request: Request, email: str = Form(...), lang: str | None = None, db: Session = Depends(get_db)):
+    language = lang or os.getenv("DEFAULT_LANGUAGE", "en")
+    strings = translations.get(language, translations["en"])
+    links = {
+        "website": os.getenv("WEBSITE_URL", "#"),
+        "whitepaper": os.getenv("WHITEPAPER_URL", "#"),
+    }
+    user = crud.mark_forgot_password(db, email)
+    message = "Request submitted" if user else "Email not found"
+    return templates.TemplateResponse(
+        "forgot.html", {"request": request, "t": strings, "links": links, "message": message}
     )
 
 
@@ -277,6 +303,37 @@ def admin_dashboard(
             "task_counts": task_counts,
         },
     )
+
+
+@app.get("/admin/users/{user_id}", response_class=HTMLResponse)
+def edit_user_form(
+    user_id: int,
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    if not secrets.compare_digest(credentials.password, ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return templates.TemplateResponse("edit_user.html", {"request": request, "user": user})
+
+
+@app.post("/admin/users/{user_id}")
+def update_user_admin(
+    user_id: int,
+    email: str = Form(None),
+    password: str = Form(None),
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    if not secrets.compare_digest(credentials.password, ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user = crud.update_user(db, user_id, email=email or None, password=password or None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.get("/analytics/leaderboard")

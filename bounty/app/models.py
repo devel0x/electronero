@@ -19,6 +19,7 @@ class User(Base):
     discord_handle = Column(String(100), nullable=True)
     reddit_username = Column(String(100), nullable=True)
     points = Column(Integer, default=0)
+    forgot_password = Column(Boolean, default=False)
 
     referrals = relationship("User", remote_side=[id])
     tasks = relationship("UserTask", back_populates="user")
