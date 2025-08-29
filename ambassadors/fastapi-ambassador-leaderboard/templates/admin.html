@@ -23,7 +23,13 @@
         <h1 class="h5">Wallet Addresses</h1>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
-            <li class="list-group-item bg-transparent text-light">{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</li>
+            <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
+                <div>
+                    {{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}
+                    {% if w.forgot_password %}<span class="badge bg-warning text-dark ms-2">reset requested</span>{% endif %}
+                </div>
+                <a href="/admin/users/{{ w.email }}" class="btn btn-sm btn-outline-light ms-2">Edit</a>
+            </li>
             {% endfor %}
             {% if not wallets %}
             <li class="list-group-item bg-transparent text-muted">No wallets</li>
@@ -36,8 +42,20 @@
         <div class="mb-3">
             <h2 class="h6">{{ email }}</h2>
             <ul class="list-group list-group-flush">
-                {% for u in urls %}
-                <li class="list-group-item bg-transparent"><a href="{{ u }}" target="_blank">{{ u }}</a></li>
+                {% for p in urls %}
+                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                    <div>
+                        <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+                        {% if p.verified %}<span class="badge bg-success ms-2">verified</span>{% endif %}
+                    </div>
+                    {% if not p.verified %}
+                    <form method="post" action="/admin/posts/verify" class="d-inline">
+                        <input type="hidden" name="email" value="{{ email }}">
+                        <input type="hidden" name="url" value="{{ p.url }}">
+                        <button type="submit" class="btn btn-sm btn-outline-light">Verify</button>
+                    </form>
+                    {% endif %}
+                </li>
                 {% endfor %}
                 {% if not urls %}
                 <li class="list-group-item bg-transparent text-muted">No posts</li>

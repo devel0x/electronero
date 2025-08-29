@@ -294,17 +294,22 @@ async def _all_wallets() -> list[dict[str, str]]:
                 "wallet": data.get("wallet", ""),
                 "telegram": tele,
                 "pending_reward": f"{reward:.8f}",
+                "forgot_password": data.get("forgot_password") == "1",
             }
         )
     return wallets
 
 
-async def _all_posts() -> dict[str, list[str]]:
-    posts: dict[str, list[str]] = {}
+async def _all_posts() -> dict[str, list[dict[str, str | bool]]]:
+    posts: dict[str, list[dict[str, str | bool]]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
         email = key.split(":", 1)[1]
-        posts[email] = await redis_client.lrange(key, 0, -1)
+        urls = await redis_client.lrange(key, 0, -1)
+        verified_set = set(await redis_client.smembers(f"verified:{email}"))
+        posts[email] = [
+            {"url": u, "verified": u in verified_set} for u in urls
+        ]
     return posts
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -355,6 +360,27 @@ async def login(
     response = RedirectResponse("/", status_code=303)
     response.set_cookie("session", token, httponly=True, max_age=SESSION_TTL_SECONDS)
     return response
+
+
+@app.get("/forgot")
+async def forgot_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        "forgot.html", {"request": request, "msg": ""}
+    )
+
+
+@app.post("/forgot")
+async def forgot_submit(request: Request, email: str = Form(...)) -> Any:
+    email_norm = email.strip().lower()
+    if await redis_client.exists(f"user:{email_norm}"):
+        await redis_client.hset(f"user:{email_norm}", "forgot_password", "1")
+    return templates.TemplateResponse(
+        "forgot.html",
+        {
+            "request": request,
+            "msg": "If the email exists, an admin has been notified.",
+        },
+    )
 
 
 @app.get("/register")
@@ -460,6 +486,63 @@ async def admin_panel(request: Request) -> Any:
     return templates.TemplateResponse(
         "admin.html", {"request": request, "wallets": wallets, "posts": posts}
     )
+
+
+@app.get("/admin/users/{email}")
+async def admin_edit_user_form(request: Request, email: str) -> Any:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    data = await redis_client.hgetall(f"user:{email}")
+    if not data:
+        return RedirectResponse("/admin")
+    return templates.TemplateResponse(
+        "edit_user.html",
+        {"request": request, "email": email, "telegram": data.get("telegram", "")},
+    )
+
+
+@app.post("/admin/users/{email}")
+async def admin_update_user(
+    request: Request,
+    email: str,
+    new_email: str = Form(""),
+    password: str = Form(""),
+    telegram: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    key = f"user:{email}"
+    if not await redis_client.exists(key):
+        return RedirectResponse("/admin")
+    target_email = email
+    new_email_norm = new_email.strip().lower()
+    if new_email_norm:
+        await redis_client.rename(key, f"user:{new_email_norm}")
+        if await redis_client.exists(f"posts:{email}"):
+            await redis_client.rename(f"posts:{email}", f"posts:{new_email_norm}")
+        if await redis_client.exists(f"verified:{email}"):
+            await redis_client.rename(
+                f"verified:{email}", f"verified:{new_email_norm}"
+            )
+        target_email = new_email_norm
+    if password:
+        await redis_client.hset(f"user:{target_email}", "password", _hash_password(password))
+        await redis_client.hdel(f"user:{target_email}", "forgot_password")
+    if telegram:
+        await redis_client.hset(
+            f"user:{target_email}", "telegram", _normalize_telegram(telegram)
+        )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/posts/verify")
+async def admin_verify_post(
+    request: Request, email: str = Form(...), url: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    await redis_client.sadd(f"verified:{email}", url)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.get("/api/admin/wallets")
