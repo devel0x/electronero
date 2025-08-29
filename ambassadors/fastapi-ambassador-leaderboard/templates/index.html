@@ -21,6 +21,8 @@
             <span class="badge text-bg-secondary">Source: {{ source }}</span>
             <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.8f'|format(pool_balance) }}</span></span>
             <span class="badge text-bg-info">TTL {{ ttl }}s</span>
+            <span class="badge text-bg-warning text-dark">Wallet {{ wallet if wallet else '—' }}</span>
+            <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
         </div>
     </div>
 </nav>
