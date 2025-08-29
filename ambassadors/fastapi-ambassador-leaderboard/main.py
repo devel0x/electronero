@@ -386,7 +386,6 @@ async def register(
             "wallet": wallet.strip(),
             "telegram": _normalize_telegram(telegram),
         },
-        mapping={"password": _hash_password(password), "wallet": wallet.strip()},
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
 
