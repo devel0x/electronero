@@ -11,11 +11,10 @@ from typing import Any, Dict
 import pandas as pd
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
-
 
 # Load environment variables
 load_dotenv()
@@ -247,6 +246,10 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+# serve /favicon.ico at the root
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("static/favicon.ico")
 
 @app.get("/login")
 async def login_form(request: Request, msg: str | None = None) -> Any:
