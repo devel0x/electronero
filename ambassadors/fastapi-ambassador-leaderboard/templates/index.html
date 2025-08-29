@@ -1,175 +1,353 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ project_name }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+
     <style>
-        body { min-height:100vh; background:linear-gradient(135deg,#1e1e2f,#141414); color:#f5f5f5; }
-        .glass-card { background:rgba(255,255,255,0.1); backdrop-filter:blur(6px); border-radius:1rem; }
-        thead th { position:sticky; top:0; background:rgba(0,0,0,0.75); cursor:pointer; }
-        .rank-badge { font-weight:600; }
+        :root{
+          --bg1:#1e1e2f; --bg2:#141414; --itc-red:#ff3b4e; --itc-blue:#4aa3ff; --itc-gold:#ffd166;
+        }
+
+        /* Base background stays, but we’ll layer effects above it */
+        body{
+          min-height:100vh;
+          background:linear-gradient(135deg,var(--bg1),var(--bg2));
+          color:#f5f5f5;
+          overflow-x:hidden;
+        }
+
+        /* FX LAYER: fixed, behind content */
+        .fx-wrap{
+          position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden;
+        }
+        /* Subtle star specks */
+        .fx-stars{
+          position:absolute; inset:0;
+          background:
+             radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+             radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+             radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+          mix-blend-mode:screen;
+          opacity:.35;
+          filter: blur(.2px);
+        }
+        /* Animated grid sheen */
+        .fx-grid{
+          position:absolute; inset:-20% -20% -20% -20%;
+          background:
+            repeating-linear-gradient( to right,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+            repeating-linear-gradient( to bottom,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+          transform:rotate(1deg);
+          filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+          opacity:.35;
+        }
+        /* Bloom blobs */
+        .fx-bloom{
+          position:absolute; width:60vmax; height:60vmax; border-radius:50%;
+          filter: blur(60px); opacity:.30; transform: translate(-50%, -50%) scale(1);
+          will-change: transform, opacity;
+          mix-blend-mode:screen;
+        }
+        .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:20%; top:25%; }
+        .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:80%; top:35%; }
+        .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:55%; top:80%; }
+
+        /* Content polish */
+        .glass-card{
+          background: rgba(255,255,255,0.08);
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:1rem;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 0 20px 50px rgba(0,0,0,.35);
+        }
+        .navbar{
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        thead th{
+          position:sticky; top:0; z-index:2;
+          background: rgba(0,0,0,0.75);
+          cursor:pointer;
+          user-select:none;
+        }
+        .rank-badge{ font-weight:600; }
+        .badge.bg-bronze{ background: linear-gradient(145deg,#cd7f32,#a56324); }
+
+        /* Small hover lift on the card */
+        .glass-card:hover{ transform: translateY(-1px); transition: transform .2s ease; }
+
+        /* Respect reduced motion */
+        @media (prefers-reduced-motion: reduce){
+          .fx-grid, .fx-bloom, .fx-stars{ animation: none !important; }
+        }
     </style>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', path='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', path='favicon-16x16.png') }}">
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', path='site.webmanifest') }}">
+    <meta name="theme-color" content="#0b1220">
 </head>
+
 <body>
-<nav class="navbar navbar-dark bg-dark bg-opacity-50">
-    <div class="container-fluid">
-        <span class="navbar-brand">🏆 Ambassador Leaderboard</span>
-        <div class="d-flex gap-2">
-            <span class="badge text-bg-secondary">Source: {{ source }}</span>
-            <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.8f'|format(pool_balance) }}</span></span>
-            <span class="badge text-bg-info">TTL {{ ttl }}s</span>
-            <span class="badge text-bg-warning text-dark">Wallet {{ wallet if wallet else '—' }}</span>
-            <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
-            <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
-        </div>
-    </div>
-</nav>
-<div class="container py-4">
-    <div class="glass-card p-3">
-        <h1 class="h3">{{ project_name }}</h1>
-        <p class="text-muted small mb-3">Auto-updated leaderboard</p>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <input id="search" type="text" class="form-control flex-grow-1" placeholder="Search...">
-            <button id="refresh-btn" class="btn btn-outline-light">Refresh</button>
-        </div>
-        <div class="table-responsive">
-            <table id="leaderboard" class="table table-dark table-striped align-middle mb-0">
-                <thead>
-                    <tr>
-                        {% for col in columns %}
-                        <th data-col="{{ col }}">{{ col.replace('_',' ').title() }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody id="leaderboard-body">
-                    {% for row in rows %}
-                    <tr>
-                        {% for col in columns %}
-                        {% set val = row.get(col, '') %}
-                        {% if col == 'rank' %}
-                        <td><span class="rank-badge">{{ val }}</span></td>
-                        {% elif col in ['x_handle','twitter','x'] %}
-                            {% set handle = val.lstrip('@') %}
-                            {% if handle %}
-                            <td><a href="https://x.com/{{ handle }}" target="_blank">@{{ handle }}</a></td>
-                            {% else %}
-                            <td class="text-muted">&mdash;</td>
-                            {% endif %}
-                        {% elif col == 'tier' %}
-                            {% if val.lower() == 'gold' %}
-                            <td><span class="badge bg-warning text-dark">Gold</span></td>
-                            {% elif val.lower() == 'silver' %}
-                            <td><span class="badge bg-secondary">Silver</span></td>
-                            {% elif val.lower() == 'bronze' %}
-                            <td><span class="badge bg-bronze">Bronze</span></td>
-                            {% else %}
-                            <td><span class="badge bg-light text-dark">{{ val }}</span></td>
-                            {% endif %}
-                        {% else %}
-                        <td>{{ val }}</td>
-                        {% endif %}
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div class="d-flex justify-content-between mt-2 small text-muted">
-            <div>Rows: <span id="row-count">{{ rows|length }}</span></div>
-            <div>Last updated: <span id="last-updated">{{ last_updated }}</span></div>
-        </div>
-    </div>
-    <footer class="text-center small mt-3 text-muted">Powered by FastAPI &amp; Bootstrap</footer>
+<!-- FX Layer -->
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
 </div>
+
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="badge text-bg-secondary">Source: {{ source }}</span>
+      <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.8f'|format(pool_balance) }}</span></span>
+      <span class="badge text-bg-info">TTL {{ ttl }}s</span>
+      <span class="badge text-bg-warning text-dark">Wallet {{ wallet if wallet else '—' }}</span>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="glass-card p-3">
+    <h1 class="h3 mb-3">{{ project_name }}</h1>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <input id="search" type="text" class="form-control flex-grow-1" placeholder="Search...">
+      <button id="refresh-btn" class="btn btn-outline-light">Refresh</button>
+    </div>
+
+    <div class="table-responsive">
+      <table id="leaderboard" class="table table-dark table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            {% for col in columns %}
+            <th data-col="{{ col }}">{{ col.replace('_',' ').title() }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          {% for row in rows %}
+          <tr>
+            {% for col in columns %}
+            {% set val = row.get(col, '') %}
+            {% if col == 'rank' %}
+              <td><span class="rank-badge">{{ val }}</span></td>
+            {% elif col in ['x_handle','twitter','x'] %}
+              {% set handle = val.lstrip('@') %}
+              {% if handle %}
+                <td><a href="https://x.com/{{ handle }}" target="_blank">@{{ handle }}</a></td>
+              {% else %}
+                <td class="text-muted">&mdash;</td>
+              {% endif %}
+            {% elif col in ['telegram','tg'] %}
+              {% set handle = val.lstrip('@') %}
+              {% if handle %}
+                <td><a href="https://t.me/{{ handle }}" target="_blank">@{{ handle }}</a></td>
+              {% else %}
+                <td class="text-muted">&mdash;</td>
+              {% endif %}
+            {% elif col == 'tier' %}
+              {% if val and val.lower() == 'gold' %}
+                <td><span class="badge bg-warning text-dark">Gold</span></td>
+              {% elif val and val.lower() == 'silver' %}
+                <td><span class="badge bg-secondary">Silver</span></td>
+              {% elif val and val.lower() == 'bronze' %}
+                <td><span class="badge bg-bronze">Bronze</span></td>
+              {% else %}
+                <td><span class="badge bg-light text-dark">{{ val }}</span></td>
+              {% endif %}
+            {% else %}
+              <td>{{ val }}</td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-between mt-2 small text-muted">
+      <div>Rows: <span id="row-count">{{ rows|length }}</span></div>
+      <div>Last updated: <span id="last-updated">{{ last_updated }}</span></div>
+    </div>
+  </div>
+
+  <footer class="text-center small mt-3 text-muted">Powered by FastAPI &amp; Bootstrap</footer>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- GSAP -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
 <script>
 const ttl = {{ ttl }};
 let autoRefresh = Math.max(ttl, 8) * 1000;
 const columns = {{ columns|tojson }};
-function linkify(handle){
-    if(!handle) return '<span class="text-muted">&mdash;</span>';
-    handle = handle.replace(/^@/, '');
-    return `<a href="https://x.com/${handle}" target="_blank">@${handle}</a>`;
+
+// --- helpers ---
+function cleanHandle(v) {
+  return (v ?? '').toString().trim().replace(/^@/, '');
 }
-function tierBadge(t){
-    if(!t) return '<span class="badge bg-light text-dark"></span>';
-    const l = t.toLowerCase();
-    if(l === 'gold') return '<span class="badge bg-warning text-dark">Gold</span>';
-    if(l === 'silver') return '<span class="badge bg-secondary">Silver</span>';
-    if(l === 'bronze') return '<span class="badge bg-bronze">Bronze</span>';
-    return `<span class="badge bg-light text-dark">${t}</span>`;
+function linkifyX(handle) {
+  const h = cleanHandle(handle);
+  if (!h) return null;
+  const a = document.createElement('a');
+  a.href = `https://x.com/${encodeURIComponent(h)}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '@' + h;
+  return a;
 }
+function linkifyTG(handle) {
+  const h = cleanHandle(handle);
+  if (!h) return null;
+  const a = document.createElement('a');
+  a.href = `https://t.me/${encodeURIComponent(h)}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '@' + h;
+  return a;
+}
+function tierBadgeEl(t) {
+  const span = document.createElement('span');
+  const v = (t ?? '').toString();
+  if (!v) { span.className = 'badge bg-light text-dark'; return span; }
+  const l = v.toLowerCase();
+  if (l === 'gold')   { span.className = 'badge bg-warning text-dark'; span.textContent = 'Gold'; }
+  else if (l === 'silver') { span.className = 'badge bg-secondary'; span.textContent = 'Silver'; }
+  else if (l === 'bronze') { span.className = 'badge bg-bronze'; span.textContent = 'Bronze'; }
+  else { span.className = 'badge bg-light text-dark'; span.textContent = v; }
+  return span;
+}
+
+// --- render ---
 function renderRows(rows){
-    const body = document.getElementById('leaderboard-body');
-    body.innerHTML = '';
-    for(const r of rows){
-        let tr = document.createElement('tr');
-        for(const c of columns){
-            let val = r[c] ?? '';
-            let html = '';
-            if(c === 'rank') html = `<span class="rank-badge">${val}</span>`;
-            else if(['x_handle','twitter','x'].includes(c)) html = linkify(val);
-            else if(c === 'tier') html = tierBadge(val);
-            else html = val;
-            const td = document.createElement('td');
-            td.innerHTML = html;
-            tr.appendChild(td);
-        }
-        body.appendChild(tr);
-    }
-    document.getElementById('row-count').innerText = rows.length;
-}
+  const body = document.getElementById('leaderboard-body');
+  body.innerHTML = '';
 
+  for (const r of rows){
+    const tr = document.createElement('tr');
+
+    for (const c of columns){
+      const td = document.createElement('td');
+      const val = r[c] ?? '';
+
+      if (c === 'rank') {
+        const span = document.createElement('span');
+        span.className = 'rank-badge';
+        span.textContent = val;
+        td.appendChild(span);
+
+      } else if (['x_handle','twitter','x'].includes(c)) {
+        const a = linkifyX(val);
+        if (a) td.appendChild(a); else { td.className = 'text-muted'; td.textContent = '—'; }
+
+      } else if (['telegram','tg'].includes(c)) {
+        const a = linkifyTG(val);
+        if (a) td.appendChild(a); else { td.className = 'text-muted'; td.textContent = '—'; }
+
+      } else if (c === 'tier') {
+        td.appendChild(tierBadgeEl(val));
+
+      } else {
+        // default: plain text
+        td.textContent = (val ?? '').toString();
+      }
+
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+
+  document.getElementById('row-count').innerText = rows.length;
+}
 document.getElementById('search').addEventListener('input', function(){
-    const term = this.value.toLowerCase();
-    const rows = Array.from(document.querySelectorAll('#leaderboard-body tr'));
-    let visible = 0;
-    rows.forEach(r => {
-        const txt = r.innerText.toLowerCase();
-        const show = txt.includes(term);
-        r.style.display = show ? '' : 'none';
-        if(show) visible++;
-    });
-    document.getElementById('row-count').innerText = visible;
+  const term = this.value.toLowerCase();
+  const rows = Array.from(document.querySelectorAll('#leaderboard-body tr'));
+  let visible = 0;
+  rows.forEach(r => {
+    const txt = r.innerText.toLowerCase();
+    const show = txt.includes(term);
+    r.style.display = show ? '' : 'none';
+    if(show) visible++;
+  });
+  document.getElementById('row-count').innerText = visible;
 });
-
 document.querySelectorAll('#leaderboard thead th').forEach((th, idx) => {
-    th.addEventListener('click', () => {
-        const tbody = document.getElementById('leaderboard-body');
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        const dir = th.dataset.sort === 'asc' ? 'desc' : 'asc';
-        rows.sort((a,b) => {
-            let A = a.children[idx].innerText.trim();
-            let B = b.children[idx].innerText.trim();
-            const numA = parseFloat(A.replace(/,/g,''));
-            const numB = parseFloat(B.replace(/,/g,''));
-            if(!isNaN(numA) && !isNaN(numB)) {
-                return dir === 'asc' ? numA - numB : numB - numA;
-            }
-            return dir === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
-        });
-        th.dataset.sort = dir;
-        tbody.innerHTML = '';
-        rows.forEach(r => tbody.appendChild(r));
+  th.addEventListener('click', () => {
+    const tbody = document.getElementById('leaderboard-body');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const dir = th.dataset.sort === 'asc' ? 'desc' : 'asc';
+    rows.sort((a,b) => {
+      let A = a.children[idx].innerText.trim();
+      let B = b.children[idx].innerText.trim();
+      const numA = parseFloat(A.replace(/,/g,'')); const numB = parseFloat(B.replace(/,/g,''));
+      if(!isNaN(numA) && !isNaN(numB)) return dir === 'asc' ? numA - numB : numB - numA;
+      return dir === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
     });
+    th.dataset.sort = dir;
+    tbody.innerHTML = '';
+    rows.forEach(r => tbody.appendChild(r));
+  });
 });
-
 async function refreshData(force=false){
-    const url = '/api/leaderboard.json' + (force ? '?refresh=true' : '');
-    const resp = await fetch(url);
-    const data = await resp.json();
-    if(data.ok){
-        renderRows(data.rows);
-        document.getElementById('last-updated').innerText = new Date(data.cached_at).toISOString();
-        document.getElementById('pool-balance').innerText = Number(data.pool_balance).toFixed(8);
-    }
+  const url = '/api/leaderboard.json' + (force ? '?refresh=true' : '');
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if(data.ok){
+    renderRows(data.rows);
+    document.getElementById('last-updated').innerText = new Date(data.cached_at).toISOString();
+    document.getElementById('pool-balance').innerText = Number(data.pool_balance).toFixed(8);
+  }
 }
-
 document.getElementById('refresh-btn').addEventListener('click', () => refreshData(true));
 setInterval(() => refreshData(true), autoRefresh);
+
+/* ===== GSAP bloom + motion ===== */
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof gsap === 'undefined') return;
+
+  const grid = document.getElementById('fxGrid');
+  const b1 = document.getElementById('b1');
+  const b2 = document.getElementById('b2');
+  const b3 = document.getElementById('b3');
+
+  // Gentle oscillation on blobs
+  gsap.to(b1, { duration: 10, xPercent: -5, yPercent: 6, scale: 1.07, opacity: 0.35, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.to(b2, { duration: 12, xPercent: 4,  yPercent: -4, scale: 1.06, opacity: 0.33, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .3 });
+  gsap.to(b3, { duration: 14, xPercent: -2, yPercent: 3, scale: 1.08, opacity: 0.32, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .6 });
+
+  // Slow grid drift + subtle hue shimmer using CSS vars
+  gsap.to(grid, { duration: 20, rotation: 3, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.to(document.body, { duration: 8, '--bg1': '#1e2338', '--bg2': '#111216', ease: 'sine.inOut', yoyo: true, repeat: -1 });
+
+  // Cursor parallax — tiny, classy
+  const parallax = (e) => {
+    const { innerWidth: w, innerHeight: h } = window;
+    const dx = (e.clientX - w/2) / w;
+    const dy = (e.clientY - h/2) / h;
+    gsap.to([b1,b2,b3], { duration: .6, x: dx * 30, y: dy * 30, ease: 'sine.out' });
+    gsap.to(grid, { duration: .8, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+  };
+  window.addEventListener('mousemove', parallax, { passive:true });
+})();
 </script>
 </body>
 </html>
