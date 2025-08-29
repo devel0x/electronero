@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os, json, shutil, shlex, subprocess
-from datetime import datetime, timedelta
 import secrets
 import hashlib
+import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
 
@@ -23,6 +24,8 @@ SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
+ADMIN_PASSWORD: str | None = os.getenv("ADMIN_PASSWORD")
+
 INTERCHAINED_CLI = os.getenv("INTERCHAINED_CLI", "interchained-cli")
 CLI_EXTRA = os.getenv("CLI_EXTRA", "")
 RPC_WALLET = os.getenv("RPC_WALLET")
@@ -60,6 +63,7 @@ def _load_registrations() -> set[str]:
 
 
 REGISTERED_EMAILS = _load_registrations()
+
 cache: Dict[str, Any] = {
     "columns": [],
     "rows": [],
@@ -152,6 +156,14 @@ async def _load_csv() -> Dict[str, Any]:
         if col not in df.columns:
             df[col] = ""
 
+    if "rank" in df.columns:
+        df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
+        df = df.sort_values("rank", ascending=True)
+    else:
+        df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
+        df = df.sort_values("points", ascending=False).reset_index(drop=True)
+        df.insert(0, "rank", range(1, len(df) + 1))
+    df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
     # if "rank" in df.columns:
     #     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
     #     df = df.sort_values("rank", ascending=True)
@@ -196,6 +208,11 @@ async def _load_csv() -> Dict[str, Any]:
     base_cols = [
         "rank",
         "name",
+#         "x_handle",
+        "points",
+#         "posts",
+#         "engagements",
+#         "referrals",
         "telegram",
         # "x_handle",
         "points",
@@ -238,13 +255,75 @@ async def _current_email(request: Request) -> str | None:
     return await redis_client.get(f"session:{token}")
 
 
+async def _current_admin(request: Request) -> bool:
+    token = request.cookies.get("admin")
+    if not token:
+        return False
+    return await redis_client.get(f"admin_session:{token}") == "admin"
+
+
+async def _pending_rewards_map() -> dict[str, float]:
+    mapping: dict[str, float] = {}
+    data = await _get_cached_data()
+    columns = data.get("columns", [])
+    rows = data.get("rows", [])
+    if "email" in columns and "pending_reward" in columns:
+        for row in rows:
+            email = str(row.get("email", "")).strip().lower()
+            if email:
+                try:
+                    mapping[email] = float(row.get("pending_reward", 0))
+                except Exception:
+                    mapping[email] = 0.0
+    return mapping
+
+
+async def _all_wallets() -> list[dict[str, str]]:
+    wallets: list[dict[str, str]] = []
+    pending_map = await _pending_rewards_map()
+    keys = await redis_client.keys("user:*")
+    for key in keys:
+        email = key.split(":", 1)[1]
+        data = await redis_client.hgetall(key)
+        tele = data.get("telegram", "")
+        if tele and not tele.startswith("@"):
+            tele = f"@{tele.lstrip('@')}"
+        reward = pending_map.get(email, 0.0)
+        wallets.append(
+            {
+                "email": email,
+                "wallet": data.get("wallet", ""),
+                "telegram": tele,
+                "pending_reward": f"{reward:.8f}",
+            }
+        )
+    return wallets
+
+
+async def _all_posts() -> dict[str, list[str]]:
+    posts: dict[str, list[str]] = {}
+    keys = await redis_client.keys("posts:*")
+    for key in keys:
+        email = key.split(":", 1)[1]
+        posts[email] = await redis_client.lrange(key, 0, -1)
+    return posts
+
 BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _normalize_telegram(handle: str) -> str:
+    h = handle.strip()
+    if not h:
+        return ""
+    h = h.lstrip("@")
+    return f"@{h}"
 
 # serve /favicon.ico at the root
 @app.get("/favicon.ico", include_in_schema=False)
@@ -291,6 +370,7 @@ async def register(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    telegram: str = Form(...),
     wallet: str = Form(...),
 ) -> Any:
     email_norm = email.strip().lower()
@@ -301,6 +381,11 @@ async def register(
         )
     await redis_client.hset(
         f"user:{email_norm}",
+        mapping={
+            "password": _hash_password(password),
+            "wallet": wallet.strip(),
+            "telegram": _normalize_telegram(telegram),
+        },
         mapping={"password": _hash_password(password), "wallet": wallet.strip()},
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
@@ -314,6 +399,85 @@ async def logout(request: Request) -> RedirectResponse:
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie("session")
     return response
+
+
+@app.get("/verify")
+async def verify_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    posts = await redis_client.lrange(f"posts:{email}", 0, -1)
+    return templates.TemplateResponse(
+        "verify.html", {"request": request, "posts": posts, "error": ""}
+    )
+
+
+@app.post("/verify")
+async def verify_submit(request: Request, url: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    url_clean = url.strip()
+    if url_clean:
+        await redis_client.lpush(f"posts:{email}", url_clean)
+    return RedirectResponse("/verify", status_code=303)
+
+
+@app.get("/admin/login")
+async def admin_login_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        "admin_login.html", {"request": request, "error": ""}
+    )
+
+
+@app.post("/admin/login")
+async def admin_login(request: Request, password: str = Form(...)) -> Any:
+    if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
+        token = secrets.token_urlsafe(32)
+        await redis_client.set(f"admin_session:{token}", "admin", ex=SESSION_TTL_SECONDS)
+        response = RedirectResponse("/admin", status_code=303)
+        response.set_cookie("admin", token, httponly=True, max_age=SESSION_TTL_SECONDS)
+        return response
+    return templates.TemplateResponse(
+        "admin_login.html", {"request": request, "error": "Invalid password"}
+    )
+
+
+@app.get("/admin/logout")
+async def admin_logout(request: Request) -> RedirectResponse:
+    token = request.cookies.get("admin")
+    if token:
+        await redis_client.delete(f"admin_session:{token}")
+    response = RedirectResponse("/admin/login", status_code=303)
+    response.delete_cookie("admin")
+    return response
+
+
+@app.get("/admin")
+async def admin_panel(request: Request) -> Any:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    wallets = await _all_wallets()
+    posts = await _all_posts()
+    return templates.TemplateResponse(
+        "admin.html", {"request": request, "wallets": wallets, "posts": posts}
+    )
+
+
+@app.get("/api/admin/wallets")
+async def api_admin_wallets(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    wallets = await _all_wallets()
+    return JSONResponse({"ok": True, "wallets": wallets})
+
+
+@app.get("/api/admin/posts")
+async def api_admin_posts(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    posts = await _all_posts()
+    return JSONResponse({"ok": True, "posts": posts})
 
 
 @app.get("/")
@@ -332,8 +496,8 @@ async def index(request: Request) -> Any:
             "rows": data["rows"],
             "source": data["source"],
             "ttl": CACHE_TTL_SECONDS,
-            "last_updated": (datetime.fromisoformat(data["cached_at"]).isoformat() if data.get("cached_at") else ""),
-            "project_name": "Interchained × Elara – Governance",
+            "last_updated": data["cached_at"],
+            "project_name": "Interchained × Elara – Ambassadors",
             "pool_balance": data["pool_balance"],
             "wallet": wallet,
         },
