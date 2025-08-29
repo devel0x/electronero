@@ -329,7 +329,7 @@ async def index(request: Request) -> Any:
             "rows": data["rows"],
             "source": data["source"],
             "ttl": CACHE_TTL_SECONDS,
-            "last_updated": data["cached_at"].isoformat() if data["cached_at"] else "",
+            "last_updated": (datetime.fromisoformat(data["cached_at"]).isoformat() if data.get("cached_at") else ""),
             "project_name": "Interchained × Elara – Governance",
             "pool_balance": data["pool_balance"],
             "wallet": wallet,
