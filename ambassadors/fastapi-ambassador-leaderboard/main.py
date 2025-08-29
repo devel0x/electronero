@@ -163,7 +163,6 @@ async def _load_csv() -> Dict[str, Any]:
         df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
         df = df.sort_values("points", ascending=False).reset_index(drop=True)
         df.insert(0, "rank", range(1, len(df) + 1))
-    df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
     # if "rank" in df.columns:
     #     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
     #     df = df.sort_values("rank", ascending=True)
@@ -209,7 +208,6 @@ async def _load_csv() -> Dict[str, Any]:
         "rank",
         "name",
 #         "x_handle",
-        "points",
 #         "posts",
 #         "engagements",
 #         "referrals",
@@ -223,7 +221,8 @@ async def _load_csv() -> Dict[str, Any]:
         "pending_reward",
     ]
     other_cols = [c for c in df.columns if c not in base_cols]
-    df = df[base_cols + other_cols]
+    df = df[[c for c in base_cols if c in df.columns]]
+    # df = df[base_cols + other_cols]
 
     df = df.fillna("")
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
