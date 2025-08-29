@@ -652,4 +652,4 @@ async def health() -> JSONResponse:
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)})
 
-      __all__ = ["app"]
+__all__ = ["app"]
