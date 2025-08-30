@@ -87,6 +87,22 @@
   background: radial-gradient(closest-side, rgba(230,57,70,.12), transparent 70%);
   z-index:0; pointer-events:none; border-radius:50%;
 }
+/* Wallet column: keep on one line, ellipsis the value, keep button intact */
+.wallet-cell{
+  white-space: nowrap;
+}
+.wallet-cell > span{
+  display: inline-block;
+  max-width: 26ch;            /* tweak if you want longer/shorter */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.copy-btn{
+  white-space: nowrap;         /* make sure "Copy" doesn't split to a new line */
+}
+
 
   </style>
 </head>
@@ -204,5 +220,34 @@
   }
 })();
 </script>
+<script>
+  // Copy wallet buttons
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+
+    e.preventDefault();        // avoid any accidental form submits
+    e.stopPropagation();
+
+    const val = btn.dataset.copy || '';
+    if (!val) return;
+
+    try {
+      await navigator.clipboard.writeText(val);
+    } catch {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = val; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+    }
+
+    // Tiny feedback
+    const prev = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 900);
+  });
+</script>
+
 </body>
 </html>
