@@ -4,6 +4,7 @@ from typing import Dict
 
 import httpx
 from telegram import Update
+from telegram.error import Forbidden
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,13 +14,21 @@ from telegram.ext import (
     filters,
 )
 
-from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, redis_client
+from main import (
+    TASK_LIST,
+    REGISTERED_EMAILS,
+    _hash_password,
+    _normalize_telegram,
+    redis_client,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Conversation states
 WAITING_PASSWORD = 1
+WAITING_REG_PASSWORD = 2
+WAITING_REG_WALLET = 3
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,7 +37,7 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Greet the user."""
     await update.message.reply_text(
-        "Welcome to the Ambassador bot. Use /checkin <email> to log in."
+        "Welcome to the Ambassador bot. Use /register <email> to sign up or /checkin <email> to log in."
     )
 
 
@@ -49,6 +58,77 @@ async def checkin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     else:
         await update.message.reply_text("Please enter your password:")
     return WAITING_PASSWORD
+
+
+async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Begin registration by collecting email."""
+    if update.effective_chat.type != "private":
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text=(
+                    "Let’s get you registered, please use your email address provided on "
+                    "the ITC Governance Ambassador form"
+                ),
+            )
+            await update.message.reply_text(
+                "I sent you a DM to follow up with your registration."
+            )
+        except Forbidden:
+            await update.message.reply_text(
+                "I couldn't DM you. Please message @xChiefMod_bot directly to register."
+            )
+        return ConversationHandler.END
+    if not context.args:
+        await update.message.reply_text(
+            "Let’s get you registered, please use your email address provided on the ITC Governance Ambassador form"
+        )
+        return ConversationHandler.END
+    email = context.args[0].strip().lower()
+    if email not in REGISTERED_EMAILS:
+        await update.message.reply_text("Email not permitted.")
+        return ConversationHandler.END
+    exists = await redis_client.exists(f"user:{email}")
+    if exists:
+        await update.message.reply_text("Email already registered.")
+        return ConversationHandler.END
+    context.user_data["reg_email"] = email
+    await update.message.reply_text("Please choose a password:")
+    return WAITING_REG_PASSWORD
+
+
+async def received_reg_password(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Store password and ask for wallet."""
+    password = update.message.text.strip()
+    context.user_data["reg_password"] = password
+    await update.message.reply_text("Please enter your wallet address:")
+    return WAITING_REG_WALLET
+
+
+async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Finalize registration by saving credentials."""
+    wallet = update.message.text.strip()
+    email = context.user_data.get("reg_email")
+    password = context.user_data.get("reg_password")
+    if not email or not password:
+        await update.message.reply_text(
+            "Registration data missing. Start over with /register <email>."
+        )
+        return ConversationHandler.END
+    await redis_client.hset(
+        f"user:{email}",
+        mapping={
+            "password": _hash_password(password),
+            "wallet": wallet,
+            "telegram": _normalize_telegram(update.effective_user.username or ""),
+        },
+    )
+    context.user_data["authenticated"] = True
+    context.user_data["email"] = email
+    await update.message.reply_text("Registered successfully.")
+    return ConversationHandler.END
 
 
 async def received_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -152,6 +232,26 @@ async def main() -> None:
     )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv)
+    reg_conv = ConversationHandler(
+        entry_points=[CommandHandler("register", register_start)],
+        states={
+            WAITING_REG_PASSWORD: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                    received_reg_password,
+                )
+            ],
+            WAITING_REG_WALLET: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                    received_reg_wallet,
+                )
+            ],
+        },
+        fallbacks=[],
+        per_chat=False,
+    )
+    application.add_handler(reg_conv)
     application.add_handler(CommandHandler("tasks", tasks))
     application.add_handler(CommandHandler("apply", apply_task))
     application.add_handler(CommandHandler("verify", verify))
