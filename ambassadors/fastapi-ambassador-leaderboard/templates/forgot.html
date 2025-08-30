@@ -20,9 +20,63 @@
     .btn-primary{ background: linear-gradient(90deg, var(--red), #ff6b6b); border: none; box-shadow: 0 6px 18px rgba(230,57,70,.35); }
     .btn-primary:hover{ filter: brightness(1.05); }
     a.link-light{ opacity:.9; } a.link-light:hover{ opacity:1; }
-    .bg-bloom{ position:absolute; inset:auto auto 10% -10%; width:60vw; height:60vw; background: radial-gradient(closest-side, rgba(230,57,70,.12), transparent 70%); pointer-events:none; }
-    #bg-stars{ position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
-    .content{ position:relative; z-index:1; }
+    
+    /* FX Layer (starfield + grid + blooms) */
+    .fx-wrap{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+    .fx-stars{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+        radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+      mix-blend-mode:screen; opacity:.35; filter: blur(.2px);
+    }
+    .fx-grid{
+      position:absolute; inset:-20% -20% -20% -20%;
+      background:
+        repeating-linear-gradient(to right, rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+      transform:rotate(1deg); opacity:.35; filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+    }
+    .fx-bloom{ position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter: blur(60px); opacity:.30; mix-blend-mode:screen; transform: translate(-50%,-50%); }
+    .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:22%; top:28%; }
+    .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:78%; top:34%; }
+    .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:52%; top:78%; }
+
+    /* Card + list polish */
+    .glass-card{
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:1rem;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .navbar{ backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); }
+    .list-group-item{
+      color:#f5f5f5;                       /* <-- force white text */
+      background:transparent;
+      border-color: rgba(255,255,255,.12);
+    }
+    .list-group-item:hover{
+      background: rgba(255,255,255,.04);
+    }
+    .lead-muted{ color: rgba(255,255,255,.85); }
+    @media (prefers-reduced-motion: reduce){ .fx-grid,.fx-bloom,.fx-stars{ animation:none !important; } }
+    /* Background FX (match existing elements you render) */
+#bg-stars{ position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+.bg-bloom{ position:fixed; left:-10%; bottom:10%; width:60vw; height:60vw;
+  background: radial-gradient(closest-side, rgba(230,57,70,.12), transparent 70%); z-index:0; pointer-events:none; }
+
+/* If you have two .glass-card blocks, keep just one. 
+   This is the recommended (polished) version: */
+.glass-card{
+  background: rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:1rem;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 20px 50px rgba(0,0,0,.35);
+}
+
   </style>
 </head>
 <body class="d-flex align-items-center">
@@ -84,31 +138,47 @@
   <!-- GSAP + animations -->
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-  <script>
-    // starfield
-    (() => {
-      const c = document.getElementById('bg-stars');
-      const ctx = c.getContext('2d');
-      const DPR = window.devicePixelRatio || 1;
-      let w, h, stars=[];
-      const STAR_COUNT=120;
-      function resize(){w=c.offsetWidth;h=c.offsetHeight;c.width=w*DPR;c.height=h*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
-      function resetStars(){stars=new Array(STAR_COUNT).fill().map(()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.2+0.2,a:Math.random()*0.8+0.2}));}
-      function draw(){ctx.clearRect(0,0,w,h);stars.forEach(st=>{st.a+= (Math.random()-.5)*.06;st.a=Math.max(0.1,Math.min(1,st.a));ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,${st.a})`;ctx.fill();});requestAnimationFrame(draw);}
-      resize();resetStars();draw();window.addEventListener('resize',()=>{resize();resetStars();});
-    })();
+<script>
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof gsap === 'undefined') return;
 
-    // bloom animation
-    gsap.to(".bg-bloom", { opacity:0.25, duration:2, ease:"power2.out" });
-    gsap.to(".bg-bloom", { opacity:0.15, duration:6, repeat:-1, yoyo:true, ease:"sine.inOut" });
-
-    // reveal animations
-    gsap.utils.toArray('[data-animate="fade-up"]').forEach(el=>{
-      gsap.from(el,{y:24,opacity:0,duration:.9,ease:"power3.out",scrollTrigger:{trigger:el,start:"top 85%"}});
+  // Gentle motion for the existing .bg-bloom element
+  const bloom = document.querySelector('.bg-bloom');
+  if (bloom) {
+    gsap.to(bloom, {
+      duration: 16,
+      xPercent: 3,
+      yPercent: -4,
+      scale: 1.05,
+      opacity: 0.35,
+      ease: 'sine.inOut',
+      yoyo: true,
+      repeat: -1
     });
 
-    // floaty logo
-    gsap.to("[data-floaty]", {y:10, rotation:0.5, duration:3.5, repeat:-1, yoyo:true, ease:"sine.inOut"});
-  </script>
+    // Tiny parallax
+    window.addEventListener('mousemove', e => {
+      const dx = (e.clientX - innerWidth / 2) / innerWidth;
+      const dy = (e.clientY - innerHeight / 2) / innerHeight;
+      gsap.to(bloom, { duration: 0.6, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+    }, { passive: true });
+  }
+
+  // Fade-ins for elements that already have data-animate
+  if (typeof ScrollTrigger !== 'undefined') {
+    gsap.utils.toArray('[data-animate]').forEach(el => {
+      const type = el.getAttribute('data-animate');
+      const from = (type === 'fade-up') ? { y: 20, opacity: 0 } : { opacity: 0 };
+      gsap.from(el, {
+        ...from,
+        duration: 0.6,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 85%' }
+      });
+    });
+  }
+})();
+</script>
 </body>
 </html>
