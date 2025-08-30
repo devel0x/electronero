@@ -12,27 +12,31 @@
   <link rel="manifest" href="{{ url_for('static', path='site.webmanifest') }}">
   <meta name="theme-color" content="#0b1220">
   <style>
-    :root{ --bg1:#1e1e2f; --bg2:#141414; }
-    body{ min-height:100vh; background:linear-gradient(135deg,var(--bg1),var(--bg2)); color:#f5f5f5; overflow-x:hidden; }
-    .glass-card{
-      background: rgba(20,20,20,0.85);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-    }
+    :root{ --bg1:#0b1220; --bg2:#06080f; --red:#e63946; }
+    body{ min-height:100vh; background:radial-gradient(1200px 600px at 20% 10%, rgba(230,57,70,.12), transparent 60%), linear-gradient(135deg,var(--bg1),var(--bg2)); color:#f5f5f5; overflow-x:hidden; position:relative; }
+    .glass-card{ background: rgba(20,20,28,0.82); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
     .brand-img{ width:160px; height:160px; object-fit:contain; border-radius:9999px; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+    .btn-primary{ background: linear-gradient(90deg, var(--red), #ff6b6b); border: none; box-shadow: 0 6px 18px rgba(230,57,70,.35); }
+    .btn-primary:hover{ filter: brightness(1.05); }
     a.link-light{ opacity:.9; } a.link-light:hover{ opacity:1; }
+    .bg-bloom{ position:absolute; inset:auto auto 10% -10%; width:60vw; height:60vw; background: radial-gradient(closest-side, rgba(230,57,70,.12), transparent 70%); pointer-events:none; }
+    #bg-stars{ position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+    .content{ position:relative; z-index:1; }
   </style>
 </head>
 <body class="d-flex align-items-center">
-  <div class="container py-5">
+  <!-- animated background -->
+  <canvas id="bg-stars"></canvas>
+  <div class="bg-bloom"></div>
+
+  <div class="container py-5 content">
     <div class="row g-5 align-items-center justify-content-center">
-      <div class="col-12 col-md-4 text-center">
-        <img class="brand-img img-fluid" src="{{ url_for('static', path='itc.png') }}" alt="Interchained / ITC logo" />
+      <div class="col-12 col-md-4 text-center" data-animate="fade-up">
+        <img class="brand-img img-fluid" data-floaty src="{{ url_for('static', path='itc.png') }}" alt="Interchained / ITC logo" />
       </div>
 
-      <div class="col-12 col-md-5 col-lg-4">
+      <div class="col-12 col-md-5 col-lg-4" data-animate="fade-up">
         <div class="glass-card p-4">
           <h1 class="h4 mb-3 text-center">Recover IGP Account</h1>
 
@@ -44,11 +48,15 @@
             <button type="submit" class="btn btn-primary w-100">Recover</button>
           </form>
 
+          <div class="text-center mt-3">
+            <a class="link-light text-decoration-none" href="/login">Back to Login</a>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Help Modal -->
   <div class="modal fade" id="contactModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -72,6 +80,35 @@
     });
   </script>
   {% endif %}
+
+  <!-- GSAP + animations -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script>
+    // starfield
+    (() => {
+      const c = document.getElementById('bg-stars');
+      const ctx = c.getContext('2d');
+      const DPR = window.devicePixelRatio || 1;
+      let w, h, stars=[];
+      const STAR_COUNT=120;
+      function resize(){w=c.offsetWidth;h=c.offsetHeight;c.width=w*DPR;c.height=h*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+      function resetStars(){stars=new Array(STAR_COUNT).fill().map(()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.2+0.2,a:Math.random()*0.8+0.2}));}
+      function draw(){ctx.clearRect(0,0,w,h);stars.forEach(st=>{st.a+= (Math.random()-.5)*.06;st.a=Math.max(0.1,Math.min(1,st.a));ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,${st.a})`;ctx.fill();});requestAnimationFrame(draw);}
+      resize();resetStars();draw();window.addEventListener('resize',()=>{resize();resetStars();});
+    })();
+
+    // bloom animation
+    gsap.to(".bg-bloom", { opacity:0.25, duration:2, ease:"power2.out" });
+    gsap.to(".bg-bloom", { opacity:0.15, duration:6, repeat:-1, yoyo:true, ease:"sine.inOut" });
+
+    // reveal animations
+    gsap.utils.toArray('[data-animate="fade-up"]').forEach(el=>{
+      gsap.from(el,{y:24,opacity:0,duration:.9,ease:"power3.out",scrollTrigger:{trigger:el,start:"top 85%"}});
+    });
+
+    // floaty logo
+    gsap.to("[data-floaty]", {y:10, rotation:0.5, duration:3.5, repeat:-1, yoyo:true, ease:"sine.inOut"});
+  </script>
 </body>
 </html>
-
