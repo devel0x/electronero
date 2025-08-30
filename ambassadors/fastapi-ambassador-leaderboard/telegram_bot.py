@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from typing import Dict
 
 import httpx
@@ -14,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 
-from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, redis_client, _get_cached_data
+from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegram, redis_client, _get_cached_data
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -23,7 +24,9 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WAITING_EMAIL = 0
 WAITING_PASSWORD = 1
 WAITING_REG_PASSWORD = 2
-WAITING_REG_WALLET = 3
+WAITING_REG_TELEGRAM = 3
+WAITING_REG_WALLET = 4
+WAITING_NEW_WALLET = 5
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -168,6 +171,94 @@ async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
+async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Begin registration by collecting email."""
+    if update.effective_chat.type != "private":
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text=(
+                    "Let’s get you registered, please use your email address provided on "
+                    "the ITC Governance Ambassador form"
+                ),
+            )
+            await update.message.reply_text(
+                "I sent you a DM to follow up with your registration."
+            )
+        except Forbidden:
+            await update.message.reply_text(
+                "I couldn't DM you. Please message @xChiefMod_bot directly to register."
+            )
+        return ConversationHandler.END
+    if not context.args:
+        await update.message.reply_text(
+            "Let’s get you registered, please use your email address provided on the ITC Governance Ambassador form"
+        )
+        return ConversationHandler.END
+    email = context.args[0].strip().lower()
+    if email not in REGISTERED_EMAILS:
+        await update.message.reply_text("Email not permitted.")
+        return ConversationHandler.END
+    exists = await redis_client.exists(f"user:{email}")
+    if exists:
+        await update.message.reply_text("Email already registered.")
+        return ConversationHandler.END
+    context.user_data["reg_email"] = email
+    await update.message.reply_text("Please choose a password:")
+    return WAITING_REG_PASSWORD
+
+
+async def received_reg_password(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Store password and ask for Telegram username."""
+    password = update.message.text.strip()
+    context.user_data["reg_password"] = password
+    await update.message.reply_text(
+        "Please enter your Telegram username (with or without @):"
+    )
+    return WAITING_REG_TELEGRAM
+
+
+async def received_reg_telegram(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Store Telegram handle and ask for wallet address."""
+    username = update.message.text.strip()
+    lower = username.lower()
+    if re.match(r"https?://", lower) or "t.me/" in lower:
+        await update.message.reply_text("Please provide a username, not a URL:")
+        return WAITING_REG_TELEGRAM
+    context.user_data["reg_telegram"] = _normalize_telegram(username)
+    await update.message.reply_text("Please enter your wallet address:")
+    return WAITING_REG_WALLET
+
+
+async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Finalize registration by saving credentials."""
+    wallet = update.message.text.strip()
+    email = context.user_data.get("reg_email")
+    password = context.user_data.get("reg_password")
+    telegram = context.user_data.get("reg_telegram")
+    if not email or not password:
+        await update.message.reply_text(
+            "Registration data missing. Start over with /register <email>."
+        )
+        return ConversationHandler.END
+    await redis_client.hset(
+        f"user:{email}",
+        mapping={
+            "password": _hash_password(password),
+            "wallet": wallet,
+            "telegram": telegram or _normalize_telegram(update.effective_user.username or ""),
+        },
+    )
+    context.user_data["authenticated"] = True
+    context.user_data["email"] = email
+    await update.message.reply_text("Registered successfully.")
+    return ConversationHandler.END
+
+
 async def received_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle password, authenticate against redis-stored hash."""
     password = (update.message.text or "").strip()
@@ -202,6 +293,35 @@ async def ensure_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.message.reply_text("Please /checkin first.")
         return False
     return True
+
+
+async def wallet_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Prompt logged-in users for a new wallet address."""
+    if not await ensure_login(update, context):
+        return ConversationHandler.END
+    if update.effective_chat.type != "private":
+        await update.message.reply_text("I'm DMing you to update your wallet address.")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="Please enter your new wallet address:",
+        )
+    else:
+        await update.message.reply_text("Please enter your new wallet address:")
+    return WAITING_NEW_WALLET
+
+
+async def wallet_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Store the new wallet for the logged-in user."""
+    if not await ensure_login(update, context):
+        return ConversationHandler.END
+    wallet = update.message.text.strip()
+    email = context.user_data.get("email")
+    if not email:
+        await update.message.reply_text("No email found. Please /checkin again.")
+        return ConversationHandler.END
+    await redis_client.hset(f"user:{email}", mapping={"wallet": wallet})
+    await update.message.reply_text("Wallet updated.")
+    return ConversationHandler.END
 
 
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -310,6 +430,12 @@ def main() -> None:
                     received_reg_password,
                 )
             ],
+            WAITING_REG_TELEGRAM: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                    received_reg_telegram,
+                )
+            ],
             WAITING_REG_WALLET: [
                 MessageHandler(
                     filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
@@ -321,6 +447,20 @@ def main() -> None:
         per_chat=False,
     )
     application.add_handler(reg_conv)
+    wallet_conv = ConversationHandler(
+        entry_points=[CommandHandler("wallet", wallet_start)],
+        states={
+            WAITING_NEW_WALLET: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                    wallet_received,
+                )
+            ],
+        },
+        fallbacks=[],
+        per_chat=False,
+    )
+    application.add_handler(wallet_conv)
     application.add_handler(CommandHandler("tasks", tasks))
     application.add_handler(CommandHandler("apply", apply_task))
     application.add_handler(CommandHandler("verify", verify))
