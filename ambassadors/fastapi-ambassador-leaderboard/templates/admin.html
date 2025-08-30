@@ -20,17 +20,31 @@
 </nav>
 <div class="container py-4">
     <div class="glass-card p-3 mb-4">
-        <h1 class="h5">Wallet Addresses</h1>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h1 class="h5 mb-0">Wallet Addresses</h1>
+            <div class="d-flex gap-1">
+                <a href="/api/admin/leaderboard.csv" class="btn btn-sm btn-outline-light">CSV</a>
+                <a href="/api/admin/leaderboard.json" class="btn btn-sm btn-outline-light">JSON</a>
+            </div>
+        </div>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
             <li class="list-group-item bg-transparent text-light">
-                <div class="d-flex justify-content-between align-items-center">
-                    <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</span>
-                    <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
-                        <input type="hidden" name="email" value="{{ w.email }}">
-                        <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
-                        <button class="btn btn-primary btn-sm">Update</button>
-                    </form>
+                <div class="d-flex flex-column gap-1">
+                    <div>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.points }} – {{ w.telegram if w.telegram else '—' }}</div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                            <button class="btn btn-primary btn-sm">Update</button>
+                        </form>
+                        <form method="post" action="/admin/points/add" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="number" step="any" name="points" class="form-control form-control-sm" placeholder="+pts">
+                            <button class="btn btn-warning btn-sm">Add</button>
+                        </form>
+                        <span class="small">Extra: {{ w.extra_points }}</span>
+                    </div>
                 </div>
             </li>
             {% endfor %}

@@ -9,10 +9,12 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
+import csv
+import io
 
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Query, Request
+from fastapi import FastAPI, Form, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -199,6 +201,13 @@ async def _load_csv() -> Dict[str, Any]:
         df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
         df = df.sort_values("points", ascending=False).reset_index(drop=True)
         df.insert(0, "rank", range(1, len(df) + 1))
+
+    # apply extra admin points if email column present
+    if "email" in df.columns:
+        df["email"] = df["email"].fillna("").astype(str).str.strip().str.lower()
+        extras = await redis_client.hgetall("extra_points")
+        df["extra_points"] = df["email"].map(lambda e: float(extras.get(e, 0.0)))
+        df["points"] = df["points"] + df["extra_points"]
     # if "rank" in df.columns:
     #     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
     #     df = df.sort_values("rank", ascending=True)
@@ -243,16 +252,9 @@ async def _load_csv() -> Dict[str, Any]:
     base_cols = [
         "rank",
         "name",
-#         "x_handle",
-#         "posts",
-#         "engagements",
-#         "referrals",
+        "email",
         "telegram",
-        # "x_handle",
         "points",
-        # "posts",
-        # "engagements",
-        # "referrals",
         "tier",
         "pending_reward",
     ]
@@ -263,8 +265,9 @@ async def _load_csv() -> Dict[str, Any]:
     df = df.fillna("")
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
 
+    columns = [c for c in df.columns if c != "email"]
     data = {
-        "columns": list(df.columns),
+        "columns": columns,
         "rows": df.astype(str).to_dict(orient="records"),
         "cached_at": datetime.utcnow().isoformat(),
         "source": source,
@@ -300,22 +303,31 @@ async def _current_admin(request: Request) -> bool:
 async def _pending_rewards_map() -> dict[str, float]:
     mapping: dict[str, float] = {}
     data = await _get_cached_data()
-    columns = data.get("columns", [])
     rows = data.get("rows", [])
-    if "email" in columns and "pending_reward" in columns:
-        for row in rows:
-            email = str(row.get("email", "")).strip().lower()
-            if email:
-                try:
-                    mapping[email] = float(row.get("pending_reward", 0))
-                except Exception:
-                    mapping[email] = 0.0
+    for row in rows:
+        email = str(row.get("email", "")).strip().lower()
+        if email:
+            try:
+                mapping[email] = float(row.get("pending_reward", 0))
+            except Exception:
+                mapping[email] = 0.0
     return mapping
 
 
 async def _all_wallets() -> list[dict[str, str]]:
     wallets: list[dict[str, str]] = []
     pending_map = await _pending_rewards_map()
+    cached = await _get_cached_data()
+    rows = cached.get("rows", [])
+    base_points: dict[str, float] = {}
+    for row in rows:
+        e = str(row.get("email", "")).strip().lower()
+        try:
+            base_points[e] = float(row.get("points", 0))
+        except Exception:
+            base_points[e] = 0.0
+    extras_raw = await redis_client.hgetall("extra_points")
+    extras = {k: float(v) for k, v in extras_raw.items()}
     keys = await redis_client.keys("user:*")
     for key in keys:
         email = key.split(":", 1)[1]
@@ -324,12 +336,16 @@ async def _all_wallets() -> list[dict[str, str]]:
         if tele and not tele.startswith("@"):
             tele = f"@{tele.lstrip('@')}"
         reward = pending_map.get(email, 0.0)
+        extra = extras.get(email, 0.0)
+        total = base_points.get(email, 0.0)
         wallets.append(
             {
                 "email": email,
                 "wallet": data.get("wallet", ""),
                 "telegram": tele,
                 "pending_reward": f"{reward:.8f}",
+                "points": f"{total:.2f}",
+                "extra_points": f"{extra:.2f}",
             }
         )
     return wallets
@@ -627,6 +643,22 @@ async def admin_telegram_update(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/points/add")
+async def admin_points_add(
+    request: Request, email: str = Form(...), points: float = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    try:
+        delta = float(points)
+    except Exception:
+        delta = 0.0
+    if delta:
+        await redis_client.hincrbyfloat("extra_points", email.strip().lower(), delta)
+        await redis_client.delete(CACHE_KEY)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/admin/tasks/verify")
 async def admin_task_verify(
     request: Request, email: str = Form(...), task_id: str = Form(...)
@@ -653,6 +685,35 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     tasks = await _all_tasks()
     return JSONResponse({"ok": True, "tasks": tasks})
+
+
+@app.get("/api/admin/leaderboard.json")
+async def api_admin_leaderboard_json(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    wallets = await _all_wallets()
+    rows = [
+        {"email": w["email"], "wallet": w["wallet"], "telegram": w["telegram"], "points": w["points"]}
+        for w in wallets
+    ]
+    return JSONResponse({"ok": True, "rows": rows})
+
+
+@app.get("/api/admin/leaderboard.csv")
+async def api_admin_leaderboard_csv(request: Request) -> Response:
+    if not await _current_admin(request):
+        return Response("unauthorized", status_code=401)
+    wallets = await _all_wallets()
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["email", "wallet", "telegram", "points"])
+    writer.writeheader()
+    for w in wallets:
+        writer.writerow({k: w.get(k, "") for k in ["email", "wallet", "telegram", "points"]})
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=leaderboard.csv"},
+    )
 
 
 @app.get("/")
