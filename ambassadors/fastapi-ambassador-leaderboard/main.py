@@ -52,6 +52,7 @@ RANK_MODE = os.getenv("RANK_MODE", "competition").lower()
 REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
 
 
 EXPECTED_COLUMNS = [
@@ -357,6 +358,28 @@ async def _all_tasks() -> dict[str, dict[str, str]]:
         tasks[email] = await redis_client.hgetall(key)
     return tasks
 
+
+async def _all_recoveries() -> list[dict[str, str]]:
+    recoveries: list[dict[str, str]] = []
+    keys = await redis_client.keys("recovery:*")
+    for key in keys:
+        raw = await redis_client.get(key)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        recoveries.append(
+            {
+                "email": data.get("email", ""),
+                "code": data.get("code", ""),
+                "telegram": data.get("telegram", ""),
+                "tg_link": data.get("tg_link"),
+            }
+        )
+    return recoveries
+
 BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -407,6 +430,50 @@ async def login(
     return response
 
 
+@app.get("/forgot")
+async def forgot_form(request: Request) -> Any:
+    """Render forgot password form."""
+    return templates.TemplateResponse(
+        "forgot.html", {"request": request, "email": "", "submitted": False}
+    )
+
+
+@app.post("/forgot")
+async def forgot_submit(request: Request, email: str = Form(...)) -> Any:
+    """Generate recovery hash for a given email."""
+    email_norm = email.strip().lower()
+    telegram = ""
+    tg_link: str | None = None
+    try:
+        df = pd.read_csv(CSV_PATH)
+        df.columns = [c.strip().lower() for c in df.columns]
+        if "email" in df.columns:
+            row = df[df["email"].astype(str).str.lower() == email_norm]
+        else:
+            row = pd.DataFrame()
+        if not row.empty:
+            telegram = str(row.iloc[0].get("telegram", "")).strip()
+    except Exception:
+        telegram = ""
+    telegram_norm = _normalize_telegram(telegram) if telegram else ""
+    if telegram_norm:
+        tg_link = f"https://t.me/{telegram_norm.lstrip('@')}"
+    code = "IGP" + hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+    data = {
+        "email": email_norm,
+        "telegram": telegram_norm,
+        "tg_link": tg_link,
+        "code": code,
+    }
+    await redis_client.set(
+        f"recovery:{email_norm}", json.dumps(data), ex=RECOVERY_TTL_SECONDS
+    )
+    return templates.TemplateResponse(
+        "forgot.html",
+        {"request": request, "email": email_norm, "submitted": True},
+    )
+
+
 @app.get("/register")
 async def register_form(request: Request) -> Any:
     return templates.TemplateResponse(
@@ -437,6 +504,26 @@ async def register(
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+
+
+@app.get("/wallet")
+async def wallet_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    user = await redis_client.hgetall(f"user:{email}")
+    return templates.TemplateResponse(
+        "wallet.html", {"request": request, "error": "", "wallet": user.get("wallet", "")}
+    )
+
+
+@app.post("/wallet")
+async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/logout")
@@ -533,6 +620,7 @@ async def admin_panel(request: Request) -> Any:
     wallets = await _all_wallets()
     posts = await _all_posts()
     tasks = await _all_tasks()
+    recoveries = await _all_recoveries()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -540,9 +628,31 @@ async def admin_panel(request: Request) -> Any:
             "wallets": wallets,
             "posts": posts,
             "tasks": tasks,
+            "recoveries": recoveries,
             "task_labels": TASK_LABELS,
         },
     )
+
+
+@app.post("/admin/recovery/reset")
+async def admin_recovery_reset(request: Request, email: str = Form(...)) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_norm = email.strip().lower()
+    key = f"recovery:{email_norm}"
+    raw = await redis_client.get(key)
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = None
+        if data and data.get("code"):
+            code = data["code"]
+            await redis_client.hset(
+                f"user:{email_norm}", mapping={"password": _hash_password(code)}
+            )
+            await redis_client.delete(key)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.get("/api/admin/wallets")
