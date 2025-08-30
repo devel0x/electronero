@@ -12,25 +12,55 @@
     </style>
 </head>
 <body>
-<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark bg-opacity-50">
     <div class="container-fluid">
-        <span class="navbar-brand">Admin Panel</span>
-        <a href="/admin/logout" class="btn btn-sm btn-outline-light">Logout</a>
+        <a class="navbar-brand" href="#">Admin Panel</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNav" aria-controls="adminNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="adminNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item"><a class="nav-link" href="#wallets">Wallets</a></li>
+                <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
+                <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
+                <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
+            </ul>
+            <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
+        </div>
     </div>
 </nav>
 <div class="container py-4">
-    <div class="glass-card p-3 mb-4">
+    <div id="wallets" class="glass-card p-3 mb-4">
         <h1 class="h5">Wallet Addresses</h1>
+        <div class="d-flex gap-2 mb-2">
+            <a href="/api/admin/export?fmt=json" class="btn btn-outline-light btn-sm">Export JSON</a>
+            <a href="/api/admin/export?fmt=csv" class="btn btn-outline-light btn-sm">Export CSV</a>
+        </div>
+        <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset"></form>
+        <div class="d-flex gap-2 mb-2">
+            <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
+            <button form="pad-bulk-form" class="btn btn-danger btn-sm" name="reset_all" value="1" type="submit">Reset All</button>
+        </div>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
             <li class="list-group-item bg-transparent text-light">
                 <div class="d-flex justify-content-between align-items-center">
-                    <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</span>
-                    <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
-                        <input type="hidden" name="email" value="{{ w.email }}">
-                        <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
-                        <button class="btn btn-primary btn-sm">Update</button>
-                    </form>
+                    <div class="d-flex align-items-center gap-2">
+                        <input class="form-check-input" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
+                        <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }} – pad: {{ w.pad }}</span>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                            <button class="btn btn-primary btn-sm">Update</button>
+                        </form>
+                        <form method="post" action="/admin/scorepad" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="number" step="1" name="pad" value="{{ w.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
+                            <button class="btn btn-secondary btn-sm">Pad</button>
+                        </form>
+                    </div>
                 </div>
             </li>
             {% endfor %}
@@ -39,7 +69,7 @@
             {% endif %}
         </ul>
     </div>
-    <div class="glass-card p-3">
+    <div id="posts" class="glass-card p-3">
         <h1 class="h5">Submitted Posts</h1>
         <form id="posts-bulk-form" method="post" action="/admin/posts/verify"></form>
         <div class="d-flex gap-2 mb-2">
@@ -53,25 +83,23 @@
                 {% for p in urls %}
                 <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
-                        {% if not p.verified %}
                         <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
-                        {% endif %}
                         <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
                     </div>
-                    {% if p.verified %}
-                    <span class="badge bg-success">Verified</span>
-                    {% else %}
-                    <form method="post" action="/admin/posts/verify">
-                        <input type="hidden" name="email" value="{{ email }}">
-                        <input type="hidden" name="url" value="{{ p.url }}">
-                        <button class="btn btn-success btn-sm">Verify</button>
-                    </form>
-                    {% endif %}
+                    <div class="d-flex gap-1">
+                        <form method="post" action="/admin/posts/verify">
+                            <input type="hidden" name="email" value="{{ email }}">
+                            <input type="hidden" name="url" value="{{ p.url }}">
+                            <button class="btn btn-success btn-sm">Verify</button>
+                        </form>
+                        <form method="post" action="/admin/posts/reject">
+                            <input type="hidden" name="email" value="{{ email }}">
+                            <input type="hidden" name="url" value="{{ p.url }}">
+                            <button class="btn btn-danger btn-sm">Reject</button>
+                        </form>
+                    </div>
                 </li>
                 {% endfor %}
-                {% if not urls %}
-                <li class="list-group-item bg-transparent text-muted">No posts</li>
-                {% endif %}
             </ul>
         </div>
         {% endfor %}
@@ -79,7 +107,31 @@
         <p class="text-muted">No posts</p>
         {% endif %}
     </div>
-    <div class="glass-card p-3 mt-4">
+    <div id="proposals" class="glass-card p-3 mt-4">
+        <h1 class="h5">Pending Proposals</h1>
+        {% for p in proposals %}
+        <div class="mb-3">
+            <h2 class="h6">{{ p.title }}</h2>
+            <p>{{ p.content }}</p>
+            <p class="small text-muted">{{ p.email }} – {{ p.telegram }} – {{ p.wallet }}</p>
+            <div class="d-flex gap-1">
+                <form method="post" action="/admin/proposals/verify" class="d-flex gap-1">
+                    <input type="hidden" name="proposal_id" value="{{ p.id }}">
+                    <input type="text" name="funding_wallet" placeholder="funding wallet" class="form-control form-control-sm" />
+                    <button class="btn btn-success btn-sm">Verify</button>
+                </form>
+                <form method="post" action="/admin/proposals/reject">
+                    <input type="hidden" name="proposal_id" value="{{ p.id }}">
+                    <button class="btn btn-danger btn-sm">Reject</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% if not proposals %}
+        <p class="text-muted">No proposals</p>
+        {% endif %}
+    </div>
+    <div id="tasks" class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>
         {% for email, tmap in tasks.items() %}
         <div class="mb-3">
