@@ -336,6 +336,7 @@ async def _all_wallets() -> list[dict[str, str]]:
 
 
 async def _all_posts() -> dict[str, list[dict[str, Any]]]:
+    """Return pending (unverified) posts grouped by user email."""
     posts: dict[str, list[dict[str, Any]]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
@@ -343,10 +344,13 @@ async def _all_posts() -> dict[str, list[dict[str, Any]]]:
         urls = await redis_client.lrange(key, 0, -1)
         verified = await redis_client.smembers(f"posts_verified:{email}")
         safe_verified = {str(v).strip() for v in verified}
-        posts[email] = [
-            {"url": str(u).strip(), "verified": str(u).strip() in safe_verified}
-            for u in urls if u
+        pending = [
+            {"url": str(u).strip()}
+            for u in urls
+            if u and str(u).strip() not in safe_verified
         ]
+        if pending:
+            posts[email] = pending
     return posts
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
@@ -437,6 +441,26 @@ async def register(
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+
+
+@app.get("/wallet")
+async def wallet_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    user = await redis_client.hgetall(f"user:{email}")
+    return templates.TemplateResponse(
+        "wallet.html", {"request": request, "error": "", "wallet": user.get("wallet", "")}
+    )
+
+
+@app.post("/wallet")
+async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/logout")
@@ -612,6 +636,19 @@ async def admin_post_verify(
     if pipe.command_stack:
         await pipe.execute()
 
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/posts/reject")
+async def admin_post_reject(
+    request: Request, email: str = Form(...), url: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_key = email.strip().lower()
+    url_clean = str(url).strip()
+    await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
+    await redis_client.srem(f"posts_verified:{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
 
 

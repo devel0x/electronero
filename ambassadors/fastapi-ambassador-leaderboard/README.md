@@ -4,7 +4,7 @@ This project is a small FastAPI application that serves an ambassador leaderboar
 
 The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
 
-Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts.
+Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Verified posts disappear from the queue, and admins may verify or reject each submission.
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
@@ -42,7 +42,7 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /health` – simple health check.
 - `GET /verify` – page for ambassadors to submit post URLs.
 - `GET /tasks` – task checklist for ambassadors with apply buttons.
-- `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts.
+- `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts awaiting verification.
 - `POST /tasks/apply` – apply to a task (authenticated users).
 - `POST /admin/tasks/verify` – mark a user's task application as verified (admin).
 - `POST /admin/tasks/destroy` – remove a user's task application (admin).
@@ -55,4 +55,7 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 ## Development notes
 - Static files are served from `static/` and templates from `templates/`.
 - The app caches data for a configurable TTL to limit repeated downloads of the CSV.
+
+## Telegram bot
+A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
 
