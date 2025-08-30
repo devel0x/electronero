@@ -30,6 +30,35 @@
     </div>
 </nav>
 <div class="container py-4">
+    <div id="recoveries" class="glass-card p-3 mb-4">
+        <h1 class="h5">Password Recoveries</h1>
+        <ul class="list-group list-group-flush">
+            {% for r in recoveries %}
+            <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
+                <div>
+                    <div><strong>Email:</strong> {{ r.email }}</div>
+                    <div><strong>Telegram:</strong>
+                        {% if r.tg_link %}
+                        <a href="{{ r.tg_link }}" target="_blank" class="link-light">{{ r.telegram }}</a>
+                        {% else %}
+                        {{ r.telegram or 'N/A' }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <code>{{ r.code }}</code>
+                    <form method="post" action="/admin/recovery/reset">
+                        <input type="hidden" name="email" value="{{ r.email }}">
+                        <button class="btn btn-success btn-sm">Reset</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+            {% if not recoveries %}
+            <li class="list-group-item bg-transparent text-muted">No recoveries</li>
+            {% endif %}
+        </ul>
+    </div>
     <div id="wallets" class="glass-card p-3 mb-4">
         <h1 class="h5">Wallet Addresses</h1>
         <div class="d-flex gap-2 mb-2">
