@@ -21,16 +21,31 @@
 <div class="container py-4">
     <div class="glass-card p-3 mb-4">
         <h1 class="h5">Wallet Addresses</h1>
+        <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset"></form>
+        <div class="d-flex gap-2 mb-2">
+            <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
+            <button form="pad-bulk-form" class="btn btn-danger btn-sm" name="reset_all" value="1" type="submit">Reset All</button>
+        </div>
         <ul class="list-group list-group-flush">
             {% for w in wallets %}
             <li class="list-group-item bg-transparent text-light">
                 <div class="d-flex justify-content-between align-items-center">
-                    <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }}</span>
-                    <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
-                        <input type="hidden" name="email" value="{{ w.email }}">
-                        <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
-                        <button class="btn btn-primary btn-sm">Update</button>
-                    </form>
+                    <div class="d-flex align-items-center gap-2">
+                        <input class="form-check-input" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
+                        <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }} – pad: {{ w.pad }}</span>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                            <button class="btn btn-primary btn-sm">Update</button>
+                        </form>
+                        <form method="post" action="/admin/scorepad" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ w.email }}">
+                            <input type="number" step="1" name="pad" value="{{ w.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
+                            <button class="btn btn-secondary btn-sm">Pad</button>
+                        </form>
+                    </div>
                 </div>
             </li>
             {% endfor %}
@@ -53,25 +68,23 @@
                 {% for p in urls %}
                 <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
-                        {% if not p.verified %}
                         <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
-                        {% endif %}
                         <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
                     </div>
-                    {% if p.verified %}
-                    <span class="badge bg-success">Verified</span>
-                    {% else %}
-                    <form method="post" action="/admin/posts/verify">
-                        <input type="hidden" name="email" value="{{ email }}">
-                        <input type="hidden" name="url" value="{{ p.url }}">
-                        <button class="btn btn-success btn-sm">Verify</button>
-                    </form>
-                    {% endif %}
+                    <div class="d-flex gap-1">
+                        <form method="post" action="/admin/posts/verify">
+                            <input type="hidden" name="email" value="{{ email }}">
+                            <input type="hidden" name="url" value="{{ p.url }}">
+                            <button class="btn btn-success btn-sm">Verify</button>
+                        </form>
+                        <form method="post" action="/admin/posts/reject">
+                            <input type="hidden" name="email" value="{{ email }}">
+                            <input type="hidden" name="url" value="{{ p.url }}">
+                            <button class="btn btn-danger btn-sm">Reject</button>
+                        </form>
+                    </div>
                 </li>
                 {% endfor %}
-                {% if not urls %}
-                <li class="list-group-item bg-transparent text-muted">No posts</li>
-                {% endif %}
             </ul>
         </div>
         {% endfor %}
