@@ -6,15 +6,59 @@
     <title>Proposals</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+    <meta name="theme-color" content="#0b1220" />
     <style>
-        body { min-height:100vh; background:linear-gradient(135deg,#1e1e2f,#141414); color:#f5f5f5; }
-        .glass-card { background:rgba(255,255,255,0.1); backdrop-filter:blur(6px); border-radius:1rem; }
+        :root{ --bg1:#0b1220; --bg2:#06080f; --red:#e63946; }
+        body{
+          min-height:100vh;
+          background:
+            radial-gradient(1200px 600px at 20% 10%, rgba(230,57,70,.12), transparent 60%),
+            linear-gradient(135deg,var(--bg1),var(--bg2));
+          color:#f5f5f5;
+          overflow-x:hidden;
+          position:relative;
+        }
+        /* glass */
+        .glass-card{
+          background: rgba(20,20,28,0.82);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 14px;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+        }
+        /* navbar */
+        .navbar{
+          position: sticky; top: 0; z-index: 10;
+          backdrop-filter: blur(8px);
+          --bs-bg-opacity: .35;
+        }
+        .navbar-brand img{ filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
+        /* buttons */
+        .btn-primary{
+          background: linear-gradient(90deg, var(--red), #ff6b6b);
+          border: none;
+          box-shadow: 0 6px 18px rgba(230,57,70,.35);
+        }
+        .btn-primary:hover{ filter: brightness(1.05); }
+        /* background fx */
+        #bg-stars{ position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+        .bg-bloom{ position:fixed; left:-10%; bottom:10%; width:60vw; height:60vw;
+          background: radial-gradient(closest-side, rgba(230,57,70,.12), transparent 70%); z-index:0; pointer-events:none; }
+        .content{ position:relative; z-index:1; }
+        /* spacing */
+        .section-title{ margin-bottom: .75rem; }
+        .proposal-item + .proposal-item{ border-top:1px solid rgba(255,255,255,.06); padding-top:1rem; }
     </style>
 </head>
 <body>
-<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <!-- animated background -->
+  <canvas id="bg-stars"></canvas>
+  <div class="bg-bloom"></div>
+
+  <nav class="navbar navbar-dark bg-dark bg-opacity-50" data-animate="fade-in">
     <div class="container-fluid">
-        <span class="navbar-brand">
+        <span class="navbar-brand d-flex align-items-center">
           <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
           ITC Governance
         </span>
@@ -26,23 +70,30 @@
             <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
         </div>
     </div>
-</nav>
-<div class="container py-4">
-    <div class="glass-card p-3 mb-4" style="max-width:600px;">
-        <h1 class="h4">Submit Proposal</h1>
-        <form method="post" action="/proposals/submit">
+  </nav>
+
+  <div class="container py-4 content">
+    <!-- submit card -->
+    <div class="glass-card p-3 p-md-4 mb-4 mx-auto" style="max-width:720px;" data-animate="fade-up">
+        <h1 class="h4 section-title">Submit Proposal</h1>
+        <form method="post" action="/proposals/submit" novalidate>
             <input type="text" name="title" class="form-control mb-2" placeholder="Title" required />
-            <textarea name="content" class="form-control mb-2" rows="3" placeholder="Details" required></textarea>
+            <textarea name="content" class="form-control mb-3" rows="3" placeholder="Details" required></textarea>
             <button class="btn btn-primary" type="submit">Submit</button>
         </form>
     </div>
-    <div class="glass-card p-3">
-        <h2 class="h5">Active Proposals</h2>
+
+    <!-- list card -->
+    <div class="glass-card p-3 p-md-4" data-animate="fade-up">
+        <h2 class="h5 section-title">Active Proposals</h2>
         {% for p in proposals %}
-        <div class="mb-3">
-            <h3 class="h6">{{ p.title }}</h3>
-            <p>{{ p.content }}</p>
-            <p class="small text-muted">Founder wallet: {{ p.founder_wallet if p.founder_wallet else '—' }}{% if p.funding_wallet %} • Funding wallet: {{ p.funding_wallet }}{% endif %}</p>
+        <div class="proposal-item mb-3">
+            <h3 class="h6 mb-1">{{ p.title }}</h3>
+            <p class="mb-2 opacity-85">{{ p.content }}</p>
+            <p class="small text-muted mb-3">
+              Founder wallet: {{ p.founder_wallet if p.founder_wallet else '—' }}
+              {% if p.funding_wallet %} • Funding wallet: {{ p.funding_wallet }}{% endif %}
+            </p>
             <div class="d-flex gap-2">
                 <form method="post" action="/proposals/vote">
                     <input type="hidden" name="proposal_id" value="{{ p.id }}" />
@@ -58,10 +109,73 @@
         </div>
         {% endfor %}
         {% if not proposals %}
-        <p class="text-muted">No active proposals</p>
+        <p class="text-muted mb-0">No active proposals</p>
         {% endif %}
     </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- GSAP + ScrollTrigger -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script>
+    // starfield
+    (() => {
+      const c = document.getElementById('bg-stars');
+      const ctx = c.getContext('2d');
+      const DPR = window.devicePixelRatio || 1;
+      let w, h, stars = [];
+      const STAR_COUNT = 140;
+
+      function resize(){
+        w = c.offsetWidth; h = c.offsetHeight;
+        c.width = w * DPR; c.height = h * DPR;
+        ctx.setTransform(DPR,0,0,DPR,0,0);
+      }
+      function resetStars(){
+        stars = new Array(STAR_COUNT).fill(0).map(() => ({
+          x: Math.random()*w,
+          y: Math.random()*h,
+          r: Math.random()*1.2+0.2,
+          a: Math.random()*0.8+0.2
+        }));
+      }
+      function draw(){
+        ctx.clearRect(0,0,w,h);
+        for(const st of stars){
+          st.a += (Math.random() - 0.5) * 0.06;
+          st.a = Math.max(0.1, Math.min(1, st.a));
+          ctx.beginPath();
+          ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
+          ctx.fillStyle = `rgba(255,255,255,${st.a})`;
+          ctx.fill();
+        }
+        requestAnimationFrame(draw);
+      }
+      resize(); resetStars(); draw();
+      window.addEventListener('resize', () => { resize(); resetStars(); });
+    })();
+
+    // bloom animation
+    gsap.fromTo(".bg-bloom",
+      { opacity: 0.0, filter: "blur(40px)" },
+      { opacity: 0.22, filter: "blur(22px)", duration: 2, ease: "power2.out" }
+    );
+    gsap.to(".bg-bloom", {
+      opacity: 0.16, filter: "blur(28px)", duration: 6, repeat: -1, yoyo: true, ease: "sine.inOut"
+    });
+
+    // reveals
+    gsap.utils.toArray('[data-animate="fade-up"]').forEach(el=>{
+      gsap.from(el,{ y:24, opacity:0, duration:.9, ease:"power3.out",
+        scrollTrigger:{ trigger: el, start: "top 85%" }
+      });
+    });
+    gsap.utils.toArray('[data-animate="fade-in"]').forEach(el=>{
+      gsap.from(el,{ opacity:0, duration:1.0, ease:"power2.out",
+        scrollTrigger:{ trigger: el, start: "top 90%" }
+      });
+    });
+  </script>
 </body>
 </html>
