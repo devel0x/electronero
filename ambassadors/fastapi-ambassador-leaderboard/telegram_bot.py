@@ -20,6 +20,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Conversation states
+WAITING_EMAIL = 0
 WAITING_PASSWORD = 1
 WAITING_REG_PASSWORD = 2
 WAITING_REG_WALLET = 3
@@ -30,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-<<<<<<< HEAD
         "Welcome to the ITC Governance bot.\n"
         "In DM use /register <email> to sign up /checkin <email> to log in. Then:\n"
         "• /tasks – view task statuses\n"
@@ -136,6 +136,13 @@ async def received_reg_password(
     await update.message.reply_text("Please enter your wallet address:")
     return WAITING_REG_WALLET
 
+def _normalize_telegram(username: str) -> str:
+    username = (username or "").strip()
+    if not username:
+        return ""
+    if username.startswith("@"):
+        username = username[1:]
+    return username.lower()
 
 async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Finalize registration by saving credentials."""
