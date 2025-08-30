@@ -4,9 +4,13 @@ This project is a small FastAPI application that serves an ambassador leaderboar
 
 The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
 
-Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts.
+Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
+
+Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
+
+Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
 
 ## Requirements
 - Python 3.11+
@@ -42,7 +46,12 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /health` – simple health check.
 - `GET /verify` – page for ambassadors to submit post URLs.
 - `GET /tasks` – task checklist for ambassadors with apply buttons.
-- `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts.
+- `GET /proposals` – list active proposals and submit new ones.
+- `POST /proposals/submit` – submit a new proposal (authenticated users).
+- `POST /proposals/vote` – vote yes or no on a proposal (authenticated users).
+- `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts awaiting verification.
+- `POST /admin/proposals/verify` – approve a pending proposal and optionally add a funding wallet (admin).
+- `POST /admin/proposals/reject` – reject a pending proposal (admin).
 - `POST /tasks/apply` – apply to a task (authenticated users).
 - `POST /admin/tasks/verify` – mark a user's task application as verified (admin).
 - `POST /admin/tasks/destroy` – remove a user's task application (admin).
@@ -55,4 +64,7 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 ## Development notes
 - Static files are served from `static/` and templates from `templates/`.
 - The app caches data for a configurable TTL to limit repeated downloads of the CSV.
+
+## Telegram bot
+A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
 
