@@ -192,11 +192,27 @@ async def _load_csv() -> Dict[str, Any]:
         if col not in df.columns:
             df[col] = ""
 
+    # Apply any admin-provided score padding before ranking.
+    pads = await redis_client.hgetall("score_pad")
+    norm_map: dict[str, float] = {}
+    for k, v in pads.items():
+        try:
+            norm_map[k.strip().lower()] = float(v)
+        except Exception:
+            continue
+
+    if "email" in df.columns:
+        df["email"] = df["email"].astype(str).str.strip()
+        df["__email_norm"] = df["email"].str.lower()
+        df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
+        df["points"] = df["points"] + df["__email_norm"].map(norm_map).fillna(0)
+    else:
+        df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
+
     if "rank" in df.columns:
         df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
         df = df.sort_values("rank", ascending=True)
     else:
-        df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
         df = df.sort_values("points", ascending=False).reset_index(drop=True)
         df.insert(0, "rank", range(1, len(df) + 1))
     # if "rank" in df.columns:
@@ -240,25 +256,19 @@ async def _load_csv() -> Dict[str, Any]:
         df["pending_reward"] = 0.0
     df["pending_reward"] = df["pending_reward"].astype(float).round(8)
 
+    if "__email_norm" in df.columns:
+        df = df.drop(columns="__email_norm")
+
     base_cols = [
         "rank",
         "name",
-#         "x_handle",
-#         "posts",
-#         "engagements",
-#         "referrals",
+        "email",
         "telegram",
-        # "x_handle",
         "points",
-        # "posts",
-        # "engagements",
-        # "referrals",
         "tier",
         "pending_reward",
     ]
-    other_cols = [c for c in df.columns if c not in base_cols]
     df = df[[c for c in base_cols if c in df.columns]]
-    # df = df[base_cols + other_cols]
 
     df = df.fillna("")
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
@@ -316,6 +326,7 @@ async def _pending_rewards_map() -> dict[str, float]:
 async def _all_wallets() -> list[dict[str, str]]:
     wallets: list[dict[str, str]] = []
     pending_map = await _pending_rewards_map()
+    pad_map = await redis_client.hgetall("score_pad")
     keys = await redis_client.keys("user:*")
     for key in keys:
         email = key.split(":", 1)[1]
@@ -324,18 +335,25 @@ async def _all_wallets() -> list[dict[str, str]]:
         if tele and not tele.startswith("@"):
             tele = f"@{tele.lstrip('@')}"
         reward = pending_map.get(email, 0.0)
+        pad_val = 0.0
+        try:
+            pad_val = float(pad_map.get(email, 0.0))
+        except Exception:
+            pad_val = 0.0
         wallets.append(
             {
                 "email": email,
                 "wallet": data.get("wallet", ""),
                 "telegram": tele,
                 "pending_reward": f"{reward:.8f}",
+                "pad": pad_val,
             }
         )
     return wallets
 
 
 async def _all_posts() -> dict[str, list[dict[str, Any]]]:
+    """Return pending (unverified) posts grouped by user email."""
     posts: dict[str, list[dict[str, Any]]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
@@ -343,10 +361,13 @@ async def _all_posts() -> dict[str, list[dict[str, Any]]]:
         urls = await redis_client.lrange(key, 0, -1)
         verified = await redis_client.smembers(f"posts_verified:{email}")
         safe_verified = {str(v).strip() for v in verified}
-        posts[email] = [
-            {"url": str(u).strip(), "verified": str(u).strip() in safe_verified}
-            for u in urls if u
+        pending = [
+            {"url": str(u).strip()}
+            for u in urls
+            if u and str(u).strip() not in safe_verified
         ]
+        if pending:
+            posts[email] = pending
     return posts
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
@@ -437,6 +458,26 @@ async def register(
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+
+
+@app.get("/wallet")
+async def wallet_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    user = await redis_client.hgetall(f"user:{email}")
+    return templates.TemplateResponse(
+        "wallet.html", {"request": request, "error": "", "wallet": user.get("wallet", "")}
+    )
+
+
+@app.post("/wallet")
+async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/logout")
@@ -615,6 +656,19 @@ async def admin_post_verify(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/posts/reject")
+async def admin_post_reject(
+    request: Request, email: str = Form(...), url: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_key = email.strip().lower()
+    url_clean = str(url).strip()
+    await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
+    await redis_client.srem(f"posts_verified:{email_key}", url_clean)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/admin/telegram/update")
 async def admin_telegram_update(
     request: Request, email: str = Form(...), telegram: str = Form(...)
@@ -624,6 +678,23 @@ async def admin_telegram_update(
     await redis_client.hset(
         f"user:{email}", "telegram", _normalize_telegram(telegram)
     )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/scorepad")
+async def admin_scorepad(
+    request: Request, email: str = Form(...), pad: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_key = email.strip().lower()
+    try:
+        pad_val = float(pad)
+    except Exception:
+        pad_val = 0.0
+    await redis_client.hset("score_pad", email_key, pad_val)
+    # Refresh cached leaderboard so padding is reflected immediately
+    await _load_csv()
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -663,12 +734,14 @@ async def index(request: Request) -> Any:
     user = await redis_client.hgetall(f"user:{email}")
     wallet = user.get("wallet") if user else ""
     data = await _get_cached_data()
+    columns = [c for c in data["columns"] if c != "email"]
+    rows = [{k: row.get(k, "") for k in columns} for row in data["rows"]]
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "columns": data["columns"],
-            "rows": data["rows"],
+            "columns": columns,
+            "rows": rows,
             "source": data["source"],
             "ttl": CACHE_TTL_SECONDS,
             "last_updated": data["cached_at"],
