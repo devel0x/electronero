@@ -56,3 +56,6 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 - Static files are served from `static/` and templates from `templates/`.
 - The app caches data for a configurable TTL to limit repeated downloads of the CSV.
 
+## Telegram bot
+A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
+

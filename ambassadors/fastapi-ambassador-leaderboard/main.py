@@ -439,6 +439,26 @@ async def register(
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
 
 
+@app.get("/wallet")
+async def wallet_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    user = await redis_client.hgetall(f"user:{email}")
+    return templates.TemplateResponse(
+        "wallet.html", {"request": request, "error": "", "wallet": user.get("wallet", "")}
+    )
+
+
+@app.post("/wallet")
+async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
+    return RedirectResponse("/", status_code=303)
+
+
 @app.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("session")
