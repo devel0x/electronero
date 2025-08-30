@@ -118,64 +118,47 @@
   <!-- GSAP + ScrollTrigger -->
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-  <script>
-    // starfield
-    (() => {
-      const c = document.getElementById('bg-stars');
-      const ctx = c.getContext('2d');
-      const DPR = window.devicePixelRatio || 1;
-      let w, h, stars = [];
-      const STAR_COUNT = 140;
+<script>
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof gsap === 'undefined') return;
 
-      function resize(){
-        w = c.offsetWidth; h = c.offsetHeight;
-        c.width = w * DPR; c.height = h * DPR;
-        ctx.setTransform(DPR,0,0,DPR,0,0);
-      }
-      function resetStars(){
-        stars = new Array(STAR_COUNT).fill(0).map(() => ({
-          x: Math.random()*w,
-          y: Math.random()*h,
-          r: Math.random()*1.2+0.2,
-          a: Math.random()*0.8+0.2
-        }));
-      }
-      function draw(){
-        ctx.clearRect(0,0,w,h);
-        for(const st of stars){
-          st.a += (Math.random() - 0.5) * 0.06;
-          st.a = Math.max(0.1, Math.min(1, st.a));
-          ctx.beginPath();
-          ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
-          ctx.fillStyle = `rgba(255,255,255,${st.a})`;
-          ctx.fill();
-        }
-        requestAnimationFrame(draw);
-      }
-      resize(); resetStars(); draw();
-      window.addEventListener('resize', () => { resize(); resetStars(); });
-    })();
-
-    // bloom animation
-    gsap.fromTo(".bg-bloom",
-      { opacity: 0.0, filter: "blur(40px)" },
-      { opacity: 0.22, filter: "blur(22px)", duration: 2, ease: "power2.out" }
-    );
-    gsap.to(".bg-bloom", {
-      opacity: 0.16, filter: "blur(28px)", duration: 6, repeat: -1, yoyo: true, ease: "sine.inOut"
+  // Gentle motion for the existing .bg-bloom element
+  const bloom = document.querySelector('.bg-bloom');
+  if (bloom) {
+    gsap.to(bloom, {
+      duration: 16,
+      xPercent: 3,
+      yPercent: -4,
+      scale: 1.05,
+      opacity: 0.35,
+      ease: 'sine.inOut',
+      yoyo: true,
+      repeat: -1
     });
 
-    // reveals
-    gsap.utils.toArray('[data-animate="fade-up"]').forEach(el=>{
-      gsap.from(el,{ y:24, opacity:0, duration:.9, ease:"power3.out",
-        scrollTrigger:{ trigger: el, start: "top 85%" }
+    // Tiny parallax on mouse move
+    window.addEventListener('mousemove', e => {
+      const dx = (e.clientX - innerWidth / 2) / innerWidth;
+      const dy = (e.clientY - innerHeight / 2) / innerHeight;
+      gsap.to(bloom, { duration: 0.6, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+    }, { passive: true });
+  }
+
+  // Fade-ins for elements that already have data-animate
+  if (typeof ScrollTrigger !== 'undefined') {
+    gsap.utils.toArray('[data-animate]').forEach(el => {
+      const type = el.getAttribute('data-animate');
+      const from = (type === 'fade-up') ? { y: 20, opacity: 0 } : { opacity: 0 };
+      gsap.from(el, {
+        ...from,
+        duration: 0.6,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 85%' }
       });
     });
-    gsap.utils.toArray('[data-animate="fade-in"]').forEach(el=>{
-      gsap.from(el,{ opacity:0, duration:1.0, ease:"power2.out",
-        scrollTrigger:{ trigger: el, start: "top 90%" }
-      });
-    });
-  </script>
+  }
+})();
+</script>
 </body>
 </html>
