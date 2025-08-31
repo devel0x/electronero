@@ -245,9 +245,11 @@
                     </thead>
                     <tbody>
                         {% set ns = namespace(any_valid=false) %}
+                        {% set seen_exact = {} %} {# exact URL dedupe #}
+                        {% set seen_pathkey = {} %} {# aggressive dedupe for X/Twitter (path-only) #}
 
                         {% for e in entries %}
-                        {# ---------------- URL validation ---------------- #}
+                        {# -------- URL validation -------- #}
                         {% set u = (e.url or '')|trim(' \n\r\t"\'') %}
                         {% set lower = u|lower %}
                         {% set ok_url = (
@@ -256,62 +258,63 @@
                         (' ' not in u) and ('\n' not in u) and
                         (lower[:11] != 'javascript:') and
                         (lower[:5] != 'data:') and
-                        (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {# ----------------
-                            Telegram validation/linkify ---------------- #} {% set tg_raw=(e.telegram or '' )|trim('
-                            \n\r\t"\'') %} {% set tg_href='' %} {% set tg_handle='' %} {% if tg_raw %} {% set
+                        (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {# -------- build
+                            dedupe keys -------- #} {% set exact_key=u %} {# for x/twitter links, dedupe by path (strip
+                            ?query) #} {% set is_x=('://x.com/' in lower) or ('://twitter.com/' in lower) %} {% set
+                            path_key=(u.split('?')[0] if is_x else exact_key) %} {# -------- Telegram validation/linkify
+                            -------- #} {% set tg_raw=(e.telegram or '' )|trim(' \n\r\t"\'') %} {% set tg_href='' %} {%
+                            set tg_handle='' %} {% if tg_raw %} {% set
                             tclean=tg_raw|replace('https://','')|replace('http://','')|replace('www.','') %} {% if
                             tclean.startswith('t.me/') or tclean.startswith('telegram.me/') %} {% set
-                            parts=tclean.split('/') %} {# t.me/<handle> or t.me/s/<handle>/123 #}
-                                {% set cand = (parts[2] if (parts|length > 2 and parts[1] == 's') else (parts[1] if
-                                parts|length > 1 else '')) %}
-                                {% set cand = cand.split('?')[0] %}
-                                {% if cand and (' ' not in cand) %}
-                                {% set tg_handle = cand %}
-                                {% set tg_href = 'https://t.me/' ~ tg_handle %}
-                                {% endif %}
-                                {% elif tg_raw.startswith('@') %}
-                                {# case 2: already @handle #}
-                                {% set cand = tg_raw[1:] %}
-                                {% if cand and (' ' not in cand) %}
-                                {% set tg_handle = cand %}
-                                {% set tg_href = 'https://t.me/' ~ tg_handle %}
-                                {% endif %}
-                                {% endif %}
-                                {% endif %}
+                            parts=tclean.split('/') %} {% set cand=(parts[2] if (parts|length>2 and parts[1]=='s') else
+                            (parts[1] if parts|length>1 else '')) %}
+                            {% set cand = cand.split('?')[0] %}
+                            {% if cand and (' ' not in cand) %}
+                            {% set tg_handle = cand %}
+                            {% set tg_href = 'https://t.me/' ~ tg_handle %}
+                            {% endif %}
+                            {% elif tg_raw.startswith('@') %}
+                            {% set cand = tg_raw[1:] %}
+                            {% if cand and (' ' not in cand) %}
+                            {% set tg_handle = cand %}
+                            {% set tg_href = 'https://t.me/' ~ tg_handle %}
+                            {% endif %}
+                            {% endif %}
+                            {% endif %}
+                            {% set ok_tg = (tg_href != '') %}
 
-                                {% set ok_tg = (tg_href != '') %}
+                            {# -------- render only if valid AND not seen -------- #}
+                            {% if ok_url and ok_tg and (exact_key not in seen_exact) and (path_key not in seen_pathkey)
+                            %}
+                            {% set _ = seen_exact.update({exact_key: true}) %}
+                            {% set _ = seen_pathkey.update({path_key: true}) %}
+                            {% set ns.any_valid = true %}
 
-                                {# ---------------- Row render: only if both are OK ---------------- #}
-                                {% if ok_url and ok_tg %}
-                                {% set ns.any_valid = true %}
-                                <tr>
-                                    <td>
-                                        <a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u
-                                            }}</a>
-                                    </td>
-                                    <td>
-                                        <a href="{{ tg_href }}" target="_blank" rel="noopener noreferrer">@{{ tg_handle
-                                            }}</a>
-                                    </td>
-                                    <td class="small wallet-cell">
-                                        {% if e.wallet %}
-                                        <span class="me-2">{{ e.wallet }}</span>
-                                        <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
-                                            data-copy="{{ e.wallet }}">Copy</button>
-                                        {% else %}
-                                        —
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endif %}
-                                {% endfor %}
+                            <tr>
+                                <td><a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
+                                </td>
+                                <td><a href="{{ tg_href }}" target="_blank" rel="noopener noreferrer">@{{ tg_handle
+                                        }}</a></td>
+                                <td class="small wallet-cell">
+                                    {% if e.wallet %}
+                                    <span class="me-2">{{ e.wallet }}</span>
+                                    <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
+                                        data-copy="{{ e.wallet }}">Copy</button>
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
 
-                                {% if not ns.any_valid %}
-                                <tr>
-                                    <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
-                                </tr>
-                                {% endif %}
+                            {% if not ns.any_valid %}
+                            <tr>
+                                <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
+                            </tr>
+                            {% endif %}
                     </tbody>
+
                 </table>
             </div>
         </div>
