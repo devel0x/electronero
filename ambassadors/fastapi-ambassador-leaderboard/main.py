@@ -205,7 +205,7 @@ async def _load_csv() -> Dict[str, Any]:
             continue
 
     if "email" in df.columns:
-        ddf["email"] = df["email"].astype(str).str.strip().str.lower()
+        df["email"] = df["email"].astype(str).str.strip().str.lower()
         df["__email_norm"] = df["email"]  # already normalized
         df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
         pads = await redis_client.hgetall("score_pad")
