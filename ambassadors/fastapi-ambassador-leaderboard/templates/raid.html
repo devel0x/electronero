@@ -205,77 +205,72 @@
 </head>
 
 <body>
-    {# --- safe link macro (no output if invalid) --- #}
-    {% macro safe_link(raw) -%}
-    {% set u = (raw or '')|trim(' \n\r\t"\'') %}
-    {% set lower = u|lower %}
-    {% set ok = (
-    u and
-    (u.startswith('http://') or u.startswith('https://')) and
-    (' ' not in u) and ('\n' not in u) and
-    (lower[:11] != 'javascript:') and
-    (lower[:5] != 'data:') and
-    (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {% if ok -%} <a href="{{ u }}"
-        target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
-        {%- endif %}
-        {%- endmacro %}
-        <!-- Background FX -->
-        <canvas id="bg-stars"></canvas>
-        <div class="bg-bloom"></div>
-        <!-- Nav -->
-        <nav class="navbar navbar-dark bg-dark bg-opacity-50" data-animate="fade-in">
-            <div class="container-fluid">
-                <span class="navbar-brand d-flex align-items-center">
-                    <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}"
-                        alt="ITC logo" />
-                    ITC Governance
-                </span>
-                <div class="d-flex gap-2">
-                    <a href="/" class="btn btn-sm btn-outline-light">Home</a>
-                    <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
-                    <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
-                    <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
-                    <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
-                    <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
-                </div>
+    <!-- Background FX -->
+    <canvas id="bg-stars"></canvas>
+    <div class="bg-bloom"></div>
+    <!-- Nav -->
+    <nav class="navbar navbar-dark bg-dark bg-opacity-50" data-animate="fade-in">
+        <div class="container-fluid">
+            <span class="navbar-brand d-flex align-items-center">
+                <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+                ITC Governance
+            </span>
+            <div class="d-flex gap-2">
+                <a href="/" class="btn btn-sm btn-outline-light">Home</a>
+                <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+                <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+                <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+                <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+                <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
             </div>
-        </nav>
+        </div>
+    </nav>
 
-        <!-- Content -->
-        <div class="container py-4 content">
-            <div class="glass-card p-3 p-md-4" data-animate="fade-up">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h1 class="h4 mb-0">Verified Posts</h1>
-                    <span class="text-white-50 small">Updated automatically</span>
-                </div>
+    <!-- Content -->
+    <div class="container py-4 content">
+        <div class="glass-card p-3 p-md-4" data-animate="fade-up">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h1 class="h4 mb-0">Verified Posts</h1>
+                <span class="text-white-50 small">Updated automatically</span>
+            </div>
 
-                <div class="table-responsive">
-                    <table class="table table-dark table-striped align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Post</th>
-                                <th>Telegram</th>
-                                <th>Wallet</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% set ns = namespace(any_valid=false) %}
-                            {% for e in entries %}
-                            {% set link = safe_link(e.url) %}
-                            {% if link %}
-                            {% set ns.any_valid = true %}
-                            <tr>
-                                <td>{{ link|safe }}</td>
-                                <td>{{ e.telegram or '—' }}</td>
-                                <td class="small wallet-cell">
-                                    {% if e.wallet %}
-                                    <span class="me-2">{{ e.wallet }}</span>
-                                    <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
-                                        data-copy="{{ e.wallet }}">Copy</button>
-                                    {% else %}
-                                    —
-                                    {% endif %}
-                                </td>
+            <div class="table-responsive">
+                <table class="table table-dark table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Post</th>
+                            <th>Telegram</th>
+                            <th>Wallet</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set ns = namespace(any_valid=false) %}
+
+                        {% for e in entries %}
+                        {# --- validate URL --- #}
+                        {% set u = (e.url or '')|trim(' \n\r\t"\'') %}
+                        {% set lower = u|lower %}
+                        {% set ok = (
+                        u and
+                        (u.startswith('http://') or u.startswith('https://')) and
+                        (' ' not in u) and ('\n' not in u) and
+                        (lower[:11] != 'javascript:') and
+                        (lower[:5] != 'data:') and
+                        (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {% if ok %} {% set
+                            ns.any_valid=true %} <tr>
+                            <td>
+                                <a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
+                            </td>
+                            <td>{{ e.telegram or '—' }}</td>
+                            <td class="small wallet-cell">
+                                {% if e.wallet %}
+                                <span class="me-2">{{ e.wallet }}</span>
+                                <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
+                                    data-copy="{{ e.wallet }}">Copy</button>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
                             </tr>
                             {% endif %}
                             {% endfor %}
@@ -285,96 +280,95 @@
                                 <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
                             </tr>
                             {% endif %}
-                        </tbody>
-
-                    </table>
-                </div>
+                    </tbody>
+                </table>
             </div>
         </div>
+    </div>
 
-        <!-- Scripts -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-        <script>
-            (() => {
-                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                if (reduce || typeof gsap === 'undefined') return;
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script>
+        (() => {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduce || typeof gsap === 'undefined') return;
 
-                // Gentle motion for the existing bloom element
-                const bloom = document.querySelector('.bg-bloom');
-                if (bloom) {
-                    gsap.to(bloom, {
-                        duration: 16,
-                        xPercent: 3,
-                        yPercent: -4,
-                        scale: 1.05,
-                        opacity: 0.35,
-                        ease: 'sine.inOut',
-                        yoyo: true,
-                        repeat: -1
-                    });
-
-                    // Tiny parallax
-                    window.addEventListener('mousemove', e => {
-                        const dx = (e.clientX - innerWidth / 2) / innerWidth;
-                        const dy = (e.clientY - innerHeight / 2) / innerHeight;
-                        gsap.to(bloom, { duration: 0.6, x: dx * 20, y: dy * 20, ease: 'sine.out' });
-                    }, { passive: true });
-                }
-
-                // Fade-in on scroll for elements already marked with data-animate
-                if (typeof ScrollTrigger !== 'undefined') {
-                    gsap.utils.toArray('[data-animate]').forEach(el => {
-                        const type = el.getAttribute('data-animate');
-                        const from = (type === 'fade-up') ? { y: 20, opacity: 0 } : { opacity: 0 };
-                        gsap.from(el, {
-                            ...from,
-                            duration: 0.6,
-                            ease: 'power2.out',
-                            scrollTrigger: { trigger: el, start: 'top 85%' }
-                        });
-                    });
-                }
-            })();
-        </script>
-        <script>
-            (function () {
-                function normalizeUrl(str) {
-                    return (str || '').trim().replace(/^['"]|['"]$/g, '');
-                }
-                function isPlausibleUrl(str) {
-                    if (!str || str.length > 2048) return false;
-                    if (/\s/.test(str)) return false;
-                    const lower = str.toLowerCase();
-                    if (lower.startsWith('javascript:') || lower.startsWith('data:')) return false;
-                    const hits = (str.match(/https?:\/\//g) || []).length;
-                    if (hits !== 1) return false;
-                    try {
-                        const u = new URL(str);
-                        return u.protocol === 'http:' || u.protocol === 'https:';
-                    } catch { return false; }
-                }
-
-                // Only touch links in the Verified Posts table
-                document.querySelectorAll('.glass-card table tbody a[href]').forEach(a => {
-                    const raw = a.getAttribute('href') || a.textContent;
-                    const clean = normalizeUrl(raw);
-                    if (isPlausibleUrl(clean)) {
-                        a.setAttribute('href', clean);
-                        a.setAttribute('rel', 'noopener noreferrer nofollow ugc');
-                        a.setAttribute('target', '_blank');
-                        // Optional: also normalize the visible text if it was quoted
-                        if (a.textContent.trim() !== clean) a.textContent = clean;
-                    } else {
-                        const span = document.createElement('span');
-                        span.className = 'text-warning';
-                        span.textContent = 'Invalid link';
-                        a.replaceWith(span);
-                    }
+            // Gentle motion for the existing bloom element
+            const bloom = document.querySelector('.bg-bloom');
+            if (bloom) {
+                gsap.to(bloom, {
+                    duration: 16,
+                    xPercent: 3,
+                    yPercent: -4,
+                    scale: 1.05,
+                    opacity: 0.35,
+                    ease: 'sine.inOut',
+                    yoyo: true,
+                    repeat: -1
                 });
-            })();
-        </script>
+
+                // Tiny parallax
+                window.addEventListener('mousemove', e => {
+                    const dx = (e.clientX - innerWidth / 2) / innerWidth;
+                    const dy = (e.clientY - innerHeight / 2) / innerHeight;
+                    gsap.to(bloom, { duration: 0.6, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+                }, { passive: true });
+            }
+
+            // Fade-in on scroll for elements already marked with data-animate
+            if (typeof ScrollTrigger !== 'undefined') {
+                gsap.utils.toArray('[data-animate]').forEach(el => {
+                    const type = el.getAttribute('data-animate');
+                    const from = (type === 'fade-up') ? { y: 20, opacity: 0 } : { opacity: 0 };
+                    gsap.from(el, {
+                        ...from,
+                        duration: 0.6,
+                        ease: 'power2.out',
+                        scrollTrigger: { trigger: el, start: 'top 85%' }
+                    });
+                });
+            }
+        })();
+    </script>
+    <script>
+        (function () {
+            function normalizeUrl(str) {
+                return (str || '').trim().replace(/^['"]|['"]$/g, '');
+            }
+            function isPlausibleUrl(str) {
+                if (!str || str.length > 2048) return false;
+                if (/\s/.test(str)) return false;
+                const lower = str.toLowerCase();
+                if (lower.startsWith('javascript:') || lower.startsWith('data:')) return false;
+                const hits = (str.match(/https?:\/\//g) || []).length;
+                if (hits !== 1) return false;
+                try {
+                    const u = new URL(str);
+                    return u.protocol === 'http:' || u.protocol === 'https:';
+                } catch { return false; }
+            }
+
+            // Only touch links in the Verified Posts table
+            document.querySelectorAll('.glass-card table tbody a[href]').forEach(a => {
+                const raw = a.getAttribute('href') || a.textContent;
+                const clean = normalizeUrl(raw);
+                if (isPlausibleUrl(clean)) {
+                    a.setAttribute('href', clean);
+                    a.setAttribute('rel', 'noopener noreferrer nofollow ugc');
+                    a.setAttribute('target', '_blank');
+                    // Optional: also normalize the visible text if it was quoted
+                    if (a.textContent.trim() !== clean) a.textContent = clean;
+                } else {
+                    const span = document.createElement('span');
+                    span.className = 'text-warning';
+                    span.textContent = 'Invalid link';
+                    a.replaceWith(span);
+                }
+            });
+        })();
+    </script>
 </body>
 
 </html>
