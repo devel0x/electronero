@@ -247,40 +247,68 @@
                         {% set ns = namespace(any_valid=false) %}
 
                         {% for e in entries %}
-                        {# --- validate URL --- #}
+                        {# ---------------- URL validation ---------------- #}
                         {% set u = (e.url or '')|trim(' \n\r\t"\'') %}
                         {% set lower = u|lower %}
-                        {% set ok = (
+                        {% set ok_url = (
                         u and
                         (u.startswith('http://') or u.startswith('https://')) and
                         (' ' not in u) and ('\n' not in u) and
                         (lower[:11] != 'javascript:') and
                         (lower[:5] != 'data:') and
-                        (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {% if ok %} {% set
-                            ns.any_valid=true %} <tr>
-                            <td>
-                                <a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
-                            </td>
-                            <td>{{ e.telegram or '—' }}</td>
-                            <td class="small wallet-cell">
-                                {% if e.wallet %}
-                                <span class="me-2">{{ e.wallet }}</span>
-                                <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
-                                    data-copy="{{ e.wallet }}">Copy</button>
-                                {% else %}
-                                —
+                        (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {# ----------------
+                            Telegram validation/linkify ---------------- #} {% set tg_raw=(e.telegram or '' )|trim('
+                            \n\r\t"\'') %} {% set tg_href='' %} {% set tg_handle='' %} {# case 1: already a link (t.me /
+                            telegram.me), extract handle #} {% set
+                            tclean=tg_raw|replace('https://','')|replace('http://','')|replace('www.','') %} {% if
+                            tclean.startswith('t.me/') or tclean.startswith('telegram.me/') %} {% set
+                            parts=tclean.split('/') %} {# t.me/<handle> or t.me/s/<handle>/123 #}
+                                {% set cand = (parts[2] if (parts|length>2 and parts[1]=='s') else (parts[1] if
+                                parts|length>1 else '')) %}
+                                {% set cand = cand.split('?')[0] %}
+                                {% if cand and (' ' not in cand) %}
+                                {% set tg_handle = cand %}
+                                {% set tg_href = 'https://t.me/' ~ tg_handle %}
                                 {% endif %}
-                            </td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
+                                {% elif tg_raw.startswith('@') %}
+                                {# case 2: @handle -> linkify #}
+                                {% set cand = tg_raw[1:] %}
+                                {% if cand and (' ' not in cand) %}
+                                {% set tg_handle = cand %}
+                                {% set tg_href = 'https://t.me/' ~ tg_handle %}
+                                {% endif %}
+                                {% endif %}
 
-                            {% if not ns.any_valid %}
-                            <tr>
-                                <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
-                            </tr>
-                            {% endif %}
+                                {% set ok_tg = (tg_href != '') %}
+
+                                {# ---------------- Row render: only if both are OK ---------------- #}
+                                {% if ok_url and ok_tg %}
+                                {% set ns.any_valid = true %}
+                                <tr>
+                                    <td><a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u
+                                            }}</a></td>
+                                    <td><a href="{{ tg_href }}" target="_blank" rel="noopener noreferrer">@{{ tg_handle
+                                            }}</a></td>
+                                    <td class="small wallet-cell">
+                                        {% if e.wallet %}
+                                        <span class="me-2">{{ e.wallet }}</span>
+                                        <button class="btn btn-sm btn-outline-light py-0 px-2 copy-btn"
+                                            data-copy="{{ e.wallet }}">Copy</button>
+                                        {% else %}
+                                        —
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endfor %}
+
+                                {% if not ns.any_valid %}
+                                <tr>
+                                    <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
+                                </tr>
+                                {% endif %}
                     </tbody>
+
                 </table>
             </div>
         </div>
