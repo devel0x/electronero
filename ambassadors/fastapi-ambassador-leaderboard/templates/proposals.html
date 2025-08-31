@@ -113,6 +113,23 @@
         {% endif %}
     </div>
   </div>
+<!-- Success Modal -->
+<div class="modal fade" id="proposalCreatedModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header text-dark">
+        <h5 class="modal-title">Success</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-dark">
+        Proposal has been created.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <!-- GSAP + ScrollTrigger -->
@@ -159,6 +176,101 @@
     });
   }
 })();
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.querySelector('form[action="/proposals/submit"]');
+  if (!form) return;
+
+  const titleInput = form.querySelector('input[name="title"]');
+  const contentInput = form.querySelector('textarea[name="content"]');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  // Small helper note under the button
+  const note = document.createElement('div');
+  note.className = 'form-text mt-2';
+  submitBtn.after(note);
+
+  const COOLDOWN_MS = 5 * 60 * 1000;
+  const KEY_LAST = 'proposal_last_ts';
+  const KEY_FLAG = 'proposal_submitted';
+
+  let last = Number(localStorage.getItem(KEY_LAST) || 0);
+  let timer = null;
+
+  function fmt(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  }
+
+  function setDisabled(disabled) {
+    submitBtn.disabled = disabled;
+    if (titleInput) titleInput.disabled = disabled;
+    if (contentInput) contentInput.disabled = disabled;
+  }
+
+  function applyCooldown(remainingMs) {
+    const active = remainingMs > 0;
+    setDisabled(active);
+    if (active) {
+      submitBtn.textContent = `Wait ${fmt(remainingMs)}`;
+      note.textContent = `Please wait ${fmt(remainingMs)} before creating another proposal.`;
+      note.classList.remove('text-success');
+      note.classList.add('text-warning');
+    } else {
+      submitBtn.textContent = 'Submit';
+      note.textContent = '';
+      note.classList.remove('text-warning');
+    }
+  }
+
+  function tick() {
+    const remaining = last + COOLDOWN_MS - Date.now();
+    if (remaining > 0) {
+      applyCooldown(remaining);
+    } else {
+      clearInterval(timer); timer = null;
+      localStorage.removeItem(KEY_LAST);
+      applyCooldown(0);
+    }
+  }
+
+  // Initial cooldown state
+  const initialRemaining = last + COOLDOWN_MS - Date.now();
+  if (initialRemaining > 0) {
+    applyCooldown(initialRemaining);
+    timer = setInterval(tick, 1000);
+  }
+
+  // Intercept submit to start cooldown and show modal after redirect
+  form.addEventListener('submit', (e) => {
+    const remaining = Number(localStorage.getItem(KEY_LAST) || 0) + COOLDOWN_MS - Date.now();
+    if (remaining > 0) {
+      // Still cooling down — block submit
+      e.preventDefault();
+      tick();
+      return;
+    }
+    // Start cooldown immediately and set one-time modal flag for after redirect
+    localStorage.setItem(KEY_LAST, Date.now().toString());
+    sessionStorage.setItem(KEY_FLAG, '1');
+  });
+
+  // If we just came back from a successful submit, show the modal once
+  if (sessionStorage.getItem(KEY_FLAG) === '1') {
+    sessionStorage.removeItem(KEY_FLAG);
+    const modalEl = document.getElementById('proposalCreatedModal');
+    if (modalEl && window.bootstrap?.Modal) {
+      const m = new bootstrap.Modal(modalEl);
+      m.show();
+    }
+    // Ensure countdown is running
+    last = Number(localStorage.getItem(KEY_LAST) || Date.now());
+    if (!timer) timer = setInterval(tick, 1000);
+  }
+});
 </script>
 </body>
 </html>
