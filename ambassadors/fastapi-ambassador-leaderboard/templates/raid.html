@@ -107,8 +107,26 @@
   </style>
 </head>
 <body>
-  <!-- Background FX -->
-<!-- animated background -->
+{# --- safe link macro (render-time) --- #}
+{% macro safe_link(raw) -%}
+  {% set u = (raw or '')|trim(' \n\r\t"\'') %}
+  {% set lower = u|lower %}
+  {% set ok = (
+      u and
+      (u.startswith('http://') or u.startswith('https://')) and
+      (' ' not in u) and ('\n' not in u) and
+      (lower[:11] != 'javascript:') and
+      (lower[:5]  != 'data:') and
+      (u|length <= 2048) and
+      ((u.count('http://') + u.count('https://')) == 1)
+  ) %}
+  {% if ok %}
+    <a href="{{ u }}" target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
+  {% else %}
+    <span class="text-warning">Invalid link</span>
+  {% endif %}
+{%- endmacro %}
+<!-- Background FX -->
 <canvas id="bg-stars"></canvas>
 <div class="bg-bloom"></div>
   <!-- Nav -->
@@ -149,7 +167,7 @@
           <tbody>
             {% for e in entries %}
             <tr>
-              <td><a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">{{ e.url }}</a></td>
+              <td>{{ safe_link(e.url) }}</td>
               <td>{{ e.telegram or '—' }}</td>
               <td class="small wallet-cell">
                 {% if e.wallet %}
@@ -221,33 +239,41 @@
 })();
 </script>
 <script>
-  // Copy wallet buttons
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.copy-btn');
-    if (!btn) return;
-
-    e.preventDefault();        // avoid any accidental form submits
-    e.stopPropagation();
-
-    const val = btn.dataset.copy || '';
-    if (!val) return;
-
+(function(){
+  function normalizeUrl(str){
+    return (str || '').trim().replace(/^['"]|['"]$/g, '');
+  }
+  function isPlausibleUrl(str){
+    if (!str || str.length > 2048) return false;
+    if (/\s/.test(str)) return false;
+    const lower = str.toLowerCase();
+    if (lower.startsWith('javascript:') || lower.startsWith('data:')) return false;
+    const hits = (str.match(/https?:\/\//g) || []).length;
+    if (hits !== 1) return false;
     try {
-      await navigator.clipboard.writeText(val);
-    } catch {
-      // Fallback for older browsers
-      const ta = document.createElement('textarea');
-      ta.value = val; document.body.appendChild(ta);
-      ta.select(); document.execCommand('copy'); ta.remove();
+      const u = new URL(str);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch { return false; }
+  }
+
+  // Only touch links in the Verified Posts table
+  document.querySelectorAll('.glass-card table tbody a[href]').forEach(a => {
+    const raw = a.getAttribute('href') || a.textContent;
+    const clean = normalizeUrl(raw);
+    if (isPlausibleUrl(clean)) {
+      a.setAttribute('href', clean);
+      a.setAttribute('rel', 'noopener noreferrer nofollow ugc');
+      a.setAttribute('target', '_blank');
+      // Optional: also normalize the visible text if it was quoted
+      if (a.textContent.trim() !== clean) a.textContent = clean;
+    } else {
+      const span = document.createElement('span');
+      span.className = 'text-warning';
+      span.textContent = 'Invalid link';
+      a.replaceWith(span);
     }
-
-    // Tiny feedback
-    const prev = btn.textContent;
-    btn.textContent = 'Copied!';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 900);
   });
+})();
 </script>
-
 </body>
 </html>
