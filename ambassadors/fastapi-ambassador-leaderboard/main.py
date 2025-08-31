@@ -180,16 +180,16 @@ def _get_pool_balance() -> float:
     return 250.0
 
 async def _load_csv() -> Dict[str, Any]:
-    """Load CSV data from Google Sheets or local file and cache in Redis."""
     path = SHEET_CSV_URL or CSV_PATH
     source = "google_sheet" if SHEET_CSV_URL else "local_csv"
 
     try:
         df = pd.read_csv(path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise RuntimeError(f"Failed to read CSV from {path}: {exc}") from exc
 
-    df.columns = [c.strip() for c in df.columns]
+    # 🔧 make headers consistent
+    df.columns = [str(c).strip().lower() for c in df.columns]
 
     for col in EXPECTED_COLUMNS:
         if col not in df.columns:
@@ -205,12 +205,15 @@ async def _load_csv() -> Dict[str, Any]:
             continue
 
     if "email" in df.columns:
-        df["email"] = df["email"].astype(str).str.strip()
-        df["__email_norm"] = df["email"].str.lower()
+        ddf["email"] = df["email"].astype(str).str.strip().str.lower()
+        df["__email_norm"] = df["email"]  # already normalized
         df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
+        pads = await redis_client.hgetall("score_pad")
+        norm_map = {k.strip().lower(): float(v) for k, v in pads.items() if v is not None}
         df["points"] = df["points"] + df["__email_norm"].map(norm_map).fillna(0)
     else:
-        df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
+        df["points"] = pd.to_numeric(df.get("points"), errors="coerce").fillna(0)
+
 
     if "rank" in df.columns:
         df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -285,6 +288,12 @@ async def _load_csv() -> Dict[str, Any]:
     }
     await redis_client.set(CACHE_KEY, json.dumps(data), ex=CACHE_TTL_SECONDS)
     return data
+
+
+def _to_lower_headers(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    return df
 
 
 async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
