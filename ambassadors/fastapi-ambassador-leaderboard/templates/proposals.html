@@ -90,7 +90,7 @@
         <div class="proposal-item mb-3">
             <h3 class="h6 mb-1">{{ p.title }}</h3>
             <p class="mb-2 opacity-85">{{ p.content }}</p>
-            <p class="small text-muted mb-3">
+            <p class="small text-warning mb-3">
               Founder wallet: {{ p.founder_wallet if p.founder_wallet else '—' }}
               {% if p.funding_wallet %} • Funding wallet: {{ p.funding_wallet }}{% endif %}
             </p>
