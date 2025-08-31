@@ -205,7 +205,7 @@
 </head>
 
 <body>
-    {# --- safe link macro (render-time) --- #}
+    {# --- safe link macro (no output if invalid) --- #}
     {% macro safe_link(raw) -%}
     {% set u = (raw or '')|trim(' \n\r\t"\'') %}
     {% set lower = u|lower %}
@@ -215,11 +215,9 @@
     (' ' not in u) and ('\n' not in u) and
     (lower[:11] != 'javascript:') and
     (lower[:5] != 'data:') and
-    (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {% if ok %} <a href="{{ u }}"
+    (u|length <= 2048) and ((u.count('http://') + u.count('https://'))==1) ) %} {% if ok -%} <a href="{{ u }}"
         target="_blank" rel="noopener noreferrer nofollow ugc">{{ u }}</a>
-        {% else %}
-        {{- none -}}
-        {% endif %}
+        {%- endif %}
         {%- endmacro %}
         <!-- Background FX -->
         <canvas id="bg-stars"></canvas>
@@ -261,9 +259,11 @@
                             </tr>
                         </thead>
                         <tbody>
+                            {% set ns = namespace(any_valid=false) %}
                             {% for e in entries %}
                             {% set link = safe_link(e.url) %}
                             {% if link %}
+                            {% set ns.any_valid = true %}
                             <tr>
                                 <td>{{ link|safe }}</td>
                                 <td>{{ e.telegram or '—' }}</td>
@@ -279,14 +279,14 @@
                             </tr>
                             {% endif %}
                             {% endfor %}
-                            {% if not entries %}
+
+                            {% if not ns.any_valid %}
                             <tr>
-                                <td colspan="3" class="text-muted py-4 text-center">
-                                    No verified posts yet. Share links in <strong>Verify</strong> to populate this list.
-                                </td>
+                                <td colspan="3" class="text-muted py-4 text-center">No valid posts to show.</td>
                             </tr>
                             {% endif %}
                         </tbody>
+
                     </table>
                 </div>
             </div>
@@ -376,4 +376,5 @@
             })();
         </script>
 </body>
+
 </html>
