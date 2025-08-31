@@ -381,23 +381,26 @@
                 } catch { return false; }
             }
 
-            // Only touch links in the Verified Posts table
-            document.querySelectorAll('.glass-card table tbody a[href]').forEach(a => {
+            // Only touch links in the **Post** column (first td)
+            document.querySelectorAll('.glass-card table tbody tr td:first-child a[href]').forEach(a => {
                 const raw = a.getAttribute('href') || a.textContent;
                 const clean = normalizeUrl(raw);
                 if (isPlausibleUrl(clean)) {
                     a.setAttribute('href', clean);
                     a.setAttribute('rel', 'noopener noreferrer nofollow ugc');
                     a.setAttribute('target', '_blank');
-                    // Optional: also normalize the visible text if it was quoted
+                    // it's okay to sync visible text for post URLs
                     if (a.textContent.trim() !== clean) a.textContent = clean;
                 } else {
+                    // Demote bad links in Post column to plain text (shouldn't happen since we skip invalid rows)
                     const span = document.createElement('span');
                     span.className = 'text-warning';
                     span.textContent = 'Invalid link';
                     a.replaceWith(span);
                 }
             });
+
+            // IMPORTANT: Do NOT touch Telegram links (second td). We want to keep "@username" text.
         })();
     </script>
 </body>
