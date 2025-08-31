@@ -696,7 +696,13 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
         return RedirectResponse("/login")
     url_clean = url.strip()
     if url_clean:
-        await redis_client.lpush(f"posts:{email}", url_clean)
+        pending = await redis_client.lrange(f"posts:{email}", 0, -1)
+        verified = await redis_client.smembers(f"posts_verified:{email}")
+        if (
+            url_clean not in {str(p) for p in pending}
+            and url_clean not in {str(v) for v in verified}
+        ):
+            await redis_client.lpush(f"posts:{email}", url_clean)
     return RedirectResponse("/verify", status_code=303)
 
 
