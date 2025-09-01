@@ -43,12 +43,12 @@
 #include <wallet/fees.h>
 #include <util/strencodings.h>
 #include <rpc/blockchain.h> 
-#include <key_io.h> // <-- this is the key one
+#include <key_io.h> 
 #include <pubkey.h>
 #include <algorithm>
 #include <utility>
 
-// using progpow::hash256;
+// using progpow::hash256; // we're not using prog anymore
 
 CTxMemPool& EnsureMemPool(NodeContext& node);
 
@@ -142,11 +142,7 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
 
                         int nHeight = ::ChainActive().Height() + 1;
                         uint256 hash;
-                        if (nHeight >= 24101) {
-                            hash = YespowerHash(block, &shared, nHeight);
-                        } else if (nHeight >= Params().GetConsensus().sha256ForkHeight) {
-                            hash = block.GetHash();
-                        } else if (nHeight >= Params().GetConsensus().yespowerForkHeight) {
+                        if (nHeight >= 1) {
                             hash = YespowerHash(block, &shared, nHeight);
                         } else {
                             hash = block.GetHash();
@@ -229,139 +225,6 @@ void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std
         }
     }).detach();
 }
-
-// void GenerateBitcoins(bool fGenerate, CConnman* connman, int nThreads, const std::string& payoutAddress, CTxMemPool& mempool)
-// {
-//     fGenerating = fGenerate;
-//     if (!fGenerate)
-//         return;
-
-//     std::thread([=, &mempool]() {
-//         while (fGenerating && !ShutdownRequested()) {
-//             foundBlock.store(false); // Reset for next round
-
-//             LogPrintf("♻️ Launching %d miner threads...\n", nThreads);
-
-//             for (int threadId = 0; threadId < nThreads; ++threadId) {
-//                 std::thread([=, &mempool]() {
-//                     LogPrintf("⛏️ Starting miner thread %d...\n", threadId);
-
-//                     const CChainParams& chainparams = Params();
-//                     CTxDestination dest = DecodeDestination(payoutAddress);
-//                     if (!IsValidDestination(dest)) {
-//                         LogPrintf("❌ Invalid payout address: %s\n", payoutAddress);
-//                         return;
-//                     }
-
-//                     CScript scriptPubKey = GetScriptForDestination(dest);
-//                     BlockAssembler assembler(mempool, chainparams);
-
-//                     const int templateRefreshInterval = 30; // seconds
-//                     uint64_t hashesDone = 0;
-//                     int64_t hashStart = GetTimeMillis();
-//                     int64_t lastTemplateTime = 0;
-
-//                     while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
-//                         int64_t now = GetTime();
-//                         if (now - lastTemplateTime >= templateRefreshInterval) {
-//                             lastTemplateTime = now;
-
-//                             std::unique_ptr<CBlockTemplate> pblocktemplate;
-//                             try {
-//                                 pblocktemplate = assembler.CreateNewBlock(scriptPubKey);
-//                             } catch (const std::exception& e) {
-//                                 LogPrintf("⚠️ Failed to create block: %s\n", e.what());
-//                                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//                                 continue;
-//                             }
-
-//                             if (!pblocktemplate) {
-//                                 LogPrintf("⚠️ Block template is null\n");
-//                                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//                                 continue;
-//                             }
-
-//                             CBlock* pblock = &pblocktemplate->block;
-//                             CMutableTransaction coinbaseTx(*pblock->vtx[0]);
-//                             coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime << threadId;
-//                             pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
-//                             pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
-//                             uint256 hashTarget = ArithToUint256(arith_uint256().SetCompact(pblock->nBits));
-//                             int printCount = 0;
-
-//                             for (uint32_t nonce = threadId; nonce < std::numeric_limits<uint32_t>::max(); nonce += nThreads) {
-//                                 if (ShutdownRequested() || !fGenerating || foundBlock.load())
-//                                     return;
-
-//                                 if (nonce % 1000 == 0) {
-//                                     int64_t newTime = GetTime();
-//                                     if (newTime > pblock->nTime) {
-//                                         pblock->nTime = newTime;
-//                                         coinbaseTx.vin[0].scriptSig = CScript() << pblock->nTime << threadId;
-//                                         pblock->vtx[0] = MakeTransactionRef(coinbaseTx);
-//                                         pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
-//                                     }
-
-//                                     int64_t elapsed = GetTimeMillis() - hashStart;
-//                                     if (elapsed >= 5000 && hashesDone > 0) {
-//                                         double rate = (double)hashesDone / (elapsed / 1000.0);
-//                                         LogPrintf("⚡ [thread %d] Hashrate: %.2f H/s\n", threadId, rate);
-//                                         hashesDone = 0;
-//                                         hashStart = GetTimeMillis();
-//                                     }
-//                                 }
-
-//                                 ++hashesDone;
-//                                 pblock->nNonce = nonce;
-//                                 int nHeight = ::ChainActive().Height() + 1;
-//                                 const Consensus::Params& params = Params().GetConsensus();
-//                                 uint256 hash;
-//                                 if (nHeight + 1 >= params.yespowerForkHeight) {
-//                                     hash = YespowerHash(*pblock);
-//                                 } else {
-//                                     hash = pblock->GetHash(); // legacy SHA256
-//                                 }
-//                                 if (printCount < 10) {
-//                                     printCount++;
-//                                     LogPrintf("🔍 Try: Hash: %s Target: %s\n", hash.ToString(), hashTarget.ToString());
-//                                 }
-
-//                                 if (UintToArith256(hash) <= UintToArith256(hashTarget)) {
-//                                     LogPrintf("✅ [thread %d] Valid block found! Hash: %s\n", threadId, hash.ToString());
-//                                     LogPrintf("🧩 Merkle Root: %s\n", pblock->hashMerkleRoot.ToString());
-//                                     LogPrintf("🎯 Coinbase TXID: %s\n", pblock->vtx[0]->GetHash().ToString());
-
-//                                     std::shared_ptr<const CBlock> pblockShared = std::make_shared<const CBlock>(*pblock);
-//                                     bool fNewBlock = false;
-//                                     if (!g_chainman.ProcessNewBlock(chainparams, pblockShared, true, &fNewBlock)) {
-//                                         LogPrintf("❌ [thread %d] Failed to process new block\n", threadId);
-//                                     } else {
-//                                         LogPrintf("✅ [thread %d] Block accepted!\n", threadId);
-//                                     }
-
-//                                     foundBlock.store(true);
-//                                     return;
-//                                 }
-//                             }
-//                         } else {
-//                             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-//                         }
-//                     }
-//                 }).detach();
-//             }
-
-//             // Wait for a block to be found before restarting
-//             while (!ShutdownRequested() && fGenerating && !foundBlock.load()) {
-//                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
-//             }
-
-//             if (foundBlock.load()) {
-//                 LogPrintf("🔁 Restarting mining after block found...\n");
-//                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
-//             }
-//         }
-//     }).detach();
-// }
 
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
@@ -516,13 +379,20 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-    bool burn_fees = nHeight >= 24500 && nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight; // fees burned until 
+    bool burn_fees = nHeight >= 1 && nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight; // fees burned until 
+    // Basis points (per 10,000)
+    static constexpr int GOV_BPS = 7300; // 73.00%
+    static constexpr int OP_BPS  =  500; // 5.00%
+    static constexpr int BPS_DENOM = 10000;
     CAmount blockReward = GetBlockSubsidy(nHeight, chainparams.GetConsensus());
     if (!burn_fees) blockReward += nFees;
-    CAmount governanceReward = blockReward / 10; // 10% goes to governance
+    // Governance + dev/ops
+    CAmount governanceReward = (blockReward * GOV_BPS) / BPS_DENOM; // 51% goes to governance & 22% development/operations
+    // CAmount governanceReward = blockReward * 73 / 100; 
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
     bool hasOpDest = IsValidDestination(opDest);
-    CAmount operatorReward = hasOpDest ? blockReward / 20 : 0; // 5% goes to node operator 
+    CAmount operatorReward = hasOpDest ? (blockReward * OP_BPS) / BPS_DENOM : 0; // 5% goes to node operator 
+    // CAmount operatorReward = hasOpDest ? blockReward * 5 / 100 : 0; 
     coinbaseTx.vout.resize(hasOpDest ? 3 : 2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
     coinbaseTx.vout[0].nValue = blockReward - governanceReward - operatorReward;

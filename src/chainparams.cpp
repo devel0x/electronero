@@ -64,36 +64,36 @@ class CMainParams : public CChainParams {
 public:
     CMainParams() {
         strNetworkID = CBaseChainParams::MAIN;
-        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
-        nTokenActivationHeight = 2500;
+        strGovernanceWallet = "itc1qg408c5vw9u4s47e5l5v5q0s0u98hprg8w94ffp";
+        nTokenActivationHeight = 1;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
-        consensus.nSubsidyHalvingInterval = 262800; // 3 months
+        consensus.nSubsidyHalvingInterval = 262800; // 3 months but we don't half br anyways this will be removed
         consensus.nDGW3Height = 1;
         consensus.yespowerForkHeight = 1;
-        consensus.sha256ForkHeight = 23904;
+        consensus.sha256ForkHeight = 1;
         consensus.difficultyForkHeight = std::numeric_limits<int>::max();
-        consensus.nextDifficultyForkHeight = 5119;
-        consensus.nextDifficultyFork2Height = 5226;
-        consensus.nextDifficultyFork3Height = 23904; 
-        consensus.nextDifficultyFork4Height = 23904; 
-        consensus.nextDifficultyFork5Height = 23904;
-        consensus.nFeeBurnEndHeight = 210000;
-        consensus.nGovernanceBp = 1000; // 10.00% example
-        consensus.nNodeOpsBp    = 500; // 5.00% example
+        consensus.nextDifficultyForkHeight = 1;
+        consensus.nextDifficultyFork2Height = 1;
+        consensus.nextDifficultyFork3Height = 1; 
+        consensus.nextDifficultyFork4Height = 1; 
+        consensus.nextDifficultyFork5Height = 1;
+        consensus.nFeeBurnEndHeight = 500000;
+        consensus.nGovernanceBp = 7300; 
+        consensus.nNodeOpsBp    = 500; 
         consensus.BIP16Exception = uint256(); // no exception
         consensus.BIP34Height = std::numeric_limits<int>::max(); // disable by default
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = std::numeric_limits<int>::max();
         consensus.BIP66Height = std::numeric_limits<int>::max();
         consensus.CSVHeight = std::numeric_limits<int>::max();
-        consensus.SegwitHeight = 1476;
-        consensus.MinBIP9WarningHeight = 1476; // disable softfork warnings
+        consensus.SegwitHeight = 1;
+        consensus.MinBIP9WarningHeight = 1; // disable softfork warnings
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitYespower = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitEasyBlocks = uint256S("000ffff000000000000000000000000000000000000000000000000000000000");
         consensus.nPowTargetTimespan = 12 * 60 * 60; // = 12 hours worth of blocks
-        consensus.nPowTargetSpacing = 30; // 30 seconds
+        consensus.nPowTargetSpacing = 30; 
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1916; // 95% of 2016
@@ -279,7 +279,7 @@ public:
 class SigNetParams : public CChainParams {
 public:
     explicit SigNetParams(const ArgsManager& args) {
-        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
+        strGovernanceWallet = "itc1qg408c5vw9u4s47e5l5v5q0s0u98hprg8w94ffp";
         std::vector<uint8_t> bin;
         vSeeds.clear();
 
@@ -389,7 +389,7 @@ class CRegTestParams : public CChainParams {
 public:
     explicit CRegTestParams(const ArgsManager& args) {
         strNetworkID =  CBaseChainParams::REGTEST;
-        strGovernanceWallet = "itc1qwccnjw6gz49vlsjvf3f6wvamltmqdykwmh0r4r";
+        strGovernanceWallet = "itc1qg408c5vw9u4s47e5l5v5q0s0u98hprg8w94ffp";
         nTokenActivationHeight = 1;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();

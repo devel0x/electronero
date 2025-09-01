@@ -22,17 +22,9 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     LogPrintf("GetNextWorkRequired: height=%d using %s\n", pindexLast->nHeight,
           (pindexLast->nHeight >= params.yespowerForkHeight ? "Yespower target" : "SHA256 target"));
           
-    if (pindexLast->nHeight + 1 >= 23985) {
+    if (pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
         return DarkGravityWave3Nova(pindexLast, params);
     }
-
-    if (pindexLast->nHeight + 1 >= params.nextDifficultyForkHeight && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight + 59) {
-        return Lwma3(pindexLast, params);
-    }
-    // Activate DGW3 from block 1 (for example)
-    if (pindexLast->nHeight + 1 >= params.nDGW3Height && pindexLast->nHeight + 1 < params.nextDifficultyForkHeight || pindexLast->nHeight + 1 >= params.nextDifficultyFork2Height) {
-        return DarkGravityWave3(pindexLast, params);
-    } 
     
     arith_uint256 limit = UintToArith256(pindexLast->nHeight + 1 >= 23985 ? params.powLimit : (pindexLast->nHeight + 1 >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit);
     LogPrintf("💡 GetNextWorkRequired: powLimit used = %s\n", limit.ToString());
@@ -198,23 +190,11 @@ unsigned int DarkGravityWave3Nova(const CBlockIndex* pindexLast, const Consensus
     }
 
     arith_uint256 bnPowLimit = UintToArith256(
-        (nextHeight >= 24101) ? params.powLimitYespower : (nextHeight >= 24078) ? params.powLimit : (nextHeight >= params.yespowerForkHeight) ? params.powLimitYespower : params.powLimit
+        (nextHeight >= 1) ? params.powLimitYespower : params.powLimit
     );
 
-    if (nextHeight < 5879 && newDifficulty > bnPowLimit) {
+    if (nextHeight <= 1 && newDifficulty > bnPowLimit) {
         newDifficulty = bnPowLimit;
-    }
-
-    if (nextHeight >= 24060 && newDifficulty > bnPowLimit && nextHeight < 24101) {
-        newDifficulty = bnPowLimit;
-    }
-
-    if(nextHeight >= 24101 && nextHeight <= 24102) {
-        newDifficulty = bnPowLimit;
-    }
-
-    if(nextHeight >= 24103 && nextHeight <= 24130) {
-        newDifficulty = UintToArith256(params.powLimitEasyBlocks);
     }
 
     LogPrintf("⛏️ Retargeting at height=%d with DGW3-NOVA\n", pindexLast->nHeight);
@@ -383,43 +363,12 @@ bool CheckProofOfWorkWithHeight(uint256 hash, CBlockHeader block, unsigned int n
         return true;
     }
 
-    if (nHeight >= 5880) {
-        if (fNegative || fOverflow || bnTarget == 0) {
-            LogPrintf("❌ Invalid target format at height %d\n", nHeight);
-            return false;
-        }
-    } else {
-        if (fNegative || fOverflow || bnTarget == 0) {
-            LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
-            return false;
-        }
+    if (fNegative || fOverflow || bnTarget == 0) {
+        LogPrintf("❌ Legacy block rejected: bad nBits or target too easy\n");
+        return false;
     }
 
-    if (nHeight >= 24101) {
-        if(nHeight == 1) {
-            return true; 
-        }
-        LogPrintf("⚡ Using Yespower at height %d\n", nHeight);
-        LogPrintf("🧮 Computed hash: %s\n", hash.ToString());
-        LogPrintf("🎯 Target:        %s\n", bnTarget.ToString());
-        LogPrintf("📏 Comparison:    hash <= target ? %s\n", (UintToArith256(hash) <= bnTarget) ? "✅ YES" : "❌ NO");
-        return CheckYespower(block, bnTarget, nHeight);
-    } else if (nHeight >= params.sha256ForkHeight) {
-        LogPrintf("🔥 Using SHA256 at height %d\n", nHeight);
-        
-        // DO NOT RECOMPUTE THE RESULT
-        arith_uint256 bnHash = UintToArith256(hash);
-        LogPrintf("📏 SHA256 PoW hash: %s\n", hash.ToString());
-        LogPrintf("🎯 Target:         %s\n", bnTarget.ToString());
-
-        if (bnHash > bnTarget) {
-            LogPrintf("❌ hash too high\n");
-            return false;
-        }
-
-        LogPrintf("✅ SHA256 passed at height %d\n", nHeight);
-        return true;
-    } else if (nHeight >= params.yespowerForkHeight) {
+    if (nHeight >= 1) {
         if(nHeight == 1) {
             return true; 
         }

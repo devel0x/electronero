@@ -129,11 +129,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
     
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !ShutdownRequested()) {
         uint256 powHash;
-        if (height >= 24101) {
-            powHash = YespowerHash(block, height);
-        } else if (height >= consensusParams.sha256ForkHeight) {
-            powHash = block.GetHash();
-        } else if (height >= consensusParams.yespowerForkHeight) {
+        if (height >= 1) {
             powHash = YespowerHash(block, height);
         } else {
             powHash = block.GetHash();
@@ -156,11 +152,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& 
         throw JSONRPCError(RPC_INTERNAL_ERROR, "ProcessNewBlock, block not accepted");
     }
 
-    if (height >= 24101) {
-        block_hash = YespowerHash(block, height);
-    } else if (height >= consensusParams.sha256ForkHeight) {
-        block_hash = block.GetHash();
-    } else if (height >= consensusParams.yespowerForkHeight) {
+    if (height >= 1) {
         block_hash = YespowerHash(block, height);
     } else {
         block_hash = block.GetHash();
@@ -709,11 +701,7 @@ static RPCHelpMan getblocktemplate()
             int nHeight = ::ChainActive().Height() + 1;
             const auto& consensus = Params().GetConsensus();
 
-            if (nHeight >= 24101) {
-                hash = YespowerHash(block, nHeight);
-            } else if (nHeight >= consensus.sha256ForkHeight) {
-                hash = block.GetHash();
-            } else if (nHeight >= consensus.yespowerForkHeight) {
+            if (nHeight >= 1) {
                 hash = YespowerHash(block, nHeight);
             } else {
                 hash = block.GetHash();
@@ -980,21 +968,28 @@ static RPCHelpMan getblocktemplate()
     std::vector<unsigned char> vch(ssTx.begin(), ssTx.end());
     result.pushKV("coinbasetxn", HexStr(vch));
     result.pushKV("extranonce_marker", "f000000ff111111f");
+    // Percent constants as basis points (per 10_000)
+    static constexpr int GOVERNANCE_BPS = 7300; // 73.00%
+    static constexpr int OPERATOR_BPS   =  500; // 5.00%
+    static constexpr int BPS_DENOM      = 10000;
     int nHeight = pindexPrev->nHeight + 1;
     const CChainParams& chainparams = Params();
-    bool burn_fees = nHeight >= 24500 && nHeight <= consensusParams.nFeeBurnEndHeight;
-    CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
-    CAmount governanceReward = blockReward / 10;  // 10% governance
-    CAmount operatorReward   = 0;
-    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
-    if (IsValidDestination(opDest)) {
-        operatorReward = blockReward / 20; // 5% node operators
-    }
+    bool burn_fees = nHeight >= 1 && nHeight <= consensusParams.nFeeBurnEndHeight;
     CAmount nFees = 0;
     for (const CAmount& fee : pblocktemplate->vTxFees)
         nFees += fee;
-    // Miner gets remainder (subsidy - governance - operator + fees)
+
     if (!burn_fees) blockReward += nFees;
+    CAmount blockReward = GetBlockSubsidy(nHeight, consensusParams);
+    CAmount governanceReward = (blockReward * GOVERNANCE_BPS) / BPS_DENOM; // 51% governance && 22% development/operations
+    // CAmount governanceReward = blockReward * 73 / 100;  
+    CAmount operatorReward   = 0;
+    CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
+    if (IsValidDestination(opDest)) {
+        operatorReward = (blockReward * OPERATOR_BPS) / BPS_DENOM; // 5% node operators
+        // operatorReward = blockReward * 5 / 100; 
+    }
+    // Miner gets remainder (subsidy - governance - operator)
     CAmount minerReward = blockReward - governanceReward - operatorReward;
     // Provide info to the template
     result.pushKV("coinbasevalue", blockReward);
@@ -1052,11 +1047,7 @@ protected:
         const Consensus::Params& consensus = Params().GetConsensus();
 
         uint256 block_expected_hash;
-        if (nHeight >= 24101) {
-            block_expected_hash = YespowerHash(block, nHeight);
-        } else if (nHeight >= consensus.sha256ForkHeight) {
-            block_expected_hash = block.GetHash();
-        } else if (nHeight >= consensus.yespowerForkHeight) {
+        if (nHeight >= 1) {
             block_expected_hash = YespowerHash(block, nHeight);
         } else {
             block_expected_hash = block.GetHash();
@@ -1099,11 +1090,7 @@ static RPCHelpMan submitblock()
     int nHeight = ::ChainActive().Height() + 1;
     const Consensus::Params& consensus = Params().GetConsensus();
     uint256 hash;
-    if (nHeight >= 24101) {
-        hash = YespowerHash(block, nHeight);
-    } else if (nHeight >= consensus.sha256ForkHeight) {
-        hash = block.GetHash();
-    } else if (nHeight >= consensus.yespowerForkHeight) {
+    if (nHeight >= 1) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash();

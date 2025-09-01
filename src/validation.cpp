@@ -1167,11 +1167,7 @@ static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessa
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= 24101) {
-        hash = YespowerHash(block, nHeight);
-    } else if (nHeight >= consensusParams.sha256ForkHeight) {
-        hash = block.GetHash(); // Legacy SHA256
-    } else if (nHeight >= consensusParams.yespowerForkHeight) {
+    } else if (nHeight >= 1) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // Legacy SHA256
@@ -1258,35 +1254,24 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     double reward;
 
-    if (nHeight == 1) {
-        return 1000000 * COIN; 
-    } else if (nHeight < 24500) {
-        int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-        if (halvings >= 64)
-            return 0;
-        CAmount nSubsidy = 2.5 * COIN;
-        nSubsidy >>= halvings; // Apply halvings
-        return nSubsidy;
+    if (nHeight <= rampUpEnd) {
+        // Linear ramp-up: 0.5 to 1.5 ITC
+        double progress = static_cast<double>(nHeight) / rampUpEnd;
+        reward = 0.5 + (1.5 * progress); // 0.5 → 1.5
+    } else if (nHeight <= peakEnd) {
+        // Flat peak at 1.5
+        reward = 1.5;
     } else {
-        if (nHeight <= rampUpEnd) {
-            // Linear ramp-up: 0.5 to 1.5 ITC
-            double progress = static_cast<double>(nHeight) / rampUpEnd;
-            reward = 0.5 + (1.5 * progress); // 0.5 → 1.5
-        } else if (nHeight <= peakEnd) {
-            // Flat peak at 1.5
-            reward = 1.5;
-        } else {
-            // Exponential decay after peak
-            double decayRate = 0.0000038405;
-            int64_t decayStart = peakEnd;
-            reward = 1.10301990 * std::exp(-decayRate * (nHeight - decayStart));
-        }
-        if (reward < 0.10301990) {
-            reward = 0.10301990;
-        }
-        // Return in satoshis (integer)
-        return static_cast<CAmount>(reward * COIN);
+        // Exponential decay after peak
+        double decayRate = 0.0000038405;
+        int64_t decayStart = peakEnd;
+        reward = 1.10301990 * std::exp(-decayRate * (nHeight - decayStart));
     }
+    if (reward < 0.10301990) {
+        reward = 0.10301990;
+    }
+    // Return in satoshis (integer)
+    return static_cast<CAmount>(reward * COIN);
 }
 
 CAmount GetTotalSubsidy(int nHeight, const Consensus::Params& consensusParams)
@@ -2261,19 +2246,22 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    bool burn_fees = pindex->nHeight + 1 >= 24500 && pindex->nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight;
+    bool burn_fees = pindex->nHeight + 1 >= 1 && pindex->nHeight <= chainparams.GetConsensus().nFeeBurnEndHeight;
     CAmount blockReward = GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
     if (!burn_fees) blockReward += nFees;
     if (block.vtx[0]->GetValueOut() > blockReward) {
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
-
+    
+    static constexpr int GOVERNANCE_BPS = 7300; // 73.00%
+    static constexpr int OPERATOR_BPS   =  500; //  5.00%
+    static constexpr int BPS_DENOM      = 10000;
     const Consensus::Params& consensusParams = chainparams.GetConsensus();
     CTxDestination govDest = DecodeDestination(chainparams.GovernanceWallet());
-    if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(govDest)) {
+    if (pindex->nHeight >= 1 && IsValidDestination(govDest)) {
         CScript govScript = GetScriptForDestination(govDest);
-        CAmount expectedGov = blockReward / 10;
+        CAmount expectedGov = (blockReward * GOVERNANCE_BPS) / BPS_DENOM;
         bool foundGov = false;
         for (const auto& out : block.vtx[0]->vout) {
             if (out.scriptPubKey == govScript) {
@@ -2292,9 +2280,9 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     }
 
     CTxDestination opDest = DecodeDestination(chainparams.NodeOperatorWallet());
-    if (pindex->nHeight >= consensusParams.sha256ForkHeight && IsValidDestination(opDest)) {
+    if (pindex->nHeight >= 1 && IsValidDestination(opDest)) {
         CScript opScript = GetScriptForDestination(opDest);
-        CAmount expectedOp = blockReward / 20;
+        CAmount expectedGov = (blockReward * OPERATOR_BPS) / BPS_DENOM;
         bool foundOp = false;
         for (const auto& out : block.vtx[0]->vout) {
             if (out.scriptPubKey == opScript) {
@@ -3442,11 +3430,7 @@ static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& st
     uint256 hash;
     if (nHeight == 0) {
         hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= 24101) {
-        hash = YespowerHash(block, nHeight);
-    }  else if (nHeight >= consensusParams.sha256ForkHeight) {
-        hash = block.GetHash(); // force legacy SHA256
-    } else if (nHeight >= consensusParams.yespowerForkHeight) {
+    } else if (nHeight >= 1) {
         hash = YespowerHash(block, nHeight);
     } else {
         hash = block.GetHash(); // SHA256

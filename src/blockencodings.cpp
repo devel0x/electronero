@@ -177,12 +177,12 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
 ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, const CBlockIndex* pindex) {
     assert(!header.IsNull());
 
-    int realHeight = pindex ? pindex->nHeight : 0; // ✅ No +1
+    int realHeight = pindex ? pindex->nHeight : 0; 
     const Consensus::Params& params = Params().GetConsensus();
     uint256 hash;
 
     if (realHeight >= params.yespowerForkHeight) {
-        hash = YespowerHash(header, realHeight); // ✅ Right height
+        hash = YespowerHash(header, realHeight); 
     } else {
         hash = header.GetHash();
     }
