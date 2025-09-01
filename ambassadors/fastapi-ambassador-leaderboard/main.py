@@ -339,9 +339,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
     wallets: list[dict[str, Any]] = []
     data = await _get_cached_data()
     rows = data.get("rows", [])
+
+    # Build lookup maps by email AND telegram (normalized)
     email_map: dict[str, dict[str, float]] = {}
+    tg_map: dict[str, dict[str, float]] = {}
+
     for row in rows:
-        email = str(row.get("email", "")).strip().lower()
         try:
             pts = float(row.get("points", 0))
         except Exception:
@@ -350,33 +353,55 @@ async def _all_wallets() -> list[dict[str, Any]]:
             rew = float(row.get("pending_reward", 0))
         except Exception:
             rew = 0.0
-        if email:
-            email_map[email] = {"points": pts, "pending_reward": rew}
+
+        stats = {"points": pts, "pending_reward": rew}
+
+        # normalized email key
+        eml = str(row.get("email", "")).strip().lower()
+        if eml:
+            email_map[eml] = stats
+
+        # normalized telegram key: lowercase, strip @
+        tg = str(row.get("telegram", "")).strip()
+        if tg:
+            tg_norm = tg.lstrip("@").lower()
+            if tg_norm:
+                tg_map[tg_norm] = stats
 
     pad_map = await redis_client.hgetall("score_pad")
+
     keys = await redis_client.keys("user:*")
     for key in keys:
-        email = key.split(":", 1)[1]
+        email = key.split(":", 1)[1]  # already stored lowercased in your code
         udata = await redis_client.hgetall(key)
-        tele = udata.get("telegram", "")
-        if tele and not tele.startswith("@"):
-            tele = f"@{tele.lstrip('@')}"
-        stats = email_map.get(email, {"points": 0.0, "pending_reward": 0.0})
-        pad_val = 0.0
+
+        # show telegram with leading @ for UI, but use normalized for lookup
+        tele_raw = udata.get("telegram", "")
+        tele_norm = tele_raw.lstrip("@").lower() if tele_raw else ""
+        tele_display = f"@{tele_norm}" if tele_norm else ""
+
+        # Prefer email join; if missing, fall back to telegram join
+        stats = email_map.get(email) or (tg_map.get(tele_norm) if tele_norm else None)
+        if not stats:
+            stats = {"points": 0.0, "pending_reward": 0.0}
+
+        # padding is keyed by normalized email (as you already do)
         try:
             pad_val = float(pad_map.get(email, 0.0))
         except Exception:
             pad_val = 0.0
+
         wallets.append(
             {
                 "email": email,
                 "wallet": udata.get("wallet", ""),
-                "telegram": tele,
+                "telegram": tele_display,
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
             }
         )
+
     return wallets
 
 
