@@ -885,6 +885,31 @@ async def api_admin_wallets(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "wallets": wallets})
 
 
+@app.get("/api/admin/validate_wallets")
+async def api_admin_validate_wallets(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if not _daemon_ready():
+        return JSONResponse({"ok": False, "error": "daemon_unavailable"}, status_code=503)
+    wallets = await _all_wallets()
+    bad: list[dict[str, str]] = []
+    for w in wallets:
+        addr = w.get("wallet") or ""
+        email = w.get("email", "")
+        tele = w.get("telegram", "")
+        if not addr:
+            bad.append({"email": email, "telegram": tele, "wallet": addr})
+            continue
+        try:
+            cp = _run_cli("validateaddress", addr)
+            data = json.loads(cp.stdout or "{}")
+            if not data.get("isvalid", False):
+                bad.append({"email": email, "telegram": tele, "wallet": addr})
+        except Exception:
+            bad.append({"email": email, "telegram": tele, "wallet": addr})
+    return JSONResponse({"ok": True, "invalid": bad})
+
+
 @app.get("/api/admin/export")
 async def api_admin_export(
     request: Request, fmt: str = Query("json"), ghost: str = Query("")
