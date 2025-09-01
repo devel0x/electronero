@@ -65,6 +65,9 @@
             <a href="#" id="export-json" class="btn btn-outline-light btn-sm">Export JSON</a>
             <a href="#" id="export-csv" class="btn btn-outline-light btn-sm">Export CSV</a>
         </div>
+        <form method="post" action="/admin/pbst" target="_blank" class="mb-2">
+            <button class="btn btn-outline-light btn-sm">Export PBST</button>
+        </form>
         <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset"></form>
         <div class="d-flex gap-2 mb-2">
             <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
@@ -105,11 +108,21 @@
             <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
             <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
         </div>
-        {% for email, urls in posts.items() %}
+        {% for email, pdata in posts.items() %}
         <div class="mb-3">
-            <h2 class="h6">{{ email }}</h2>
+            <h2 class="h6">
+                {{ email }}
+                {% if pdata.telegram %}
+                    –
+                    {% if pdata.tg_link %}
+                    <a href="{{ pdata.tg_link }}" target="_blank">{{ pdata.telegram }}</a>
+                    {% else %}
+                    {{ pdata.telegram }}
+                    {% endif %}
+                {% endif %}
+            </h2>
             <ul class="list-group list-group-flush">
-                {% for p in urls %}
+                {% for p in pdata.urls %}
                 <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
                         <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
