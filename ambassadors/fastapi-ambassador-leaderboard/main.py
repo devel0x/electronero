@@ -162,7 +162,7 @@ def _get_pool_balance() -> float:
         data = json.loads(cp.stdout)
         if data.get("success"):
             base_amount = float(data.get("total_amount", 0.0))
-            ops_amount = base_amount * 2200 / 10000
+            ops_amount = base_amount * 3000 / 10000
             true_amount = base_amount - ops_amount
             return true_amount
     except subprocess.CalledProcessError as e:
@@ -173,7 +173,7 @@ def _get_pool_balance() -> float:
         try:
             cp = _run_cli(f"-rpcwallet={RPC_WALLET}", "getbalance")
             base_amount = float(cp.stdout.strip())
-            ops_amount = base_amount * 2200 / 10000
+            ops_amount = base_amount * 3000 / 10000
             true_amount = base_amount - ops_amount
             return true_amount
         except Exception as e:
@@ -181,7 +181,7 @@ def _get_pool_balance() -> float:
     try:
         cp = _run_cli("getreceivedbyaddress", addr, "0")
         base_amount = float(cp.stdout.strip())
-        ops_amount = base_amount * 2200 / 10000
+        ops_amount = base_amount * 3000 / 10000
         true_amount = base_amount - ops_amount
         return true_amount
     except Exception as e:
