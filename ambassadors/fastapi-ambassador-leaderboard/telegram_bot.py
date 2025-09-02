@@ -361,11 +361,16 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     url = context.args[0].strip()
     email = context.user_data.get("email")
-    if url:
+    if not url:
+        await update.message.reply_text("Provide a valid URL.")
+        return
+    pending = await redis_client.lrange(f"posts:{email}", 0, -1)
+    verified = await redis_client.smembers(f"posts_verified:{email}")
+    if url not in {str(p) for p in pending} and url not in {str(v) for v in verified}:
         await redis_client.lpush(f"posts:{email}", url)
         await update.message.reply_text("🧾 Post submitted for verification.")
     else:
-        await update.message.reply_text("Provide a valid URL.")
+        await update.message.reply_text("⚠️ This link was already submitted.")
 
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

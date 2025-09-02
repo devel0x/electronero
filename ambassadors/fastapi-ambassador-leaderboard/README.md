@@ -4,7 +4,8 @@ This project is a small FastAPI application that serves an ambassador leaderboar
 
 The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
 
-Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
+Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Pending posts now show both the submitter's email and a link to their Telegram handle. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
+Duplicate links are ignored—each ambassador can only submit a given URL once.
 
 A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
 
