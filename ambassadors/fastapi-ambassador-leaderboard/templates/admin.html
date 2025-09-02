@@ -103,6 +103,7 @@
         <h1 class="h5">Submitted Posts</h1>
         <form id="posts-bulk-form" method="post" action="/admin/posts/verify"></form>
         <div class="d-flex gap-2 mb-2">
+            <button id="posts-select-all" type="button" class="btn btn-outline-light btn-sm">Select All</button>
             <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
             <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
         </div>
@@ -267,6 +268,11 @@
         } catch (err) {
             alert('Validation failed');
         }
+    });
+    document.getElementById('posts-select-all').addEventListener('click', function() {
+        document.querySelectorAll('input[form="posts-bulk-form"][type="checkbox"]').forEach(cb => {
+            cb.checked = true;
+        });
     });
 </script>
 </body>
