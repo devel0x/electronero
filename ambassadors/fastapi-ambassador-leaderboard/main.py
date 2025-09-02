@@ -708,9 +708,30 @@ async def verify_form(request: Request) -> Any:
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
-    posts = await redis_client.lrange(f"posts:{email}", 0, -1)
+    email_key = email.strip().lower()
+    urls = await redis_client.lrange(f"posts:{email_key}", 0, -1)
+    verified = await redis_client.smembers(f"posts_verified:{email_key}")
+    rejected = await redis_client.smembers(f"posts_rejected:{email_key}")
+    safe_verified = {str(v).strip() for v in verified}
+    safe_rejected = {str(v).strip() for v in rejected}
+    submissions: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for u in urls:
+        url = str(u).strip()
+        if not url:
+            continue
+        if url in safe_verified:
+            status = "verified"
+        elif url in safe_rejected:
+            status = "rejected"
+        else:
+            status = "pending"
+        submissions.append({"url": url, "status": status})
+        seen.add(url)
+    for url in safe_rejected - seen:
+        submissions.append({"url": url, "status": "rejected"})
     return templates.TemplateResponse(
-        "verify.html", {"request": request, "posts": posts, "error": ""}
+        "verify.html", {"request": request, "submissions": submissions}
     )
 
 
@@ -719,9 +740,11 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
+    email_key = email.strip().lower()
     url_clean = url.strip()
     if url_clean:
-        await redis_client.lpush(f"posts:{email}", url_clean)
+        await redis_client.lpush(f"posts:{email_key}", url_clean)
+        await redis_client.srem(f"posts_rejected:{email_key}", url_clean)
     return RedirectResponse("/verify", status_code=303)
 
 
@@ -874,6 +897,31 @@ async def api_admin_wallets(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "wallets": wallets})
 
 
+@app.get("/api/admin/validate_wallets")
+async def api_admin_validate_wallets(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if not _daemon_ready():
+        return JSONResponse({"ok": False, "error": "daemon_unavailable"}, status_code=503)
+    wallets = await _all_wallets()
+    bad: list[dict[str, str]] = []
+    for w in wallets:
+        addr = w.get("wallet") or ""
+        email = w.get("email", "")
+        tele = w.get("telegram", "")
+        if not addr:
+            bad.append({"email": email, "telegram": tele, "wallet": addr})
+            continue
+        try:
+            cp = _run_cli("validateaddress", addr)
+            data = json.loads(cp.stdout or "{}")
+            if not data.get("isvalid", False):
+                bad.append({"email": email, "telegram": tele, "wallet": addr})
+        except Exception:
+            bad.append({"email": email, "telegram": tele, "wallet": addr})
+    return JSONResponse({"ok": True, "invalid": bad})
+
+
 @app.get("/api/admin/export")
 async def api_admin_export(
     request: Request, fmt: str = Query("json"), ghost: str = Query("")
@@ -922,7 +970,7 @@ async def admin_post_verify(
     selected: list[str] = Form([]),
     email: str | None = Form(None),
     url: str | None = Form(None),
-    verify_all: str | None = Form(None),
+    verify_all: bool = Form(False),
 ) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
@@ -948,6 +996,7 @@ async def admin_post_verify(
                 u = _clean_url(u)
                 if u:
                     pipe.sadd(f"posts_verified:{eml_key}", u)
+                    pipe.srem(f"posts_rejected:{eml_key}", u)
 
     else:
         # Selected checkboxes and/or single email+url
@@ -963,6 +1012,7 @@ async def admin_post_verify(
             u = _clean_url(u)
             if eml_key and u:
                 pipe.sadd(f"posts_verified:{eml_key}", u)
+                pipe.srem(f"posts_rejected:{eml_key}", u)
 
     if pipe.command_stack:
         await pipe.execute()
@@ -980,6 +1030,7 @@ async def admin_post_reject(
     url_clean = str(url).strip()
     await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
+    await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
 
 
