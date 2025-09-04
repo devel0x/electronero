@@ -163,7 +163,8 @@ def _get_pool_balance() -> float:
         if data.get("success"):
             base_amount = float(data.get("total_amount", 0.0))
             ops_amount = base_amount * 3000 / 10000
-            true_amount = base_amount - ops_amount
+            operations_reserve = 300
+            true_amount = base_amount - ops_amount - operations_reserve
             return true_amount
     except subprocess.CalledProcessError as e:
         print(f"[pool_balance] scantxoutset failed: {e.stderr.strip()}")
@@ -174,7 +175,8 @@ def _get_pool_balance() -> float:
             cp = _run_cli(f"-rpcwallet={RPC_WALLET}", "getbalance")
             base_amount = float(cp.stdout.strip())
             ops_amount = base_amount * 3000 / 10000
-            true_amount = base_amount - ops_amount
+            operations_reserve = 300
+            true_amount = base_amount - ops_amount - operations_reserve
             return true_amount
         except Exception as e:
             print(f"[pool_balance] getbalance (wallet) error: {e}")
@@ -182,7 +184,8 @@ def _get_pool_balance() -> float:
         cp = _run_cli("getreceivedbyaddress", addr, "0")
         base_amount = float(cp.stdout.strip())
         ops_amount = base_amount * 3000 / 10000
-        true_amount = base_amount - ops_amount
+        operations_reserve = 300
+        true_amount = base_amount - ops_amount - operations_reserve
         return true_amount
     except Exception as e:
         print(f"[pool_balance] getreceivedbyaddress error: {e}")
