@@ -71,33 +71,39 @@
             <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
             <button form="pad-bulk-form" class="btn btn-danger btn-sm" name="reset_all" value="1" type="submit">Reset All</button>
         </div>
-        <ul class="list-group list-group-flush">
+        <div class="row row-cols-1 row-cols-md-2 g-3">
             {% for w in wallets %}
-            <li class="list-group-item bg-transparent text-light">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center gap-2">
-                        <input class="form-check-input" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
-                        <span>{{ w.email }} – {{ w.wallet if w.wallet else '—' }} – {{ w.pending_reward }} – {{ w.telegram if w.telegram else '—' }} – pad: {{ w.pad }}</span>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <form method="post" action="/admin/telegram/update" class="d-flex gap-1">
-                            <input type="hidden" name="email" value="{{ w.email }}">
-                            <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
-                            <button class="btn btn-primary btn-sm">Update</button>
-                        </form>
-                        <form method="post" action="/admin/scorepad" class="d-flex gap-1">
-                            <input type="hidden" name="email" value="{{ w.email }}">
-                            <input type="number" step="1" name="pad" value="{{ w.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
-                            <button class="btn btn-secondary btn-sm">Pad</button>
-                        </form>
+            <div class="col">
+                <div class="card h-100 user-card text-light">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="card-title mb-0">{{ w.email }}</h5>
+                            <input class="form-check-input mt-1" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
+                        </div>
+                        <p class="mb-1"><strong>Wallet:</strong> {{ w.wallet if w.wallet else '—' }}</p>
+                        <p class="mb-1"><strong>Pending Reward:</strong> {{ w.pending_reward }}</p>
+                        <p class="mb-1"><strong>Telegram:</strong> {{ w.telegram if w.telegram else '—' }}</p>
+                        <p class="mb-2"><strong>Pad:</strong> {{ w.pad }}</p>
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            <form method="post" action="/admin/telegram/update" class="d-flex gap-1 flex-grow-1">
+                                <input type="hidden" name="email" value="{{ w.email }}">
+                                <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
+                                <button class="btn btn-primary btn-sm">Update</button>
+                            </form>
+                            <form method="post" action="/admin/scorepad" class="d-flex gap-1">
+                                <input type="hidden" name="email" value="{{ w.email }}">
+                                <input type="number" step="1" name="pad" value="{{ w.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
+                                <button class="btn btn-secondary btn-sm">Pad</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
-            </li>
+            </div>
             {% endfor %}
-            {% if not wallets %}
-            <li class="list-group-item bg-transparent text-muted">No wallets</li>
-            {% endif %}
-        </ul>
+        </div>
+        {% if not wallets %}
+        <p class="text-muted">No wallets</p>
+        {% endif %}
     </div>
     <div id="posts" class="glass-card p-3">
         <h1 class="h5">Submitted Posts</h1>
