@@ -66,6 +66,10 @@
             <a href="#" id="export-csv" class="btn btn-outline-light btn-sm">Export CSV</a>
             <button id="validate-wallets" class="btn btn-outline-light btn-sm">Validate Wallets</button>
         </div>
+        <form method="post" action="/admin/pbst" target="_blank" class="mb-2 d-flex gap-2">
+            <input type="password" name="export_key" placeholder="GHOST_EXPORT_KEY" class="form-control form-control-sm" required>
+            <button class="btn btn-outline-light btn-sm">Export PBST</button>
+        </form>
         <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset"></form>
         <div class="d-flex gap-2 mb-2">
             <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>

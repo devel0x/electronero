@@ -9,7 +9,7 @@ Duplicate links are ignored—each ambassador can only submit a given URL once.
 
 A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
 
-The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, and Telegram handles as JSON or CSV files. Downloads prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable.
+The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, and Telegram handles as JSON or CSV files. All exports, including the PBST generator, prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable. The PBST generator strips any leading `Interchained:` prefix from wallet addresses, normalizes them to lowercase, and uses `interchained-cli` to build a partially signed transaction paying each ambassador's pending reward to their registered wallet for offline signing.
 
 Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
 
@@ -36,7 +36,7 @@ Ambassadors may submit governance proposals and vote yes or no on active items. 
     - Optionally set `AMBASSADOR_POOL_ADDRESS` so the app can fetch the address balance via `interchained-cli` and show pending rewards.
     - Ensure `REGISTRATIONS_CSV` points to a CSV listing authorized ambassador emails.
     - Set `REDIS_URL` if your Redis server differs from the default `redis://localhost:6379/0`.
-    - Set `GHOST_EXPORT_KEY` to a secret password required for JSON/CSV exports.
+    - Set `GHOST_EXPORT_KEY` to a secret password required for JSON/CSV exports and PBST generation.
 3. **Run the server**
    ```bash
    uvicorn main:app --reload
@@ -66,6 +66,7 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /api/admin/wallets` – JSON list of all registered emails, wallets, Telegram handles, and pending rewards (admin only).
 - `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
 - `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, and Telegram handles (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/pbst` – generate a PBST paying pending rewards to each registered wallet (admin, requires `GHOST_EXPORT_KEY`).
 
 If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app tracks the pool's balance and displays each ambassador's pending reward in both the HTML table and the JSON API response.
 

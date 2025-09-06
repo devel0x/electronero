@@ -549,6 +549,14 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+def _normalize_wallet(addr: str) -> str:
+    a = addr.strip()
+    if not a:
+        return ""
+    a = re.sub(r'^interchained:\s*', '', a, flags=re.I)
+    return a.lower()
+
+
 def _normalize_telegram(handle: str) -> str:
     h = handle.strip()
     if not h:
@@ -1056,6 +1064,49 @@ async def admin_proposal_reject(
     await redis_client.hset(f"proposal:{proposal_id.strip()}", "status", "rejected")
     return RedirectResponse("/admin", status_code=303)
 
+
+
+@app.post("/admin/pbst")
+async def admin_export_pbst(
+    request: Request, export_key: str = Form(...)
+) -> Response:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    expected = os.environ.get("GHOST_EXPORT_KEY", "")
+    if not expected:
+        return JSONResponse({"ok": False, "error": "missing_export_key"}, status_code=500)
+    if export_key.strip() != expected:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=403)
+    if not _daemon_ready():
+        return JSONResponse({"ok": False, "error": "daemon_unavailable"}, status_code=500)
+    wallets = await _all_wallets()
+    outputs: dict[str, float] = {}
+    for w in wallets:
+        addr = _normalize_wallet(str(w.get("wallet", "")))
+        try:
+            amt = float(w.get("pending_reward", 0))
+        except Exception:
+            amt = 0.0
+        if addr and amt > 0:
+            outputs[addr] = amt
+    if not outputs:
+        return JSONResponse({"ok": False, "error": "no_rewards"}, status_code=400)
+    try:
+        cp = _run_cli("walletcreatefundedpsbt", "[]", json.dumps(outputs))
+        data = json.loads(cp.stdout)
+        psbt = data.get("psbt")
+        if not psbt:
+            raise RuntimeError("no psbt in response")
+        filename = f"pbst_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.psbt"
+        return Response(
+            psbt,
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except subprocess.CalledProcessError as e:
+        return JSONResponse({"ok": False, "error": e.stderr.strip()}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 @app.post("/admin/telegram/update")
 async def admin_telegram_update(
