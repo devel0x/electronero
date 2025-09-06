@@ -97,10 +97,25 @@
         </form>
         <h2 class="h5">Your submissions</h2>
         <ul class="list-group list-group-flush">
-            {% for u in posts %}
-            <li class="list-group-item bg-transparent"><a href="{{ u }}" target="_blank">{{ u }}</a></li>
+            {% for u in pending %}
+            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                <a href="{{ u }}" target="_blank">{{ u }}</a>
+                <span class="badge bg-secondary">pending</span>
+            </li>
             {% endfor %}
-            {% if not posts %}
+            {% for u in verified %}
+            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                <a href="{{ u }}" target="_blank">{{ u }}</a>
+                <span class="badge bg-success">verified</span>
+            </li>
+            {% endfor %}
+            {% for u in rejected %}
+            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                <a href="{{ u }}" target="_blank">{{ u }}</a>
+                <span class="badge bg-danger">rejected</span>
+            </li>
+            {% endfor %}
+            {% if not pending and not verified and not rejected %}
             <li class="list-group-item bg-transparent text-muted">No posts submitted</li>
             {% endif %}
         </ul>

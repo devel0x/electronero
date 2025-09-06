@@ -389,7 +389,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
         # show telegram with leading @ for UI, but use normalized for lookup
         tele_raw = udata.get("telegram", "")
-        tele_norm = tele_raw.lstrip("@").lower() if tele_raw else ""
+        tele_norm = str(tele_raw).strip().lstrip("@").lower()
         tele_display = f"@{tele_norm}" if tele_norm else ""
 
         # Prefer email join; if missing, fall back to telegram join
@@ -408,6 +408,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "email": email,
                 "wallet": udata.get("wallet", ""),
                 "telegram": tele_display,
+                "tg_link": f"https://t.me/{tele_norm}" if tele_norm else "",
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
@@ -433,10 +434,10 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
         ]
         if pending:
             udata = await redis_client.hgetall(f"user:{email}")
-            tele = udata.get("telegram", "")
-            if tele and not tele.startswith("@"):
-                tele = f"@{tele.lstrip('@')}"
-            tg_link = f"https://t.me/{tele.lstrip('@')}" if tele else ""
+            tele_raw = udata.get("telegram", "")
+            tele_norm = str(tele_raw).strip().lstrip("@").lower()
+            tele = f"@{tele_norm}" if tele_norm else ""
+            tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
             posts[email] = {"urls": pending, "telegram": tele, "tg_link": tg_link}
     return posts
 
@@ -553,7 +554,7 @@ def _normalize_telegram(handle: str) -> str:
     h = handle.strip()
     if not h:
         return ""
-    h = h.lstrip("@")
+    h = h.lstrip("@").lower()
     return f"@{h}"
 
 # serve /favicon.ico at the root
@@ -725,9 +726,18 @@ async def verify_form(request: Request) -> Any:
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
-    posts = await redis_client.lrange(f"posts:{email}", 0, -1)
+    pending = await redis_client.lrange(f"posts:{email}", 0, -1)
+    verified = await redis_client.smembers(f"posts_verified:{email}")
+    rejected = await redis_client.smembers(f"posts_rejected:{email}")
     return templates.TemplateResponse(
-        "verify.html", {"request": request, "posts": posts, "error": ""}
+        "verify.html",
+        {
+            "request": request,
+            "pending": pending,
+            "verified": verified,
+            "rejected": rejected,
+            "error": "",
+        },
     )
 
 
@@ -744,6 +754,7 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
             url_clean not in {str(p) for p in pending}
             and url_clean not in {str(v) for v in verified}
         ):
+            await redis_client.srem(f"posts_rejected:{email}", url_clean)
             await redis_client.lpush(f"posts:{email}", url_clean)
     return RedirectResponse("/verify", status_code=303)
 
@@ -996,6 +1007,7 @@ async def admin_post_verify(
                 u = _clean_url(u)
                 if u:
                     pipe.sadd(f"posts_verified:{eml_key}", u)
+                    pipe.srem(f"posts_rejected:{eml_key}", u)
 
     else:
         # Selected checkboxes and/or single email+url
@@ -1011,6 +1023,7 @@ async def admin_post_verify(
             u = _clean_url(u)
             if eml_key and u:
                 pipe.sadd(f"posts_verified:{eml_key}", u)
+                pipe.srem(f"posts_rejected:{eml_key}", u)
 
     if pipe.command_stack:
         await pipe.execute()
@@ -1028,6 +1041,7 @@ async def admin_post_reject(
     url_clean = str(url).strip()
     await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
+    await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
 
 

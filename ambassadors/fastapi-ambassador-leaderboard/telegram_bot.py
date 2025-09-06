@@ -19,6 +19,7 @@ from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegr
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+HASHRATE_API = "https://explorer.interchained.org/api/mining/hashrate"
 
 # Conversation states
 WAITING_EMAIL = 0
@@ -366,7 +367,10 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
-    if url not in {str(p) for p in pending} and url not in {str(v) for v in verified}:
+    pending_set = {str(p) for p in pending}
+    verified_set = {str(v) for v in verified}
+    if url not in pending_set and url not in verified_set:
+        await redis_client.srem(f"posts_rejected:{email}", url)
         await redis_client.lpush(f"posts:{email}", url)
         await update.message.reply_text("🧾 Post submitted for verification.")
     else:
@@ -391,6 +395,22 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     for row in rows:
         lines.append(f"{row.get('rank')}. {row.get('name')} - {row.get('points')} pts")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+
+
+async def hashrate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(HASHRATE_API)
+            resp.raise_for_status()
+            data = resp.json().get("1Day", {})
+        val = data.get("val")
+        unit = data.get("unitAbbreviation") or data.get("unit")
+        if val is None or not unit:
+            raise ValueError("unexpected API response")
+        message = f"24h average network hashrate: {val} {unit}/s"
+    except Exception as exc:
+        message = f"Failed to fetch hashrate: {exc}"
+    await update.message.reply_text(message)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -470,6 +490,7 @@ def main() -> None:
     application.add_handler(CommandHandler("apply", apply_task))
     application.add_handler(CommandHandler("verify", verify))
     application.add_handler(CommandHandler("leaderboard", leaderboard))
+    application.add_handler(CommandHandler("hashrate", hashrate))
     application.add_handler(CommandHandler("logout", logout))
     application.add_error_handler(on_error)
 
