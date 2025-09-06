@@ -82,7 +82,13 @@
                         </div>
                         <p class="mb-1"><strong>Wallet:</strong> {{ w.wallet if w.wallet else '—' }}</p>
                         <p class="mb-1"><strong>Pending Reward:</strong> {{ w.pending_reward }}</p>
-                        <p class="mb-1"><strong>Telegram:</strong> {{ w.telegram if w.telegram else '—' }}</p>
+                        <p class="mb-1"><strong>Telegram:</strong>
+                            {% if w.tg_link %}
+                                <a href="{{ w.tg_link }}" target="_blank" class="link-light">{{ w.telegram }}</a>
+                            {% else %}
+                                {{ w.telegram if w.telegram else '—' }}
+                            {% endif %}
+                        </p>
                         <p class="mb-2"><strong>Pad:</strong> {{ w.pad }}</p>
                         <div class="d-flex flex-column flex-sm-row gap-2">
                             <form method="post" action="/admin/telegram/update" class="d-flex gap-1 flex-grow-1">

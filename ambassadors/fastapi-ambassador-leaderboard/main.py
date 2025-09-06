@@ -389,7 +389,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
         # show telegram with leading @ for UI, but use normalized for lookup
         tele_raw = udata.get("telegram", "")
-        tele_norm = tele_raw.lstrip("@").lower() if tele_raw else ""
+        tele_norm = str(tele_raw).strip().lstrip("@").lower()
         tele_display = f"@{tele_norm}" if tele_norm else ""
 
         # Prefer email join; if missing, fall back to telegram join
@@ -408,6 +408,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "email": email,
                 "wallet": udata.get("wallet", ""),
                 "telegram": tele_display,
+                "tg_link": f"https://t.me/{tele_norm}" if tele_norm else "",
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
@@ -433,10 +434,10 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
         ]
         if pending:
             udata = await redis_client.hgetall(f"user:{email}")
-            tele = udata.get("telegram", "")
-            if tele and not tele.startswith("@"):
-                tele = f"@{tele.lstrip('@')}"
-            tg_link = f"https://t.me/{tele.lstrip('@')}" if tele else ""
+            tele_raw = udata.get("telegram", "")
+            tele_norm = str(tele_raw).strip().lstrip("@").lower()
+            tele = f"@{tele_norm}" if tele_norm else ""
+            tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
             posts[email] = {"urls": pending, "telegram": tele, "tg_link": tg_link}
     return posts
 
@@ -553,7 +554,7 @@ def _normalize_telegram(handle: str) -> str:
     h = handle.strip()
     if not h:
         return ""
-    h = h.lstrip("@")
+    h = h.lstrip("@").lower()
     return f"@{h}"
 
 # serve /favicon.ico at the root
