@@ -1,2 +1,9 @@
 .bg-bronze { background-color: #cd7f32 !important; color: #0b0b0b !important; }
 /* room for brand tweaks */
+
+.user-card {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+}
