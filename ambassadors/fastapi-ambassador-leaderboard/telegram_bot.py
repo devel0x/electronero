@@ -164,6 +164,7 @@ async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
             "password": _hash_password(password),
             "wallet": wallet,
             "telegram": _normalize_telegram(update.effective_user.username or ""),
+            "verified": "0",
         },
     )
     context.user_data["authenticated"] = True
@@ -252,6 +253,7 @@ async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
             "password": _hash_password(password),
             "wallet": wallet,
             "telegram": telegram or _normalize_telegram(update.effective_user.username or ""),
+            "verified": "0",
         },
     )
     context.user_data["authenticated"] = True
