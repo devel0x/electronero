@@ -384,12 +384,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
     keys = await redis_client.keys("user:*")
     for key in keys:
-        email = key.split(":", 1)[1]  # already stored lowercased in your code
+        email = key.split(":", 1)[1]  # already stored lowercased
         udata = await redis_client.hgetall(key)
 
         # show telegram with leading @ for UI, but use normalized for lookup
         tele_raw = udata.get("telegram", "")
-        tele_norm = tele_raw.lstrip("@").lower() if tele_raw else ""
+        tele_norm = str(tele_raw).strip().lstrip("@").lower()
         tele_display = f"@{tele_norm}" if tele_norm else ""
 
         # Prefer email join; if missing, fall back to telegram join
@@ -403,14 +403,25 @@ async def _all_wallets() -> list[dict[str, Any]]:
         except Exception:
             pad_val = 0.0
 
+        # verification: check redis for verified posts or tasks
+        verified_posts = await redis_client.scard(f"posts_verified:{email}")
+        task_statuses = await redis_client.hvals(f"tasks:{email}")
+        task_verified = any(v == "verified" for v in task_statuses)
+        is_verified = verified_posts > 0 or task_verified or str(udata.get("verified")) == "1"
+        # persist computed status
+        await redis_client.hset(f"user:{email}", "verified", int(is_verified))
+
         wallets.append(
             {
                 "email": email,
                 "wallet": udata.get("wallet", ""),
                 "telegram": tele_display,
+                "tg_link": f"https://t.me/{tele_norm}" if tele_norm else "",
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
+                "verified": is_verified,
+                "verified_posts": verified_posts,
             }
         )
 
@@ -418,7 +429,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
 
 async def _all_posts() -> dict[str, dict[str, Any]]:
-    """Return pending posts grouped by user email with Telegram info."""
+    """Return pending posts grouped by user email with Telegram/pad info."""
     posts: dict[str, dict[str, Any]] = {}
     keys = await redis_client.keys("posts:*")
     for key in keys:
@@ -433,11 +444,18 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
         ]
         if pending:
             udata = await redis_client.hgetall(f"user:{email}")
-            tele = udata.get("telegram", "")
-            if tele and not tele.startswith("@"):
-                tele = f"@{tele.lstrip('@')}"
-            tg_link = f"https://t.me/{tele.lstrip('@')}" if tele else ""
-            posts[email] = {"urls": pending, "telegram": tele, "tg_link": tg_link}
+            tele_raw = udata.get("telegram", "")
+            tele_norm = str(tele_raw).strip().lstrip("@").lower()
+            tele = f"@{tele_norm}" if tele_norm else ""
+            tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
+            pad_val = int(udata.get("pad", 0) or 0)
+            posts[email] = {
+                "urls": pending,
+                "telegram": tele,
+                "tg_link": tg_link,
+                "pad": pad_val,
+                "count": len(pending),
+            }
     return posts
 
 
@@ -553,7 +571,7 @@ def _normalize_telegram(handle: str) -> str:
     h = handle.strip()
     if not h:
         return ""
-    h = h.lstrip("@")
+    h = h.lstrip("@").lower()
     return f"@{h}"
 
 # serve /favicon.ico at the root
@@ -660,6 +678,7 @@ async def register(
             "password": _hash_password(password),
             "wallet": wallet.strip(),
             "telegram": _normalize_telegram(telegram),
+            "verified": 0,
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
@@ -939,12 +958,22 @@ async def api_admin_export(
             "telegram": w.get("telegram", ""),
             "points": w.get("points", 0.0),
             "pending_reward": float(w.get("pending_reward", 0.0)),
+            "verified": bool(w.get("verified", False)),
+            "posts": int(w.get("verified_posts", 0)),
         }
         for w in wallets
     ]
     if fmt.lower() == "csv":
         output = io.StringIO()
-        fieldnames = ["email", "wallet", "telegram", "points", "pending_reward"]
+        fieldnames = [
+            "email",
+            "wallet",
+            "telegram",
+            "points",
+            "pending_reward",
+            "verified",
+            "posts",
+        ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(export_rows)
@@ -980,6 +1009,7 @@ async def admin_post_verify(
         return str(v).strip().encode("utf-8", "ignore").decode("utf-8", "ignore")
 
     pipe = redis_client.pipeline()
+    touched_emails: set[str] = set()
 
     if verify_all:
         # Works with BOTH shapes:
@@ -988,6 +1018,8 @@ async def admin_post_verify(
         posts = await _all_posts()
         for eml, entries in posts.items():
             eml_key = eml.strip().lower()
+            if eml_key:
+                touched_emails.add(eml_key)
             for entry in entries:
                 if isinstance(entry, dict):
                     u = entry.get("url", "")
@@ -1011,9 +1043,12 @@ async def admin_post_verify(
             u = _clean_url(u)
             if eml_key and u:
                 pipe.sadd(f"posts_verified:{eml_key}", u)
+                touched_emails.add(eml_key)
 
     if pipe.command_stack:
         await pipe.execute()
+        for eml in touched_emails:
+            await redis_client.hset(f"user:{eml}", "verified", 1)
 
     return RedirectResponse("/admin", status_code=303)
 
@@ -1114,6 +1149,7 @@ async def admin_task_verify(
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     await redis_client.hset(f"tasks:{email}", task_id, "verified")
+    await redis_client.hset(f"user:{email}", "verified", 1)
     return RedirectResponse("/admin", status_code=303)
 
 

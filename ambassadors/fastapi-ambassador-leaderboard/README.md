@@ -9,9 +9,11 @@ Duplicate links are ignored—each ambassador can only submit a given URL once.
 
 A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
 
-The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, and Telegram handles as JSON or CSV files. Downloads prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable.
+The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, Telegram handles, verification status, and verified-post counts as JSON or CSV files. Downloads prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable.
 
 Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
+
+Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, and pending reward. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
@@ -65,7 +67,7 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /api/admin/tasks` – JSON dictionary of task applications grouped by user (admin only).
 - `GET /api/admin/wallets` – JSON list of all registered emails, wallets, Telegram handles, and pending rewards (admin only).
 - `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
-- `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, and Telegram handles (admin only, requires `GHOST_EXPORT_KEY`).
+- `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, Telegram handles, verification flags, and verified-post counts (admin only, requires `GHOST_EXPORT_KEY`).
 
 If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app tracks the pool's balance and displays each ambassador's pending reward in both the HTML table and the JSON API response.
 
@@ -75,4 +77,6 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 
 ## Telegram bot
 A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
+
+Use `/hashrate` to query the network's 24‑hour average mining power.
 
