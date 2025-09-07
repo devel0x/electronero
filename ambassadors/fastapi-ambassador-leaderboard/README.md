@@ -17,6 +17,12 @@ The app also provides a tasks panel where ambassadors can apply to various commu
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
 
+Each ambassador can also create a personalized referral link using a custom username. Link clicks and referred signups are tracked per ambassador, and admins can verify or reject each referral in a dedicated dashboard section.
+
+## Planned features
+- **Social engagement analytics:** The platform will fetch likes, shares, and comments from supported networks to surface high-impact posts and boost ambassador recognition.
+- **DAO treasury payouts:** Governance proposals will be able to trigger on-chain disbursements from a community treasury, allowing fully decentralized reward distribution.
+
 ## Requirements
 - Python 3.11+
 - Pinned Python dependencies are listed in `requirements.txt`.
