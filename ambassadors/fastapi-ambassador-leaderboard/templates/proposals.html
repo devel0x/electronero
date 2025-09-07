@@ -76,7 +76,7 @@
     <!-- submit card -->
     <div class="glass-card p-3 p-md-4 mb-4 mx-auto" style="max-width:720px;" data-animate="fade-up">
         <h1 class="h4 section-title">Submit Proposal</h1>
-        <form method="post" action="/proposals/submit" novalidate>
+        <form method="post" action="/proposals/submit" novalidate data-ajax data-action="submit">
             <input type="text" name="title" class="form-control mb-2" placeholder="Title" required />
             <textarea name="content" class="form-control mb-3" rows="3" placeholder="Details" required></textarea>
             <button class="btn btn-primary" type="submit">Submit</button>
@@ -84,7 +84,7 @@
     </div>
 
     <!-- list card -->
-    <div class="glass-card p-3 p-md-4" data-animate="fade-up">
+    <div class="glass-card p-3 p-md-4" data-animate="fade-up" id="proposalsList">
         <h2 class="h5 section-title">Active Proposals</h2>
         {% for p in proposals %}
         <div class="proposal-item mb-3">
@@ -95,12 +95,12 @@
               {% if p.funding_wallet %} • Funding wallet: {{ p.funding_wallet }}{% endif %}
             </p>
             <div class="d-flex gap-2">
-                <form method="post" action="/proposals/vote">
+                <form method="post" action="/proposals/vote" data-ajax data-action="vote" data-choice="yes">
                     <input type="hidden" name="proposal_id" value="{{ p.id }}" />
                     <input type="hidden" name="choice" value="yes" />
                     <button class="btn btn-success btn-sm" {% if p.user_vote=='yes' %}disabled{% endif %}>Yes ({{ p.yes }})</button>
                 </form>
-                <form method="post" action="/proposals/vote">
+                <form method="post" action="/proposals/vote" data-ajax data-action="vote" data-choice="no">
                     <input type="hidden" name="proposal_id" value="{{ p.id }}" />
                     <input type="hidden" name="choice" value="no" />
                     <button class="btn btn-danger btn-sm" {% if p.user_vote=='no' %}disabled{% endif %}>No ({{ p.no }})</button>
@@ -179,22 +179,10 @@
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const form = document.querySelector('form[action="/proposals/submit"]');
-  if (!form) return;
-
-  const titleInput = form.querySelector('input[name="title"]');
-  const contentInput = form.querySelector('textarea[name="content"]');
-  const submitBtn = form.querySelector('button[type="submit"]');
-
-  // Small helper note under the button
-  const note = document.createElement('div');
-  note.className = 'form-text mt-2';
-  submitBtn.after(note);
+  const submitForm = document.querySelector('form[data-action="submit"]');
 
   const COOLDOWN_MS = 5 * 60 * 1000;
   const KEY_LAST = 'proposal_last_ts';
-  const KEY_FLAG = 'proposal_submitted';
-
   let last = Number(localStorage.getItem(KEY_LAST) || 0);
   let timer = null;
 
@@ -205,15 +193,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${m}:${String(r).padStart(2, '0')}`;
   }
 
-  function setDisabled(disabled) {
+  function setDisabled(disabled, submitBtn, titleInput, contentInput) {
     submitBtn.disabled = disabled;
     if (titleInput) titleInput.disabled = disabled;
     if (contentInput) contentInput.disabled = disabled;
   }
 
-  function applyCooldown(remainingMs) {
+  function applyCooldown(remainingMs, submitBtn, note, titleInput, contentInput) {
     const active = remainingMs > 0;
-    setDisabled(active);
+    setDisabled(active, submitBtn, titleInput, contentInput);
     if (active) {
       submitBtn.textContent = `Wait ${fmt(remainingMs)}`;
       note.textContent = `Please wait ${fmt(remainingMs)} before creating another proposal.`;
@@ -226,50 +214,94 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function tick() {
+  function tick(submitBtn, note, titleInput, contentInput) {
     const remaining = last + COOLDOWN_MS - Date.now();
     if (remaining > 0) {
-      applyCooldown(remaining);
+      applyCooldown(remaining, submitBtn, note, titleInput, contentInput);
     } else {
       clearInterval(timer); timer = null;
       localStorage.removeItem(KEY_LAST);
-      applyCooldown(0);
+      applyCooldown(0, submitBtn, note, titleInput, contentInput);
     }
   }
 
-  // Initial cooldown state
-  const initialRemaining = last + COOLDOWN_MS - Date.now();
-  if (initialRemaining > 0) {
-    applyCooldown(initialRemaining);
-    timer = setInterval(tick, 1000);
-  }
+  if (submitForm) {
+    const titleInput = submitForm.querySelector('input[name="title"]');
+    const contentInput = submitForm.querySelector('textarea[name="content"]');
+    const submitBtn = submitForm.querySelector('button[type="submit"]');
+    const note = document.createElement('div');
+    note.className = 'form-text mt-2';
+    submitBtn.after(note);
 
-  // Intercept submit to start cooldown and show modal after redirect
-  form.addEventListener('submit', (e) => {
-    const remaining = Number(localStorage.getItem(KEY_LAST) || 0) + COOLDOWN_MS - Date.now();
-    if (remaining > 0) {
-      // Still cooling down — block submit
+    const initialRemaining = last + COOLDOWN_MS - Date.now();
+    if (initialRemaining > 0) {
+      applyCooldown(initialRemaining, submitBtn, note, titleInput, contentInput);
+      timer = setInterval(() => tick(submitBtn, note, titleInput, contentInput), 1000);
+    }
+
+    submitForm.addEventListener('submit', async e => {
       e.preventDefault();
-      tick();
-      return;
-    }
-    // Start cooldown immediately and set one-time modal flag for after redirect
-    localStorage.setItem(KEY_LAST, Date.now().toString());
-    sessionStorage.setItem(KEY_FLAG, '1');
-  });
+      const remaining = Number(localStorage.getItem(KEY_LAST) || 0) + COOLDOWN_MS - Date.now();
+      if (remaining > 0) {
+        tick(submitBtn, note, titleInput, contentInput);
+        return;
+      }
+      localStorage.setItem(KEY_LAST, Date.now().toString());
 
-  // If we just came back from a successful submit, show the modal once
-  if (sessionStorage.getItem(KEY_FLAG) === '1') {
-    sessionStorage.removeItem(KEY_FLAG);
-    const modalEl = document.getElementById('proposalCreatedModal');
-    if (modalEl && window.bootstrap?.Modal) {
-      const m = new bootstrap.Modal(modalEl);
-      m.show();
-    }
-    // Ensure countdown is running
-    last = Number(localStorage.getItem(KEY_LAST) || Date.now());
-    if (!timer) timer = setInterval(tick, 1000);
+      const fd = new FormData(submitForm);
+      const resp = await fetch(submitForm.action, {
+        method: submitForm.method || 'POST',
+        body: fd,
+        redirect: 'manual'
+      });
+      if (resp.status < 400) {
+        submitForm.reset();
+        applyCooldown(COOLDOWN_MS, submitBtn, note, titleInput, contentInput);
+        if (!timer) timer = setInterval(() => tick(submitBtn, note, titleInput, contentInput), 1000);
+        const modalEl = document.getElementById('proposalCreatedModal');
+        if (modalEl && window.bootstrap?.Modal) {
+          new bootstrap.Modal(modalEl).show();
+        }
+      }
+    });
   }
+
+  function attachVoteHandler(vForm) {
+    vForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(vForm);
+      const resp = await fetch(vForm.action, {
+        method: vForm.method || 'POST',
+        body: fd,
+        redirect: 'manual'
+      });
+      if (resp.status < 400) {
+        const choice = vForm.dataset.choice;
+        const proposal = vForm.closest('.proposal-item');
+        const yesForm = proposal.querySelector('form[data-choice="yes"]');
+        const noForm = proposal.querySelector('form[data-choice="no"]');
+        const yesBtn = yesForm.querySelector('button');
+        const noBtn = noForm.querySelector('button');
+        let yesCount = parseInt(yesBtn.textContent.match(/\((\d+)\)/)[1]);
+        let noCount = parseInt(noBtn.textContent.match(/\((\d+)\)/)[1]);
+        if (choice === 'yes') {
+          if (noBtn.disabled) {
+            noCount--; noBtn.disabled = false;
+          }
+          yesCount++; yesBtn.disabled = true;
+        } else {
+          if (yesBtn.disabled) {
+            yesCount--; yesBtn.disabled = false;
+          }
+          noCount++; noBtn.disabled = true;
+        }
+        yesBtn.textContent = `Yes (${yesCount})`;
+        noBtn.textContent = `No (${noCount})`;
+      }
+    });
+  }
+
+  document.querySelectorAll('form[data-action="vote"]').forEach(attachVoteHandler);
 });
 </script>
 </body>

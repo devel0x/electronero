@@ -13,6 +13,8 @@ The wallet section includes export buttons so administrators can download all am
 
 Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
 
+Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, and pending reward. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
+
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
@@ -75,4 +77,6 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 
 ## Telegram bot
 A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
+
+Use `/hashrate` to query the network's 24‑hour average mining power.
 

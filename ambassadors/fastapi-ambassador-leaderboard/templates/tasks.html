@@ -101,7 +101,7 @@
         {% elif status == 'applied' %}
           <span class="badge bg-warning text-dark">Applied</span>
         {% else %}
-          <form method="post" action="/tasks/apply" class="m-0">
+          <form method="post" action="/tasks/apply" class="m-0" data-ajax data-update="apply">
             <input type="hidden" name="task_id" value="{{ tid }}">
             <button class="btn btn-primary btn-sm">Apply</button>
           </form>
@@ -141,6 +141,25 @@
     gsap.to(grid, { duration:.8, x:dx*20, y:dy*20, ease:'sine.out' });
   }, { passive:true });
 })();
+</script>
+<script>
+document.querySelectorAll('form[data-ajax]').forEach(form => {
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const resp = await fetch(form.action, {
+      method: form.method || 'POST',
+      body: fd,
+      redirect: 'manual'
+    });
+    if (resp.status < 400 && form.dataset.update === 'apply') {
+      const badge = document.createElement('span');
+      badge.className = 'badge bg-warning text-dark';
+      badge.textContent = 'Applied';
+      form.replaceWith(badge);
+    }
+  });
+});
 </script>
 </body>
 </html>
