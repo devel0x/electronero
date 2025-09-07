@@ -347,6 +347,15 @@ async def _pending_rewards_map() -> dict[str, float]:
     return mapping
 
 
+def _next_tuesday(start: datetime) -> datetime:
+    """Return the next Tuesday after ``start`` (never the same day)."""
+    days_ahead = (1 - start.weekday() + 7) % 7
+    if days_ahead == 0:
+        days_ahead = 7
+    target = start + timedelta(days=days_ahead)
+    return target.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 async def _all_wallets() -> list[dict[str, Any]]:
     wallets: list[dict[str, Any]] = []
     data = await _get_cached_data()
@@ -403,6 +412,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
         except Exception:
             pad_val = 0.0
 
+        stake_data = await redis_client.hgetall(f"stake:{email}")
         wallets.append(
             {
                 "email": email,
@@ -412,10 +422,23 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
+                "stake_state": stake_data.get("state", "claimed"),
+                "stake_request": stake_data.get("request", ""),
+                "stake_requested_at": stake_data.get("requested_at", ""),
+                "stake_expires_at": stake_data.get("expires_at", ""),
             }
         )
 
     return wallets
+
+
+async def _all_stakes() -> list[dict[str, Any]]:
+    wallets = await _all_wallets()
+    return [
+        w
+        for w in wallets
+        if w.get("stake_state") == "staked" or w.get("stake_request")
+    ]
 
 
 async def _all_posts() -> dict[str, dict[str, Any]]:
@@ -686,6 +709,53 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
     return RedirectResponse("/", status_code=303)
 
 
+@app.get("/stake")
+async def stake_form(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    stake = await redis_client.hgetall(f"stake:{email}")
+    state = stake.get("state", "claimed")
+    request_type = stake.get("request", "")
+    expires = stake.get("expires_at", "")
+    rewards = await _pending_rewards_map()
+    pending = rewards.get(email, 0.0)
+    return templates.TemplateResponse(
+        "stake.html",
+        {
+            "request": request,
+            "state": state,
+            "request_type": request_type,
+            "expires": expires,
+            "pending_reward": f"{pending:.8f}",
+        },
+    )
+
+
+@app.post("/stake")
+async def stake_action(request: Request, action: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    key = f"stake:{email}"
+    now = datetime.utcnow().isoformat()
+    stake = await redis_client.hgetall(key)
+    state = stake.get("state", "claimed")
+    if action == "stake":
+        await redis_client.hset(
+            key,
+            mapping={"state": state, "request": "stake", "requested_at": now},
+        )
+    elif action == "unstake":
+        await redis_client.hset(
+            key,
+            mapping={"state": state, "request": "unstake", "requested_at": now},
+        )
+    elif action == "cancel":
+        await redis_client.hdel(key, "request", "requested_at")
+    return RedirectResponse("/stake", status_code=303)
+
+
 @app.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("session")
@@ -861,6 +931,7 @@ async def admin_panel(request: Request) -> Any:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     wallets = await _all_wallets()
+    stakes = await _all_stakes()
     posts = await _all_posts()
     tasks = await _all_tasks()
     proposals = await _pending_proposals()
@@ -870,6 +941,7 @@ async def admin_panel(request: Request) -> Any:
         {
             "request": request,
             "wallets": wallets,
+            "stakes": stakes,
             "posts": posts,
             "tasks": tasks,
             "recoveries": recoveries,
@@ -906,6 +978,14 @@ async def api_admin_wallets(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     wallets = await _all_wallets()
     return JSONResponse({"ok": True, "wallets": wallets})
+
+
+@app.get("/api/admin/stakes")
+async def api_admin_stakes(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    stakes = await _all_stakes()
+    return JSONResponse({"ok": True, "stakes": stakes})
 
 
 @app.get("/api/admin/validate_wallets")
@@ -950,12 +1030,13 @@ async def api_admin_export(
             "telegram": w.get("telegram", ""),
             "points": w.get("points", 0.0),
             "pending_reward": float(w.get("pending_reward", 0.0)),
+            "staking": "staked" if w.get("stake_state") == "staked" else "claimed",
         }
         for w in wallets
     ]
     if fmt.lower() == "csv":
         output = io.StringIO()
-        fieldnames = ["email", "wallet", "telegram", "points", "pending_reward"]
+        fieldnames = ["email", "wallet", "telegram", "points", "pending_reward", "staking"]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(export_rows)
@@ -965,6 +1046,49 @@ async def api_admin_export(
             headers={"Content-Disposition": "attachment; filename=ambassadors.csv"},
         )
     return JSONResponse({"ok": True, "ambassadors": export_rows})
+
+
+@app.post("/admin/stake/verify")
+async def admin_stake_verify(request: Request, email: str = Form(...)) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    email_key = email.strip().lower()
+    key = f"stake:{email_key}"
+    data = await redis_client.hgetall(key)
+    action = data.get("request")
+    now = datetime.utcnow()
+    if action == "stake":
+        expires = _next_tuesday(now).isoformat()
+        await redis_client.hset(
+            key,
+            mapping={
+                "state": "staked",
+                "request": "",
+                "requested_at": "",
+                "expires_at": expires,
+            },
+        )
+    elif action == "unstake":
+        await redis_client.hset(
+            key,
+            mapping={
+                "state": "claimed",
+                "request": "",
+                "requested_at": "",
+                "expires_at": "",
+            },
+        )
+    return JSONResponse({"ok": True})
+
+
+@app.post("/admin/stake/reject")
+async def admin_stake_reject(request: Request, email: str = Form(...)) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    email_key = email.strip().lower()
+    key = f"stake:{email_key}"
+    await redis_client.hdel(key, "request", "requested_at")
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/admin/posts")
