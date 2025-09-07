@@ -412,6 +412,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
                 "pad": pad_val,
+                "verified": udata.get("verified") == "1",
             }
         )
 
@@ -661,6 +662,7 @@ async def register(
             "password": _hash_password(password),
             "wallet": wallet.strip(),
             "telegram": _normalize_telegram(telegram),
+            "verified": "0",
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
@@ -950,12 +952,13 @@ async def api_admin_export(
             "telegram": w.get("telegram", ""),
             "points": w.get("points", 0.0),
             "pending_reward": float(w.get("pending_reward", 0.0)),
+            "verified": bool(w.get("verified")),
         }
         for w in wallets
     ]
     if fmt.lower() == "csv":
         output = io.StringIO()
-        fieldnames = ["email", "wallet", "telegram", "points", "pending_reward"]
+        fieldnames = ["email", "wallet", "telegram", "points", "pending_reward", "verified"]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(export_rows)
@@ -1008,6 +1011,7 @@ async def admin_post_verify(
                 if u:
                     pipe.sadd(f"posts_verified:{eml_key}", u)
                     pipe.srem(f"posts_rejected:{eml_key}", u)
+                    pipe.hset(f"user:{eml_key}", "verified", "1")
 
     else:
         # Selected checkboxes and/or single email+url
@@ -1024,6 +1028,7 @@ async def admin_post_verify(
             if eml_key and u:
                 pipe.sadd(f"posts_verified:{eml_key}", u)
                 pipe.srem(f"posts_rejected:{eml_key}", u)
+                pipe.hset(f"user:{eml_key}", "verified", "1")
 
     if pipe.command_stack:
         await pipe.execute()
@@ -1128,6 +1133,7 @@ async def admin_task_verify(
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     await redis_client.hset(f"tasks:{email}", task_id, "verified")
+    await redis_client.hset(f"user:{email}", "verified", "1")
     return RedirectResponse("/admin", status_code=303)
 
 

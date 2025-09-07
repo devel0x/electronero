@@ -89,6 +89,7 @@
                                 {{ w.telegram if w.telegram else '—' }}
                             {% endif %}
                         </p>
+                        <p class="mb-1"><strong>Status:</strong> {{ 'Verified' if w.verified else 'Unverified' }}</p>
                         <p class="mb-2"><strong>Pad:</strong> {{ w.pad }}</p>
                         <div class="d-flex flex-column flex-sm-row gap-2">
                             <form method="post" action="/admin/telegram/update" class="d-flex gap-1 flex-grow-1">
