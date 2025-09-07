@@ -21,6 +21,7 @@
         <div class="collapse navbar-collapse" id="adminNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="#wallets">Wallets</a></li>
+                <li class="nav-item"><a class="nav-link" href="#staking">Staking</a></li>
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
@@ -109,6 +110,54 @@
         </div>
         {% if not wallets %}
         <p class="text-muted">No wallets</p>
+        {% endif %}
+    </div>
+    <div id="staking" class="glass-card p-3 mb-4">
+        <h1 class="h5">Staking</h1>
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+            {% for s in stakes %}
+            <div class="col">
+                <div class="card h-100 user-card text-light">
+                    <div class="card-body">
+                        <h5 class="card-title mb-2">{{ s.email }}</h5>
+                        <p class="mb-1"><strong>Wallet:</strong> {{ s.wallet if s.wallet else '—' }}</p>
+                        <p class="mb-1"><strong>Pending Reward:</strong> {{ s.pending_reward }}</p>
+                        <p class="mb-1"><strong>Status:</strong> {{ s.stake_state }}</p>
+                        {% if s.stake_request %}
+                        <p class="mb-1"><strong>Request:</strong> {{ s.stake_request }}</p>
+                        {% endif %}
+                        <p class="mb-1"><strong>Expires:</strong> {{ s.stake_expires_at }}</p>
+                        <p class="mb-2"><strong>Telegram:</strong>
+                            {% if s.tg_link %}
+                                <a href="{{ s.tg_link }}" target="_blank" class="link-light">{{ s.telegram }}</a>
+                            {% else %}
+                                {{ s.telegram if s.telegram else '—' }}
+                            {% endif %}
+                        </p>
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            {% if s.stake_request %}
+                            <form method="post" action="/admin/stake/verify" data-ajax="true">
+                                <input type="hidden" name="email" value="{{ s.email }}">
+                                <button class="btn btn-success btn-sm">Verify</button>
+                            </form>
+                            <form method="post" action="/admin/stake/reject" data-ajax="true">
+                                <input type="hidden" name="email" value="{{ s.email }}">
+                                <button class="btn btn-danger btn-sm">Reject</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="/admin/scorepad" class="d-flex gap-1" data-ajax="true">
+                                <input type="hidden" name="email" value="{{ s.email }}">
+                                <input type="number" step="1" name="pad" value="{{ s.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
+                                <button class="btn btn-secondary btn-sm">Pad</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if not stakes %}
+        <p class="text-muted">No staking requests</p>
         {% endif %}
     </div>
     <div id="posts" class="glass-card p-3">
@@ -284,6 +333,21 @@
     document.getElementById('posts-select-all').addEventListener('click', function() {
         document.querySelectorAll('input[form="posts-bulk-form"][type="checkbox"]').forEach(cb => {
             cb.checked = true;
+        });
+    });
+    document.querySelectorAll('form[data-ajax="true"]').forEach(f => {
+        f.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                const resp = await fetch(f.action, {method: f.method || 'POST', body: new FormData(f)});
+                if (resp.ok) {
+                    location.reload();
+                } else {
+                    alert('Request failed');
+                }
+            } catch (err) {
+                alert('Request failed');
+            }
         });
     });
 </script>
