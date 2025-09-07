@@ -4,7 +4,9 @@ This project is a small FastAPI application that serves an ambassador leaderboar
 
 The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
 
-Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Pending posts now show both the submitter's email and a link to their Telegram handle. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
+New ambassadors may also join through a verified referral link. The registration form validates emails with a basic regex and, when a valid referral is present, appends the new account to both `data/registrations.csv` and `data/leaderboard.csv`. Each referral-based signup starts with 100 points and the `Ambassador` tier automatically filled in.
+
+Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Pending posts now show both the submitter's email and a link to their Telegram handle. Submitted URLs are checked for reachability, rejecting obviously bad links before they reach the queue. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
 Duplicate links are ignored—each ambassador can only submit a given URL once.
 
 A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
@@ -16,6 +18,12 @@ Admins may also apply a per-user score padding to audit or correct totals withou
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
+
+Each ambassador can also create a personalized referral link using a custom username. Link clicks and referred signups are tracked per ambassador, and admins can verify or reject each referral in a dedicated dashboard section.
+
+## Planned features
+- **Social engagement analytics:** The platform will fetch likes, shares, and comments from supported networks to surface high-impact posts and boost ambassador recognition.
+- **DAO treasury payouts:** Governance proposals will be able to trigger on-chain disbursements from a community treasury, allowing fully decentralized reward distribution.
 
 ## Requirements
 - Python 3.11+
@@ -75,4 +83,6 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 
 ## Telegram bot
 A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
+
+Links submitted via `/verify` are tested for reachability and rejected if they cannot be fetched, ensuring only valid URLs enter the review queue.
 

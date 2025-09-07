@@ -15,7 +15,15 @@ from telegram.ext import (
     filters,
 )
 
-from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegram, redis_client, _get_cached_data
+from main import (
+    TASK_LIST,
+    REGISTERED_EMAILS,
+    _hash_password,
+    _normalize_telegram,
+    redis_client,
+    _get_cached_data,
+    _valid_url,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -362,8 +370,8 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     url = context.args[0].strip()
     email = context.user_data.get("email")
-    if not url:
-        await update.message.reply_text("Provide a valid URL.")
+    if not url or not await _valid_url(url):
+        await update.message.reply_text("Provide a valid, reachable URL.")
         return
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
