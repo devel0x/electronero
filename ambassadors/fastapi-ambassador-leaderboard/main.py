@@ -19,6 +19,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
+import httpx
+from urllib.parse import quote
 
 # Load environment variables
 load_dotenv()
@@ -102,6 +104,22 @@ def _load_registrations() -> set[str]:
 
 
 REGISTERED_EMAILS = _load_registrations()
+
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+URL_RE = re.compile(r"^https?://[^\s]+$")
+
+async def _valid_url(url: str) -> bool:
+    if not URL_RE.match(url):
+        return False
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+            resp = await client.head(url)
+            if resp.status_code >= 400:
+                resp = await client.get(url)
+            return resp.status_code < 400
+    except Exception:
+        return False
 
 cache: Dict[str, Any] = {
     "columns": [],
@@ -438,7 +456,12 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
             tele_norm = str(tele_raw).strip().lstrip("@").lower()
             tele = f"@{tele_norm}" if tele_norm else ""
             tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
-            posts[email] = {"urls": pending, "telegram": tele, "tg_link": tg_link}
+            posts[email] = {
+                "urls": pending,
+                "telegram": tele,
+                "tg_link": tg_link,
+                "count": len(urls),
+            }
     return posts
 
 
@@ -457,6 +480,39 @@ async def _all_verified_posts() -> list[dict[str, str]]:
         for url in urls:
             entries.append({"url": url, "telegram": tele, "wallet": wallet})
     return entries
+
+
+async def _all_referrals() -> dict[str, dict[str, Any]]:
+    """Return referrals grouped by referrer email."""
+    refs: dict[str, dict[str, Any]] = {}
+    keys = await redis_client.keys("referrals:*")
+    for key in keys:
+        referrer = key.split(":", 1)[1]
+        emails = await redis_client.smembers(key)
+        udata = await redis_client.hgetall(f"user:{referrer}")
+        tele_raw = udata.get("telegram", "")
+        tele_norm = str(tele_raw).strip().lstrip("@").lower()
+        tele_display = f"@{tele_norm}" if tele_norm else ""
+        entries = []
+        for eml in emails:
+            data = await redis_client.hgetall(f"referral:{referrer}:{eml}")
+            rtele_raw = data.get("telegram", "")
+            rtele = f"@{str(rtele_raw).lstrip('@')}" if rtele_raw else ""
+            entries.append(
+                {
+                    "email": eml,
+                    "telegram": rtele,
+                    "status": data.get("status", "pending"),
+                }
+            )
+        clicks = int(await redis_client.get(f"ref_clicks:{referrer}") or 0)
+        refs[referrer] = {
+            "telegram": tele_display,
+            "count": len(emails),
+            "clicks": clicks,
+            "entries": entries,
+        }
+    return refs
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
     tasks: dict[str, dict[str, str]] = {}
@@ -650,20 +706,71 @@ async def register(
     wallet: str = Form(...),
 ) -> Any:
     email_norm = email.strip().lower()
-    if email_norm not in REGISTERED_EMAILS:
+    if not EMAIL_RE.match(email_norm):
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "Invalid email address"},
+        )
+    slug = request.cookies.get("ref")
+    referrer = await redis_client.get(f"ref_slug:{slug}") if slug else None
+    if email_norm not in REGISTERED_EMAILS and not referrer:
         return templates.TemplateResponse(
             "register.html",
             {"request": request, "error": "Email not permitted"},
         )
+    telegram_norm = _normalize_telegram(telegram)
     await redis_client.hset(
         f"user:{email_norm}",
         mapping={
             "password": _hash_password(password),
             "wallet": wallet.strip(),
-            "telegram": _normalize_telegram(telegram),
+            "telegram": telegram_norm,
         },
     )
-    return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+    if referrer:
+        await redis_client.sadd(f"referrals:{referrer}", email_norm)
+        await redis_client.hset(
+            f"referral:{referrer}:{email_norm}",
+            mapping={
+                "email": email_norm,
+                "telegram": telegram_norm,
+                "status": "pending",
+            },
+        )
+    try:
+        with open(REGISTRATIONS_CSV, "a", newline="") as f:
+            csv.writer(f).writerow([email_norm])
+        REGISTERED_EMAILS.add(email_norm)
+    except Exception as e:
+        print(f"[register] failed to update registrations.csv: {e}")
+    try:
+        with open(CSV_PATH, "a", newline="") as f:
+            csv.writer(f).writerow([
+                telegram_norm.lstrip("@"),
+                telegram_norm,
+                100,
+                "Ambassador",
+                "",
+                "",
+                "",
+                email_norm,
+            ])
+        await redis_client.delete(CACHE_KEY)
+    except Exception as e:
+        print(f"[register] failed to update leaderboard.csv: {e}")
+    response = RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+    response.delete_cookie("ref")
+    return response
+
+
+@app.get("/r/{slug}")
+async def ref_redirect(slug: str) -> RedirectResponse:
+    email = await redis_client.get(f"ref_slug:{slug}")
+    resp = RedirectResponse("/register", status_code=303)
+    if email:
+        await redis_client.incr(f"ref_clicks:{email}")
+        resp.set_cookie("ref", slug, max_age=60 * 60 * 24 * 30)
+    return resp
 
 
 @app.get("/wallet")
@@ -684,6 +791,52 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
         return RedirectResponse("/login")
     await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/referrals")
+async def referrals_page(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    slug = await redis_client.hget(f"user:{email}", "ref_slug") or ""
+    clicks = int(await redis_client.get(f"ref_clicks:{email}") or 0)
+    referred = await redis_client.smembers(f"referrals:{email}")
+    entries = []
+    for eml in referred:
+        data = await redis_client.hgetall(f"referral:{email}:{eml}")
+        tele_raw = data.get("telegram", "")
+        tele = f"@{str(tele_raw).lstrip('@')}" if tele_raw else ""
+        entries.append({"email": eml, "telegram": tele, "status": data.get("status", "pending")})
+    error = request.query_params.get("error", "")
+    return templates.TemplateResponse(
+        "referrals.html",
+        {
+            "request": request,
+            "slug": slug,
+            "clicks": clicks,
+            "entries": entries,
+            "error": error,
+        },
+    )
+
+
+@app.post("/referrals")
+async def referrals_update(request: Request, slug: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    new_slug = slug.strip().lower()
+    if not new_slug:
+        return RedirectResponse("/referrals", status_code=303)
+    current = await redis_client.hget(f"user:{email}", "ref_slug")
+    existing = await redis_client.get(f"ref_slug:{new_slug}")
+    if existing and existing != email:
+        return RedirectResponse("/referrals?error=slug+taken", status_code=303)
+    if current and current != new_slug:
+        await redis_client.delete(f"ref_slug:{current}")
+    await redis_client.hset(f"user:{email}", mapping={"ref_slug": new_slug})
+    await redis_client.set(f"ref_slug:{new_slug}", email)
+    return RedirectResponse("/referrals", status_code=303)
 
 
 @app.get("/logout")
@@ -736,7 +889,7 @@ async def verify_form(request: Request) -> Any:
             "pending": pending,
             "verified": verified,
             "rejected": rejected,
-            "error": "",
+            "error": request.query_params.get("error", ""),
         },
     )
 
@@ -747,7 +900,7 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
     if not email:
         return RedirectResponse("/login")
     url_clean = url.strip()
-    if url_clean:
+    if url_clean and await _valid_url(url_clean):
         pending = await redis_client.lrange(f"posts:{email}", 0, -1)
         verified = await redis_client.smembers(f"posts_verified:{email}")
         if (
@@ -756,7 +909,10 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
         ):
             await redis_client.srem(f"posts_rejected:{email}", url_clean)
             await redis_client.lpush(f"posts:{email}", url_clean)
-    return RedirectResponse("/verify", status_code=303)
+        return RedirectResponse("/verify", status_code=303)
+    return RedirectResponse(
+        f"/verify?error={quote('Invalid or unreachable URL')}", status_code=303
+    )
 
 
 @app.get("/raid")
@@ -865,6 +1021,7 @@ async def admin_panel(request: Request) -> Any:
     tasks = await _all_tasks()
     proposals = await _pending_proposals()
     recoveries = await _all_recoveries()
+    referrals = await _all_referrals()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -875,6 +1032,7 @@ async def admin_panel(request: Request) -> Any:
             "recoveries": recoveries,
             "task_labels": TASK_LABELS,
             "proposals": proposals,
+            "referrals": referrals,
         },
     )
 
@@ -1043,6 +1201,28 @@ async def admin_post_reject(
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
     await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/referrals/verify")
+async def admin_referral_verify(
+    request: Request, referrer: str = Form(...), email: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    key = f"referral:{referrer.strip().lower()}:{email.strip().lower()}"
+    await redis_client.hset(key, mapping={"status": "verified"})
+    return RedirectResponse("/admin#referrals", status_code=303)
+
+
+@app.post("/admin/referrals/reject")
+async def admin_referral_reject(
+    request: Request, referrer: str = Form(...), email: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    key = f"referral:{referrer.strip().lower()}:{email.strip().lower()}"
+    await redis_client.hset(key, mapping={"status": "rejected"})
+    return RedirectResponse("/admin#referrals", status_code=303)
 
 
 @app.post("/admin/proposals/verify")
