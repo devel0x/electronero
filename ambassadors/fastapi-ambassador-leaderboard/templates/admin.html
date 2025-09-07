@@ -122,7 +122,7 @@
         {% for email, pdata in posts.items() %}
         <div class="mb-3">
             <h2 class="h6">
-                {{ email }}
+                {{ email }} ({{ pdata.count }})
                 {% if pdata.telegram %}
                     –
                     {% if pdata.tg_link %}

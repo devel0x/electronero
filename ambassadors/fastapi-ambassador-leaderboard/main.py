@@ -438,7 +438,12 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
             tele_norm = str(tele_raw).strip().lstrip("@").lower()
             tele = f"@{tele_norm}" if tele_norm else ""
             tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
-            posts[email] = {"urls": pending, "telegram": tele, "tg_link": tg_link}
+            posts[email] = {
+                "urls": pending,
+                "telegram": tele,
+                "tg_link": tg_link,
+                "count": len(urls),
+            }
     return posts
 
 
