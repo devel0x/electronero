@@ -22,6 +22,7 @@
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="#wallets">Wallets</a></li>
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
+                <li class="nav-item"><a class="nav-link" href="#referrals">Referrals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
             </ul>
@@ -124,7 +125,7 @@
         {% for email, pdata in posts.items() %}
         <div class="mb-3">
             <h2 class="h6">
-                {{ email }}
+                {{ email }} ({{ pdata.count }})
                 {% if pdata.telegram %}
                     –
                     {% if pdata.tg_link %}
@@ -160,6 +161,48 @@
         {% endfor %}
         {% if not posts %}
         <p class="text-muted">No posts</p>
+        {% endif %}
+    </div>
+    <div id="referrals" class="glass-card p-3 mt-4">
+        <h1 class="h5">Referrals</h1>
+        {% for email, rdata in referrals.items() %}
+        <div class="mb-3">
+            <h2 class="h6">{{ email }}{% if rdata.telegram %} – {{ rdata.telegram }}{% endif %} ({{ rdata.count }} referrals, {{ rdata.clicks }} clicks)</h2>
+            <div class="row row-cols-1 row-cols-md-2 g-3">
+                {% for ref in rdata.entries %}
+                <div class="col">
+                    <div class="card h-100 user-card text-light">
+                        <div class="card-body">
+                            <p class="mb-1"><strong>Email:</strong> {{ ref.email }}</p>
+                            <p class="mb-1"><strong>Telegram:</strong> {{ ref.telegram or '—' }}</p>
+                            <p class="mb-1"><strong>Referred by:</strong> {{ email }}{% if rdata.telegram %} ({{ rdata.telegram }}){% endif %}</p>
+                            {% if ref.status == 'verified' %}
+                            <span class="badge bg-success">Verified</span>
+                            {% elif ref.status == 'rejected' %}
+                            <span class="badge bg-danger">Rejected</span>
+                            {% else %}
+                            <div class="d-flex gap-2">
+                                <form method="post" action="/admin/referrals/verify">
+                                    <input type="hidden" name="referrer" value="{{ email }}">
+                                    <input type="hidden" name="email" value="{{ ref.email }}">
+                                    <button class="btn btn-success btn-sm">Verify</button>
+                                </form>
+                                <form method="post" action="/admin/referrals/reject">
+                                    <input type="hidden" name="referrer" value="{{ email }}">
+                                    <input type="hidden" name="email" value="{{ ref.email }}">
+                                    <button class="btn btn-danger btn-sm">Reject</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if not referrals %}
+        <p class="text-muted">No referrals</p>
         {% endif %}
     </div>
     <div id="proposals" class="glass-card p-3 mt-4">
