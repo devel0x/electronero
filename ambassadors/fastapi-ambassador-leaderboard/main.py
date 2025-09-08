@@ -1039,6 +1039,7 @@ async def admin_post_verify(
                 if u:
                     pipe.sadd(f"posts_verified:{eml_key}", u)
                     pipe.srem(f"posts_rejected:{eml_key}", u)
+                    pipe.lrem(f"posts:{eml_key}", 0, u)
 
     else:
         # Selected checkboxes and/or single email+url
@@ -1056,6 +1057,7 @@ async def admin_post_verify(
                 pipe.sadd(f"posts_verified:{eml_key}", u)
                 touched_emails.add(eml_key)
                 pipe.srem(f"posts_rejected:{eml_key}", u)
+                pipe.lrem(f"posts:{eml_key}", 0, u)
 
     if pipe.command_stack:
         await pipe.execute()
