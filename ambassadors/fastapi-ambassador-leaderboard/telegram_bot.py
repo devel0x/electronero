@@ -367,7 +367,10 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
-    if url not in {str(p) for p in pending} and url not in {str(v) for v in verified}:
+    pending_set = {str(p) for p in pending}
+    verified_set = {str(v) for v in verified}
+    if url not in pending_set and url not in verified_set:
+        await redis_client.srem(f"posts_rejected:{email}", url)
         await redis_client.lpush(f"posts:{email}", url)
         await update.message.reply_text("🧾 Post submitted for verification.")
     else:
