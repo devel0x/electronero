@@ -77,7 +77,12 @@
                 <div class="card h-100 user-card text-light">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">{{ w.email }}</h5>
+                            <h5 class="card-title mb-0">
+                                {{ w.email }}
+                                {% if not w.verified %}
+                                <span class="badge bg-warning text-dark ms-2">Unverified</span>
+                                {% endif %}
+                            </h5>
                             <input class="form-check-input mt-1" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
                         </div>
                         <p class="mb-1"><strong>Wallet:</strong> {{ w.wallet if w.wallet else '—' }}</p>
@@ -122,40 +127,53 @@
             <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
         </div>
         {% for email, pdata in posts.items() %}
-        <div class="mb-3">
-            <h2 class="h6">
-                {{ email }}
-                {% if pdata.telegram %}
-                    –
-                    {% if pdata.tg_link %}
-                    <a href="{{ pdata.tg_link }}" target="_blank">{{ pdata.telegram }}</a>
-                    {% else %}
-                    {{ pdata.telegram }}
-                    {% endif %}
-                {% endif %}
-            </h2>
-            <ul class="list-group list-group-flush">
-                {% for p in pdata.urls %}
-                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center gap-2">
-                        <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
-                        <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+        <div class="card user-card mb-3 text-light">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-2">
+                    <div>
+                        <h5 class="card-title mb-0">{{ email }}</h5>
+                        {% if pdata.telegram %}
+                            {% if pdata.tg_link %}
+                            <a href="{{ pdata.tg_link }}" target="_blank" class="link-light small">{{ pdata.telegram }}</a>
+                            {% else %}
+                            <span class="small">{{ pdata.telegram }}</span>
+                            {% endif %}
+                        {% endif %}
                     </div>
-                    <div class="d-flex gap-1">
-                        <form method="post" action="/admin/posts/verify" data-ajax data-remove="li">
-                            <input type="hidden" name="email" value="{{ email }}">
-                            <input type="hidden" name="url" value="{{ p.url }}">
-                            <button class="btn btn-success btn-sm">Verify</button>
-                        </form>
-                        <form method="post" action="/admin/posts/reject" data-ajax data-remove="li">
-                            <input type="hidden" name="email" value="{{ email }}">
-                            <input type="hidden" name="url" value="{{ p.url }}">
-                            <button class="btn btn-danger btn-sm">Reject</button>
-                        </form>
+                    <div class="mt-2 mt-sm-0 d-flex gap-2">
+                        <span class="badge bg-secondary">Pad {{ pdata.pad }}</span>
+                        <span class="badge bg-info text-dark">{{ pdata.count }} posts</span>
                     </div>
-                </li>
-                {% endfor %}
-            </ul>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <tbody>
+                            {% for p in pdata.urls %}
+                            <tr class="post-row">
+                                <td class="d-flex align-items-center gap-2 text-break">
+                                    <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
+                                    <a href="{{ p.url }}" target="_blank" class="link-light">{{ p.url }}</a>
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <form method="post" action="/admin/posts/verify" data-ajax data-remove="tr">
+                                            <input type="hidden" name="email" value="{{ email }}">
+                                            <input type="hidden" name="url" value="{{ p.url }}">
+                                            <button class="btn btn-success btn-sm">Verify</button>
+                                        </form>
+                                        <form method="post" action="/admin/posts/reject" data-ajax data-remove="tr">
+                                            <input type="hidden" name="email" value="{{ email }}">
+                                            <input type="hidden" name="url" value="{{ p.url }}">
+                                            <button class="btn btn-danger btn-sm">Reject</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         {% endfor %}
         {% if not posts %}
@@ -307,7 +325,21 @@
             if (resp.status < 400) {
                 const removeSel = form.dataset.remove;
                 if (removeSel) {
-                    form.closest(removeSel)?.remove();
+                    const tgt = form.closest(removeSel);
+                    tgt?.remove();
+                    if (removeSel === 'tr') {
+                        const card = form.closest('.user-card');
+                        if (card && !card.querySelector('tr')) {
+                            card.remove();
+                        }
+                        const postsSec = document.getElementById('posts');
+                        if (!postsSec.querySelector('tr.post-row') && !postsSec.querySelector('.text-muted')) {
+                            const p = document.createElement('p');
+                            p.className = 'text-muted';
+                            p.textContent = 'No posts';
+                            postsSec.appendChild(p);
+                        }
+                    }
                 }
                 if (form.dataset.bulk === 'pad') {
                     if (fd.get('reset_all')) {
@@ -321,13 +353,13 @@
                 } else if (form.dataset.bulk === 'posts') {
                     const postsSec = document.getElementById('posts');
                     if (fd.get('verify_all')) {
-                        postsSec.querySelectorAll('li').forEach(li => li.remove());
+                        postsSec.querySelectorAll('tr.post-row').forEach(row => row.remove());
                     } else {
                         document.querySelectorAll('input[form="posts-bulk-form"][name="selected"]:checked').forEach(cb => {
-                            cb.closest('li')?.remove();
+                            cb.closest('tr')?.remove();
                         });
                     }
-                    if (!postsSec.querySelector('li') && !postsSec.querySelector('.text-muted')) {
+                    if (!postsSec.querySelector('tr.post-row') && !postsSec.querySelector('.text-muted')) {
                         const p = document.createElement('p');
                         p.className = 'text-muted';
                         p.textContent = 'No posts';
