@@ -744,9 +744,18 @@ async def verify_form(request: Request) -> Any:
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
-    posts = await redis_client.lrange(f"posts:{email}", 0, -1)
+    pending = await redis_client.lrange(f"posts:{email}", 0, -1)
+    verified = await redis_client.smembers(f"posts_verified:{email}")
+    rejected = await redis_client.smembers(f"posts_rejected:{email}")
     return templates.TemplateResponse(
-        "verify.html", {"request": request, "posts": posts, "error": ""}
+        "verify.html",
+        {
+            "request": request,
+            "pending": pending,
+            "verified": verified,
+            "rejected": rejected,
+            "error": "",
+        },
     )
 
 
@@ -763,6 +772,7 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
             url_clean not in {str(p) for p in pending}
             and url_clean not in {str(v) for v in verified}
         ):
+            await redis_client.srem(f"posts_rejected:{email}", url_clean)
             await redis_client.lpush(f"posts:{email}", url_clean)
     return RedirectResponse("/verify", status_code=303)
 
@@ -1028,6 +1038,7 @@ async def admin_post_verify(
                 u = _clean_url(u)
                 if u:
                     pipe.sadd(f"posts_verified:{eml_key}", u)
+                    pipe.srem(f"posts_rejected:{eml_key}", u)
 
     else:
         # Selected checkboxes and/or single email+url
@@ -1044,6 +1055,7 @@ async def admin_post_verify(
             if eml_key and u:
                 pipe.sadd(f"posts_verified:{eml_key}", u)
                 touched_emails.add(eml_key)
+                pipe.srem(f"posts_rejected:{eml_key}", u)
 
     if pipe.command_stack:
         await pipe.execute()
@@ -1063,6 +1075,7 @@ async def admin_post_reject(
     url_clean = str(url).strip()
     await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
+    await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
 
 
