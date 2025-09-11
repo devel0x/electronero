@@ -591,11 +591,11 @@ async def login(
     request: Request, email: str = Form(...), password: str = Form(...)
 ) -> Any:
     email_norm = email.strip().lower()
-    if email_norm not in REGISTERED_EMAILS:
+    stored = await redis_client.hgetall(f"user:{email_norm}")
+    if not stored and email_norm not in REGISTERED_EMAILS:
         return templates.TemplateResponse(
             "login.html", {"request": request, "error": "Email not registered", "msg": ""}
         )
-    stored = await redis_client.hgetall(f"user:{email_norm}")
     if not stored or stored.get("password") != _hash_password(password):
         return templates.TemplateResponse(
             "login.html", {"request": request, "error": "Invalid credentials", "msg": ""}
@@ -652,9 +652,9 @@ async def forgot_submit(request: Request, email: str = Form(...)) -> Any:
 
 
 @app.get("/register")
-async def register_form(request: Request) -> Any:
+async def register_form(request: Request, ref: str | None = None) -> Any:
     return templates.TemplateResponse(
-        "register.html", {"request": request, "error": ""}
+        "register.html", {"request": request, "error": "", "ref": ref or ""}
     )
 
 
@@ -665,13 +665,28 @@ async def register(
     password: str = Form(...),
     telegram: str = Form(...),
     wallet: str = Form(...),
+    ref: str | None = Form(None),
 ) -> Any:
     email_norm = email.strip().lower()
-    if email_norm not in REGISTERED_EMAILS:
+    ref_norm = ref.strip().lower() if ref else ""
+    ip = request.client.host if request.client else ""
+    if await redis_client.sismember("registered_ips", ip):
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "error": "Email not permitted"},
+            {"request": request, "error": "IP already used", "ref": ref_norm},
         )
+    if ref_norm:
+        if not await redis_client.exists(f"referral:{ref_norm}"):
+            return templates.TemplateResponse(
+                "register.html",
+                {"request": request, "error": "Invalid referral", "ref": ""},
+            )
+    elif email_norm not in REGISTERED_EMAILS:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "Email not permitted", "ref": ""},
+        )
+    await redis_client.sadd("registered_ips", ip)
     await redis_client.hset(
         f"user:{email_norm}",
         mapping={
@@ -679,8 +694,32 @@ async def register(
             "wallet": wallet.strip(),
             "telegram": _normalize_telegram(telegram),
             "verified": 0,
+            "referral_source": ref_norm,
+            "ip": ip,
         },
     )
+    REGISTERED_EMAILS.add(email_norm)
+    if ref_norm:
+        await redis_client.hincrby(f"referral:{ref_norm}", "registrations", 1)
+        await redis_client.sadd(f"referral:{ref_norm}:ips", ip)
+        name = email_norm.split("@")[0]
+        row = [
+            name,
+            _normalize_telegram(telegram),
+            100,
+            "Ambassador",
+            "",
+            "",
+            "",
+            email_norm,
+        ]
+        try:
+            with open(CSV_PATH, "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            await redis_client.delete(CACHE_KEY)
+        except Exception:
+            pass
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
 
 
@@ -702,6 +741,78 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
         return RedirectResponse("/login")
     await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/referral")
+async def referral_page(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    code = await redis_client.hget(f"user:{email}", "referral")
+    link = None
+    clicks = registrations = 0
+    if code:
+        data = await redis_client.hgetall(f"referral:{code}")
+        clicks = int(data.get("clicks", 0))
+        registrations = int(data.get("registrations", 0))
+        link = str(request.base_url) + f"r/{code}"
+    return templates.TemplateResponse(
+        "referral.html",
+        {
+            "request": request,
+            "code": code,
+            "link": link,
+            "clicks": clicks,
+            "registrations": registrations,
+            "error": "",
+        },
+    )
+
+
+@app.post("/referral")
+async def referral_generate(request: Request, username: str = Form(...)) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    username_norm = username.strip().lower()
+    if not username_norm or await redis_client.exists(f"referral:{username_norm}"):
+        return templates.TemplateResponse(
+            "referral.html",
+            {
+                "request": request,
+                "code": None,
+                "link": None,
+                "clicks": 0,
+                "registrations": 0,
+                "error": "Username already taken",
+            },
+        )
+    await redis_client.hset(
+        f"referral:{username_norm}",
+        mapping={"owner": email, "clicks": 0, "registrations": 0},
+    )
+    await redis_client.hset(f"user:{email}", "referral", username_norm)
+    link = str(request.base_url) + f"r/{username_norm}"
+    return templates.TemplateResponse(
+        "referral.html",
+        {
+            "request": request,
+            "code": username_norm,
+            "link": link,
+            "clicks": 0,
+            "registrations": 0,
+            "error": "",
+        },
+    )
+
+
+@app.get("/r/{username}")
+async def referral_redirect(username: str) -> RedirectResponse:
+    code = username.strip().lower()
+    if await redis_client.exists(f"referral:{code}"):
+        await redis_client.hincrby(f"referral:{code}", "clicks", 1)
+        return RedirectResponse(f"/register?ref={code}")
+    return RedirectResponse("/register")
 
 
 @app.get("/logout")
