@@ -431,6 +431,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
 async def _all_posts() -> dict[str, dict[str, Any]]:
     """Return pending posts grouped by user email with Telegram/pad info."""
     posts: dict[str, dict[str, Any]] = {}
+    pad_map = await redis_client.hgetall("score_pad")
     keys = await redis_client.keys("posts:*")
     for key in keys:
         email = key.split(":", 1)[1].strip().lower()
@@ -448,7 +449,10 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
             tele_norm = str(tele_raw).strip().lstrip("@").lower()
             tele = f"@{tele_norm}" if tele_norm else ""
             tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
-            pad_val = int(udata.get("pad", 0) or 0)
+            try:
+                pad_val = float(pad_map.get(email, 0.0))
+            except Exception:
+                pad_val = 0.0
             posts[email] = {
                 "urls": pending,
                 "telegram": tele,

@@ -132,13 +132,21 @@
                 <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-2">
                     <div>
                         <h5 class="card-title mb-0">{{ email }}</h5>
-                        {% if pdata.telegram %}
-                            {% if pdata.tg_link %}
-                            <a href="{{ pdata.tg_link }}" target="_blank" class="link-light small">{{ pdata.telegram }}</a>
-                            {% else %}
-                            <span class="small">{{ pdata.telegram }}</span>
+                        <p class="small mb-1 d-flex flex-wrap align-items-center gap-2 mt-1">
+                            {% if pdata.telegram %}
+                                {% if pdata.tg_link %}
+                                <a href="{{ pdata.tg_link }}" target="_blank" class="link-light">{{ pdata.telegram }}</a>
+                                {% else %}
+                                <span>{{ pdata.telegram }}</span>
+                                {% endif %}
                             {% endif %}
-                        {% endif %}
+                            <span>Pad: <span class="pad-display">{{ pdata.pad }}</span></span>
+                        </p>
+                        <form method="post" action="/admin/scorepad" class="d-flex gap-1">
+                            <input type="hidden" name="email" value="{{ email }}">
+                            <input type="number" step="1" name="pad" value="{{ pdata.pad }}" class="form-control form-control-sm" style="max-width:6rem" placeholder="pad">
+                            <button class="btn btn-secondary btn-sm">Pad</button>
+                        </form>
                     </div>
                     <div class="mt-2 mt-sm-0 d-flex gap-2">
                         <span class="badge bg-info text-dark">{{ pdata.count }} posts</span>
