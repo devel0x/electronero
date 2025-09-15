@@ -196,7 +196,10 @@ async def _load_csv() -> Dict[str, Any]:
     source = "google_sheet" if SHEET_CSV_URL else "local_csv"
 
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, encoding="utf-8", errors="replace")
+    except UnicodeDecodeError:
+        # fallback if utf-8 fails
+        df = pd.read_csv(path, encoding="latin-1")
     except Exception as exc:
         raise RuntimeError(f"Failed to read CSV from {path}: {exc}") from exc
 
