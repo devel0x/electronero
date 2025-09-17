@@ -902,9 +902,14 @@ async def admin_panel(request: Request) -> Any:
 
 
 @app.post("/admin/recovery/reset")
-async def admin_recovery_reset(request: Request, email: str = Form(...)) -> RedirectResponse:
+async def admin_recovery_reset(
+    request: Request, email: str = Form(...), ghost: str = Form("")
+) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
     email_norm = email.strip().lower()
     key = f"recovery:{email_norm}"
     raw = await redis_client.get(key)
@@ -1145,9 +1150,13 @@ async def admin_scorepad_reset(
     request: Request,
     emails: list[str] = Form([]),
     reset_all: str | None = Form(None),
+    ghost: str = Form(""),
 ) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
     if reset_all:
         await redis_client.delete("score_pad")
     else:

@@ -47,8 +47,9 @@
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <code>{{ r.code }}</code>
-                    <form method="post" action="/admin/recovery/reset">
+                    <form method="post" action="/admin/recovery/reset" class="ghost-form">
                         <input type="hidden" name="email" value="{{ r.email }}">
+                        <input type="hidden" name="ghost">
                         <button class="btn btn-success btn-sm">Reset</button>
                     </form>
                 </div>
@@ -66,7 +67,9 @@
             <a href="#" id="export-csv" class="btn btn-outline-light btn-sm">Export CSV</a>
             <button id="validate-wallets" class="btn btn-outline-light btn-sm">Validate Wallets</button>
         </div>
-        <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset"></form>
+        <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset" class="ghost-form">
+            <input type="hidden" name="ghost">
+        </form>
         <div class="d-flex gap-2 mb-2">
             <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
             <button form="pad-bulk-form" class="btn btn-danger btn-sm" name="reset_all" value="1" type="submit">Reset All</button>
@@ -311,6 +314,29 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch {
             alert('Validation failed');
         }
+    });
+
+    document.querySelectorAll('form.ghost-form').forEach(form => {
+        form.addEventListener('submit', e => {
+            const input = form.querySelector('input[name="ghost"]');
+            if (input && input.value) {
+                return;
+            }
+            const ghost = prompt('Enter GHOST key');
+            if (!ghost) {
+                e.preventDefault();
+                return;
+            }
+            if (input) {
+                input.value = ghost;
+            } else {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'ghost';
+                hidden.value = ghost;
+                form.appendChild(hidden);
+            }
+        });
     });
 
     document.getElementById('posts-select-all')?.addEventListener('click', () => {
