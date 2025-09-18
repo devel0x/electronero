@@ -122,6 +122,20 @@ cache: Dict[str, Any] = {
     "pool_balance": 0.0,
 }
 
+async def _maintenance_guard(request: Request):
+    if await _maintenance_enabled():
+        # let admins bypass
+        if await _current_admin(request):
+            return None
+        # block ambassadors
+        if request.url.path.startswith("/api"):
+            return JSONResponse({"ok": False, "error": "maintenance_mode"}, status_code=503)
+        return templates.TemplateResponse(
+            "maintenance.html",
+            {"request": request},
+            status_code=503,
+        )
+    return None
 
 # def _get_pool_balance() -> float:
 #     """Fetch ITC balance for the ambassador pool address via interchained-cli."""
@@ -1584,6 +1598,9 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
 
 @app.get("/")
 async def index(request: Request) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
     is_admin = await _current_admin(request)
     if await _maintenance_enabled() and not is_admin:
         return templates.TemplateResponse(
