@@ -87,3 +87,10 @@ A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat.
 
 Use `/hashrate` to query the network's 24‑hour average mining power.
 
+Set `TELEGRAM_ADMIN_IDS` (comma-separated Telegram user IDs) or
+`TELEGRAM_ADMIN_USERNAMES` (comma-separated usernames without the leading `@`)
+to enable admin-only bot commands. Configured admins can increment an
+ambassador's score padding via `/pump @username amount`, which adds to the
+existing pad instead of overwriting it—for example, `/pump @interchained 100`
+adds 100 points to @interchained's score pad.
+
