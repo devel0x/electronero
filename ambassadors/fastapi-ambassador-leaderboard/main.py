@@ -902,9 +902,14 @@ async def admin_panel(request: Request) -> Any:
 
 
 @app.post("/admin/recovery/reset")
-async def admin_recovery_reset(request: Request, email: str = Form(...)) -> RedirectResponse:
+async def admin_recovery_reset(
+    request: Request, email: str = Form(...), ghost: str = Form("")
+) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
     email_norm = email.strip().lower()
     key = f"recovery:{email_norm}"
     raw = await redis_client.get(key)
@@ -1145,9 +1150,13 @@ async def admin_scorepad_reset(
     request: Request,
     emails: list[str] = Form([]),
     reset_all: str | None = Form(None),
+    ghost: str = Form(""),
 ) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
     if reset_all:
         await redis_client.delete("score_pad")
     else:
@@ -1158,6 +1167,65 @@ async def admin_scorepad_reset(
             await pipe.execute()
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/tasks/bulk")
+async def admin_task_bulk(
+    request: Request,
+    action: str = Form(...),
+    selected: list[str] = Form([]),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    action_name = (action or "").strip().lower()
+
+    if action_name == "verify_all":
+        tasks = await _all_tasks()
+        pipe = redis_client.pipeline()
+        touched: set[str] = set()
+        for email, mapping in tasks.items():
+            email_key = email.strip().lower()
+            if not email_key or not mapping:
+                continue
+            touched.add(email_key)
+            for task_id in mapping.keys():
+                tid = str(task_id).strip()
+                if tid:
+                    pipe.hset(f"tasks:{email_key}", tid, "verified")
+        if pipe.command_stack:
+            await pipe.execute()
+            for email_key in touched:
+                await redis_client.hset(f"user:{email_key}", "verified", 1)
+
+    elif action_name in {"verify_selected", "destroy_selected"}:
+        items: set[tuple[str, str]] = set()
+        for raw in selected:
+            if not raw or "||" not in raw:
+                continue
+            email_part, task_part = raw.split("||", 1)
+            email_key = email_part.strip().lower()
+            task_id = task_part.strip()
+            if email_key and task_id:
+                items.add((email_key, task_id))
+
+        if items:
+            pipe = redis_client.pipeline()
+            touched: set[str] = set()
+            if action_name == "verify_selected":
+                for email_key, task_id in items:
+                    pipe.hset(f"tasks:{email_key}", task_id, "verified")
+                    touched.add(email_key)
+            else:
+                for email_key, task_id in items:
+                    pipe.hdel(f"tasks:{email_key}", task_id)
+
+            if pipe.command_stack:
+                await pipe.execute()
+                for email_key in touched:
+                    await redis_client.hset(f"user:{email_key}", "verified", 1)
+
     return RedirectResponse("/admin", status_code=303)
 
 
