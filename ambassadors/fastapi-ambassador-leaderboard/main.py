@@ -357,7 +357,7 @@ async def _set_maintenance(enabled: bool) -> None:
     else:
         await redis_client.delete(MAINTENANCE_FLAG_KEY)
 
-
+        
 def _should_track_path(path: str) -> bool:
     for prefix in ANALYTICS_IGNORE_PREFIXES:
         if path.startswith(prefix):
@@ -1486,6 +1486,65 @@ async def admin_scorepad_reset(
             await pipe.execute()
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/tasks/bulk")
+async def admin_task_bulk(
+    request: Request,
+    action: str = Form(...),
+    selected: list[str] = Form([]),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    action_name = (action or "").strip().lower()
+
+    if action_name == "verify_all":
+        tasks = await _all_tasks()
+        pipe = redis_client.pipeline()
+        touched: set[str] = set()
+        for email, mapping in tasks.items():
+            email_key = email.strip().lower()
+            if not email_key or not mapping:
+                continue
+            touched.add(email_key)
+            for task_id in mapping.keys():
+                tid = str(task_id).strip()
+                if tid:
+                    pipe.hset(f"tasks:{email_key}", tid, "verified")
+        if pipe.command_stack:
+            await pipe.execute()
+            for email_key in touched:
+                await redis_client.hset(f"user:{email_key}", "verified", 1)
+
+    elif action_name in {"verify_selected", "destroy_selected"}:
+        items: set[tuple[str, str]] = set()
+        for raw in selected:
+            if not raw or "||" not in raw:
+                continue
+            email_part, task_part = raw.split("||", 1)
+            email_key = email_part.strip().lower()
+            task_id = task_part.strip()
+            if email_key and task_id:
+                items.add((email_key, task_id))
+
+        if items:
+            pipe = redis_client.pipeline()
+            touched: set[str] = set()
+            if action_name == "verify_selected":
+                for email_key, task_id in items:
+                    pipe.hset(f"tasks:{email_key}", task_id, "verified")
+                    touched.add(email_key)
+            else:
+                for email_key, task_id in items:
+                    pipe.hdel(f"tasks:{email_key}", task_id)
+
+            if pipe.command_stack:
+                await pipe.execute()
+                for email_key in touched:
+                    await redis_client.hset(f"user:{email_key}", "verified", 1)
+
     return RedirectResponse("/admin", status_code=303)
 
 
