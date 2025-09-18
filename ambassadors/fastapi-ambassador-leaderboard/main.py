@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import ipaddress
 import os, json, shutil, shlex, subprocess
 import secrets
 import hashlib
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pandas as pd
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
@@ -70,6 +72,14 @@ EXPECTED_COLUMNS = [
 
 redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
 CACHE_KEY = "leaderboard_cache"
+
+ANALYTICS_VISITOR_KEY = "analytics:visits"
+ANALYTICS_VISITOR_LIMIT = 200
+ANALYTICS_GEO_CACHE_PREFIX = "analytics:geo:"
+ANALYTICS_UNIQUE_IPS_KEY = "analytics:unique_ips"
+ANALYTICS_TOTAL_VISITS_KEY = "analytics:total_visits"
+ANALYTICS_IGNORE_PREFIXES = ("/static", "/favicon.ico", "/health")
+GEO_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # one week
 
 # Remove/normalize invalid surrogate code points from Python strings.
 _SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
@@ -335,6 +345,261 @@ async def _current_admin(request: Request) -> bool:
     return await redis_client.get(f"admin_session:{token}") == "admin"
 
 
+def _should_track_path(path: str) -> bool:
+    for prefix in ANALYTICS_IGNORE_PREFIXES:
+        if path.startswith(prefix):
+            return False
+    return True
+
+
+def _extract_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        ip = forwarded.split(",")[0].strip()
+        if ip:
+            return ip
+    client = request.client
+    if client and client.host:
+        return client.host
+    return ""
+
+
+def _format_location_label(country: str, region: str, city: str) -> str:
+    parts = [city, region, country]
+    label = ", ".join(p for p in parts if p)
+    return label or (country or "Unknown") or "Unknown"
+
+
+def _format_timestamp(ts: str) -> str:
+    if not ts:
+        return ""
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            return ts
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _normalize_date_str(ts: str) -> str:
+    if not ts:
+        return ""
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            return ""
+    return dt.date().isoformat()
+
+
+async def _resolve_ip_location(ip: str) -> dict[str, str]:
+    default = {
+        "country": "",
+        "region": "",
+        "city": "",
+        "label": "Unknown",
+    }
+    if not ip:
+        return default
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+        if any(
+            [
+                ip_obj.is_private,
+                ip_obj.is_loopback,
+                ip_obj.is_reserved,
+                ip_obj.is_multicast,
+                ip_obj.is_unspecified,
+            ]
+        ):
+            label = "Local Network"
+            return {
+                "country": "",
+                "region": "",
+                "city": "",
+                "label": label,
+            }
+    except ValueError:
+        return default
+
+    cache_key = f"{ANALYTICS_GEO_CACHE_PREFIX}{ip}"
+    cached = await redis_client.get(cache_key)
+    if cached:
+        try:
+            data = json.loads(cached)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city"
+            )
+            if resp.status_code == 200:
+                payload = resp.json()
+                if payload.get("status") == "success":
+                    country = payload.get("country") or ""
+                    region = payload.get("regionName") or ""
+                    city = payload.get("city") or ""
+                    label = _format_location_label(country, region, city)
+                    result = {
+                        "country": country,
+                        "region": region,
+                        "city": city,
+                        "label": label,
+                    }
+                    await redis_client.setex(
+                        cache_key, GEO_CACHE_TTL_SECONDS, json.dumps(result)
+                    )
+                    return result
+    except Exception as exc:
+        print(f"[analytics] geo lookup failed for {ip}: {exc}")
+
+    return default
+
+
+async def _record_visit(ip: str, path: str, user: str, user_agent: str = "") -> None:
+    now = datetime.utcnow().isoformat()
+    location = await _resolve_ip_location(ip)
+    visitor_key = f"analytics:visitor:{ip or 'unknown'}"
+    count = await redis_client.hincrby(visitor_key, "count", 1)
+    await redis_client.hset(
+        visitor_key,
+        mapping={
+            "ip": ip or "unknown",
+            "last_seen": now,
+            "country": location.get("country", ""),
+            "region": location.get("region", ""),
+            "city": location.get("city", ""),
+            "label": location.get("label", "Unknown"),
+            "last_path": path,
+            "last_user": user or "",
+            "user_agent": user_agent,
+            "count": count,
+        },
+    )
+    await redis_client.sadd(ANALYTICS_UNIQUE_IPS_KEY, ip or "unknown")
+    await redis_client.incr(ANALYTICS_TOTAL_VISITS_KEY)
+    log_entry = {
+        "ip": ip or "unknown",
+        "path": path,
+        "timestamp": now,
+        "user": user or "",
+        "location": location.get("label", "Unknown"),
+    }
+    await redis_client.lpush(ANALYTICS_VISITOR_KEY, json.dumps(log_entry))
+    await redis_client.ltrim(ANALYTICS_VISITOR_KEY, 0, ANALYTICS_VISITOR_LIMIT - 1)
+
+
+async def _user_growth_series() -> tuple[list[dict[str, Any]], int]:
+    keys = await redis_client.keys("user:*")
+    totals: dict[str, int] = {}
+    unknown = 0
+    for key in keys:
+        data = await redis_client.hgetall(key)
+        created = _normalize_date_str(data.get("created_at", ""))
+        if created:
+            totals[created] = totals.get(created, 0) + 1
+        else:
+            unknown += 1
+    total_users = len(keys)
+    if not totals:
+        if total_users:
+            today = datetime.utcnow().date().isoformat()
+            return ([{"date": today, "count": total_users}]), total_users
+        return ([], 0)
+    series: list[dict[str, Any]] = []
+    cumulative = 0
+    for date in sorted(totals.keys()):
+        cumulative += totals[date]
+        series.append({"date": date, "count": cumulative})
+    if unknown:
+        for idx in range(len(series)):
+            series[idx]["count"] += unknown
+    return series, total_users
+
+
+async def _analytics_dashboard() -> dict[str, Any]:
+    total_visits_raw = await redis_client.get(ANALYTICS_TOTAL_VISITS_KEY)
+    try:
+        total_visits = int(total_visits_raw or 0)
+    except Exception:
+        total_visits = 0
+
+    visitor_keys = await redis_client.keys("analytics:visitor:*")
+    visitor_details: list[dict[str, Any]] = []
+    location_totals: dict[str, int] = {}
+    for key in visitor_keys:
+        data = await redis_client.hgetall(key)
+        if not data:
+            continue
+        ip = data.get("ip", key.split(":", 2)[-1])
+        count_raw = data.get("count", 0)
+        try:
+            count = int(count_raw)
+        except Exception:
+            count = 0
+        last_seen = _format_timestamp(data.get("last_seen", ""))
+        label = data.get("label") or _format_location_label(
+            data.get("country", ""),
+            data.get("region", ""),
+            data.get("city", ""),
+        )
+        location_totals[label] = location_totals.get(label, 0) + count
+        visitor_details.append(
+            {
+                "ip": ip,
+                "count": count,
+                "last_seen": last_seen,
+                "label": label,
+                "country": data.get("country", ""),
+                "region": data.get("region", ""),
+                "city": data.get("city", ""),
+                "last_path": data.get("last_path", ""),
+                "last_user": data.get("last_user", ""),
+            }
+        )
+
+    visitor_details.sort(key=lambda item: item.get("last_seen", ""), reverse=True)
+    visitor_details = visitor_details[:20]
+
+    top_locations = [
+        {"label": label, "count": count}
+        for label, count in sorted(
+            location_totals.items(), key=lambda x: x[1], reverse=True
+        )[:10]
+    ]
+
+    raw_recent = await redis_client.lrange(ANALYTICS_VISITOR_KEY, 0, 19)
+    recent: list[dict[str, Any]] = []
+    for raw in raw_recent:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        entry["timestamp"] = _format_timestamp(entry.get("timestamp", ""))
+        recent.append(entry)
+
+    unique_visitors = await redis_client.scard(ANALYTICS_UNIQUE_IPS_KEY)
+    user_growth, total_users = await _user_growth_series()
+
+    return {
+        "total_visits": total_visits,
+        "unique_visitors": unique_visitors,
+        "visitor_details": visitor_details,
+        "recent": recent,
+        "top_locations": top_locations,
+        "user_growth": user_growth,
+        "total_users": total_users,
+    }
+
+
 async def _pending_rewards_map() -> dict[str, float]:
     mapping: dict[str, float] = {}
     data = await _get_cached_data()
@@ -575,6 +840,24 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+@app.middleware("http")
+async def analytics_middleware(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if not _should_track_path(path):
+        return response
+    try:
+        ip = _extract_client_ip(request)
+        email = await _current_email(request)
+        is_admin = await _current_admin(request)
+        user_label = email or ("admin" if is_admin else "")
+        user_agent = request.headers.get("user-agent", "")
+        await _record_visit(ip, path, user_label, user_agent)
+    except Exception as exc:
+        print(f"[analytics] failed to record visit for {path}: {exc}")
+    return response
+
+
 def _normalize_telegram(handle: str) -> str:
     h = handle.strip()
     if not h:
@@ -680,13 +963,16 @@ async def register(
             "register.html",
             {"request": request, "error": "Email not permitted"},
         )
+    key = f"user:{email_norm}"
+    has_created = await redis_client.hexists(key, "created_at")
     await redis_client.hset(
-        f"user:{email_norm}",
+        key,
         mapping={
             "password": _hash_password(password),
             "wallet": wallet.strip(),
             "telegram": _normalize_telegram(telegram),
             "verified": 0,
+            **({"created_at": datetime.utcnow().isoformat()} if not has_created else {}),
         },
     )
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
@@ -891,6 +1177,7 @@ async def admin_panel(request: Request) -> Any:
     tasks = await _all_tasks()
     proposals = await _pending_proposals()
     recoveries = await _all_recoveries()
+    analytics = await _analytics_dashboard()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -901,6 +1188,7 @@ async def admin_panel(request: Request) -> Any:
             "recoveries": recoveries,
             "task_labels": TASK_LABELS,
             "proposals": proposals,
+            "analytics": analytics,
         },
     )
 
