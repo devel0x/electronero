@@ -216,13 +216,23 @@
     </div>
     <div id="tasks" class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>
+        <form id="tasks-bulk-form" method="post" action="/admin/tasks/bulk"></form>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button id="tasks-select-all" type="button" class="btn btn-outline-light btn-sm">Select All</button>
+            <button form="tasks-bulk-form" class="btn btn-success btn-sm" name="action" value="verify_selected" type="submit">Verify Selected</button>
+            <button form="tasks-bulk-form" class="btn btn-success btn-sm" name="action" value="verify_all" type="submit">Verify All</button>
+            <button form="tasks-bulk-form" class="btn btn-danger btn-sm" name="action" value="destroy_selected" type="submit">Destroy Selected</button>
+        </div>
         {% for email, tmap in tasks.items() %}
         <div class="mb-3">
             <h2 class="h6">{{ email }}</h2>
             <ul class="list-group list-group-flush">
                 {% for tid, status in tmap.items() %}
-                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center  text-light">
-                    <span>{{ task_labels.get(tid, tid) }}</span>
+                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center text-light gap-3">
+                    <div class="d-flex align-items-center gap-2 flex-grow-1">
+                        <input class="form-check-input task-select" type="checkbox" name="selected" value="{{ email }}||{{ tid }}" form="tasks-bulk-form">
+                        <span>{{ task_labels.get(tid, tid) }}</span>
+                    </div>
                     <div class="d-flex gap-1">
                         {% if status != 'verified' %}
                         <form method="post" action="/admin/tasks/verify">
@@ -341,6 +351,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('posts-select-all')?.addEventListener('click', () => {
         document.querySelectorAll('input[form="posts-bulk-form"][type="checkbox"]').forEach(cb => {
+            cb.checked = true;
+        });
+    });
+
+    document.getElementById('tasks-select-all')?.addEventListener('click', () => {
+        document.querySelectorAll('input.task-select').forEach(cb => {
             cb.checked = true;
         });
     });
