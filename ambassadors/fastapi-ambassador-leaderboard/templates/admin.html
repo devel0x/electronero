@@ -30,6 +30,31 @@
     </div>
 </nav>
 <div class="container py-4">
+    <div id="maintenance" class="glass-card p-3 mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Maintenance Mode</h1>
+                <p class="mb-0 text-muted small">
+                    {% if maintenance_enabled %}
+                    Ambassador dashboards are currently paused. They will see the maintenance notice and
+                    ambassador-facing APIs return a 503 response until you toggle this off.
+                    {% else %}
+                    Enable maintenance to pause ambassador access while you perform updates or data imports.
+                    {% endif %}
+                </p>
+            </div>
+            <form id="maintenance-form" method="post" action="/admin/maintenance" class="d-flex align-items-center gap-3">
+                <input type="hidden" name="enabled" value="{{ 1 if maintenance_enabled else 0 }}">
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="maintenance-toggle" {% if maintenance_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="maintenance-toggle">{{ 'On' if maintenance_enabled else 'Off' }}</label>
+                </div>
+                <span class="badge {% if maintenance_enabled %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                    {% if maintenance_enabled %}Active{% else %}Disabled{% endif %}
+                </span>
+            </form>
+        </div>
+    </div>
     <div id="analytics" class="glass-card p-3 mb-4">
         <h1 class="h5 text-uppercase">Analytics Overview</h1>
         <div class="row g-3 mb-3">
@@ -389,6 +414,18 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const maintenanceForm = document.getElementById('maintenance-form');
+    const maintenanceToggle = document.getElementById('maintenance-toggle');
+    if (maintenanceForm && maintenanceToggle) {
+        maintenanceToggle.addEventListener('change', () => {
+            const hidden = maintenanceForm.querySelector('input[name="enabled"]');
+            if (hidden) {
+                hidden.value = maintenanceToggle.checked ? '1' : '0';
+            }
+            maintenanceForm.submit();
+        });
+    }
+
     const userGrowthData = {{ analytics.user_growth | tojson }};
     const growthCanvas = document.getElementById('userGrowthChart');
     if (growthCanvas && Array.isArray(userGrowthData) && userGrowthData.length) {

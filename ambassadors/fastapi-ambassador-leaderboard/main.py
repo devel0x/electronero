@@ -80,6 +80,7 @@ ANALYTICS_UNIQUE_IPS_KEY = "analytics:unique_ips"
 ANALYTICS_TOTAL_VISITS_KEY = "analytics:total_visits"
 ANALYTICS_IGNORE_PREFIXES = ("/static", "/favicon.ico", "/health")
 GEO_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # one week
+MAINTENANCE_FLAG_KEY = "app:maintenance_mode"
 
 # Remove/normalize invalid surrogate code points from Python strings.
 _SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
@@ -345,6 +346,18 @@ async def _current_admin(request: Request) -> bool:
     return await redis_client.get(f"admin_session:{token}") == "admin"
 
 
+async def _maintenance_enabled() -> bool:
+    value = await redis_client.get(MAINTENANCE_FLAG_KEY)
+    return str(value) == "1"
+
+
+async def _set_maintenance(enabled: bool) -> None:
+    if enabled:
+        await redis_client.set(MAINTENANCE_FLAG_KEY, "1")
+    else:
+        await redis_client.delete(MAINTENANCE_FLAG_KEY)
+
+        
 def _should_track_path(path: str) -> bool:
     for prefix in ANALYTICS_IGNORE_PREFIXES:
         if path.startswith(prefix):
@@ -1178,6 +1191,7 @@ async def admin_panel(request: Request) -> Any:
     proposals = await _pending_proposals()
     recoveries = await _all_recoveries()
     analytics = await _analytics_dashboard()
+    maintenance_enabled = await _maintenance_enabled()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -1189,8 +1203,21 @@ async def admin_panel(request: Request) -> Any:
             "task_labels": TASK_LABELS,
             "proposals": proposals,
             "analytics": analytics,
+            "maintenance_enabled": maintenance_enabled,
         },
     )
+
+
+@app.post("/admin/maintenance")
+async def admin_maintenance_toggle(
+    request: Request, enabled: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    normalized = str(enabled).strip().lower()
+    is_enabled = normalized in {"1", "true", "yes", "on"}
+    await _set_maintenance(is_enabled)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/recovery/reset")
@@ -1555,6 +1582,16 @@ async def index(request: Request) -> Any:
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
+    is_admin = await _current_admin(request)
+    if await _maintenance_enabled() and not is_admin:
+        return templates.TemplateResponse(
+            "maintenance.html",
+            {
+                "request": request,
+                "email": email,
+            },
+            status_code=503,
+        )
     user = await redis_client.hgetall(f"user:{email}")
     wallet = user.get("wallet") if user else ""
     data = await _get_cached_data()
@@ -1578,8 +1615,12 @@ async def index(request: Request) -> Any:
 
 @app.get("/api/leaderboard.json")
 async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSONResponse:
-    if not await _current_email(request):
+    email = await _current_email(request)
+    is_admin = await _current_admin(request)
+    if not is_admin and not email:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if await _maintenance_enabled() and not is_admin:
+        return JSONResponse({"ok": False, "error": "maintenance_mode"}, status_code=503)
     data = await _get_cached_data(force_refresh=refresh)
     return JSONResponse(
         {
