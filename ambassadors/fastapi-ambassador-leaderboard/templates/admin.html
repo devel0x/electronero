@@ -46,7 +46,7 @@
             <form id="maintenance-form" method="post" action="/admin/maintenance" class="d-flex align-items-center gap-3">
                 <input type="hidden" name="enabled" value="{{ 1 if maintenance_enabled else 0 }}">
                 <div class="form-check form-switch m-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="maintenance-toggle" {% if maintenance_enabled %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" role="switch" id="maintenance-toggle" name="enabled" value="1" {% if maintenance_enabled %}checked{% endif %}>
                     <label class="form-check-label" for="maintenance-toggle">{{ 'On' if maintenance_enabled else 'Off' }}</label>
                 </div>
                 <span class="badge {% if maintenance_enabled %}bg-warning text-dark{% else %}bg-success{% endif %}">
@@ -414,17 +414,15 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const maintenanceForm = document.getElementById('maintenance-form');
-    const maintenanceToggle = document.getElementById('maintenance-toggle');
-    if (maintenanceForm && maintenanceToggle) {
-        maintenanceToggle.addEventListener('change', () => {
-            const hidden = maintenanceForm.querySelector('input[name="enabled"]');
-            if (hidden) {
-                hidden.value = maintenanceToggle.checked ? '1' : '0';
-            }
-            maintenanceForm.submit();
-        });
-    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const maintenanceForm = document.getElementById('maintenance-form');
+        const toggle = document.getElementById('maintenance-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', () => {
+                toggle.form.submit();
+            });
+        }
+    });
 
     const userGrowthData = {{ analytics.user_growth | tojson }};
     const growthCanvas = document.getElementById('userGrowthChart');
