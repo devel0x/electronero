@@ -1,10 +1,10 @@
 import logging
 import os
 import re
-from typing import Dict
+from typing import Dict, Optional, Set
 
 import httpx
-from telegram import Update
+from telegram import Update, User
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
     Application,
@@ -15,7 +15,15 @@ from telegram.ext import (
     filters,
 )
 
-from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegram, redis_client, _get_cached_data
+from main import (
+    TASK_LIST,
+    REGISTERED_EMAILS,
+    _hash_password,
+    redis_client,
+    _get_cached_data,
+    TELEGRAM_EMAIL_MAP_KEY,
+    record_telegram_email,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -148,6 +156,101 @@ def _normalize_telegram(username: str) -> str:
         username = username[1:]
     return username.lower()
 
+
+def _parse_admin_ids(raw: str) -> Set[int]:
+    ids: Set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            logger.warning("Ignoring invalid TELEGRAM_ADMIN_IDS entry: %s", part)
+    return ids
+
+
+def _parse_admin_usernames(raw: str) -> Set[str]:
+    handles: Set[str] = set()
+    for part in raw.split(","):
+        handle = _normalize_telegram(part)
+        if handle:
+            handles.add(handle)
+    return handles
+
+
+ADMIN_USER_IDS: Set[int] = _parse_admin_ids(os.getenv("TELEGRAM_ADMIN_IDS", ""))
+ADMIN_USERNAMES: Set[str] = _parse_admin_usernames(
+    os.getenv("TELEGRAM_ADMIN_USERNAMES", "")
+)
+
+if not ADMIN_USER_IDS and not ADMIN_USERNAMES:
+    logger.warning(
+        "No Telegram admin identifiers configured; admin-only commands will be disabled."
+    )
+
+
+def _is_admin_user(user: Optional[User]) -> bool:
+    if user is None:
+        return False
+    if ADMIN_USER_IDS and user.id in ADMIN_USER_IDS:
+        return True
+    username = _normalize_telegram(getattr(user, "username", ""))
+    if ADMIN_USERNAMES and username and username in ADMIN_USERNAMES:
+        return True
+    return False
+
+
+async def _emails_for_target(identifier: str) -> list[str]:
+    """Resolve a Telegram username or email to leaderboard email(s)."""
+    norm = _normalize_telegram(identifier)
+    raw_lower = str(identifier or "").strip().lower()
+    possible_email = (
+        raw_lower
+        if raw_lower and "@" in raw_lower and not raw_lower.startswith("@")
+        else None
+    )
+
+    matches: Set[str] = set()
+
+    if norm:
+        direct = await redis_client.hget(TELEGRAM_EMAIL_MAP_KEY, norm)
+        if direct:
+            matches.add(str(direct).strip().lower())
+
+    try:
+        data = await _get_cached_data()
+    except Exception as exc:  # pragma: no cover - defensive logging only
+        logger.warning(
+            "Failed to load cached leaderboard while resolving %s: %s", identifier, exc
+        )
+        data = {}
+
+    rows = data.get("rows", []) if isinstance(data, dict) else []
+    for row in rows:
+        email = str(row.get("email", "")).strip().lower()
+        if not email:
+            continue
+        tele = _normalize_telegram(row.get("telegram", ""))
+        if tele == norm:
+            matches.add(email)
+        elif possible_email and email == possible_email:
+            matches.add(email)
+
+    keys = await redis_client.keys("user:*")
+    for key in keys:
+        email = key.split(":", 1)[1].strip().lower()
+        if not email:
+            continue
+        if possible_email and email == possible_email:
+            matches.add(email)
+            continue
+        udata = await redis_client.hgetall(key)
+        if _normalize_telegram(udata.get("telegram", "")) == norm:
+            matches.add(email)
+
+    return sorted(matches)
+
 async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Finalize registration by saving credentials."""
     wallet = update.message.text.strip()
@@ -158,16 +261,20 @@ async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
             "Registration data missing. Start over with /register <email>."
         )
         return ConversationHandler.END
+    email_key = str(email).strip().lower()
+    old_telegram = await redis_client.hget(f"user:{email_key}", "telegram")
+    stored_handle = _normalize_telegram(update.effective_user.username or "")
     await redis_client.hset(
-        f"user:{email}",
+        f"user:{email_key}",
         mapping={
             "password": _hash_password(password),
             "wallet": wallet,
-            "telegram": _normalize_telegram(update.effective_user.username or ""),
+            "telegram": stored_handle,
         },
     )
+    await record_telegram_email(email_key, stored_handle, previous=old_telegram)
     context.user_data["authenticated"] = True
-    context.user_data["email"] = email
+    context.user_data["email"] = email_key
     await update.message.reply_text("Registered successfully.")
     return ConversationHandler.END
 
@@ -246,16 +353,20 @@ async def received_reg_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
             "Registration data missing. Start over with /register <email>."
         )
         return ConversationHandler.END
+    email_key = str(email).strip().lower()
+    old_telegram = await redis_client.hget(f"user:{email_key}", "telegram")
+    stored_handle = telegram or _normalize_telegram(update.effective_user.username or "")
     await redis_client.hset(
-        f"user:{email}",
+        f"user:{email_key}",
         mapping={
             "password": _hash_password(password),
             "wallet": wallet,
-            "telegram": telegram or _normalize_telegram(update.effective_user.username or ""),
+            "telegram": stored_handle,
         },
     )
+    await record_telegram_email(email_key, stored_handle, previous=old_telegram)
     context.user_data["authenticated"] = True
-    context.user_data["email"] = email
+    context.user_data["email"] = email_key
     await update.message.reply_text("Registered successfully.")
     return ConversationHandler.END
 
@@ -397,6 +508,87 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
+async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if message is None:
+        return
+
+    if not _is_admin_user(update.effective_user):
+        await message.reply_text("🚫 This command is restricted to admins.")
+        return
+
+    if len(context.args) < 2:
+        await message.reply_text("Usage: /pump @username amount")
+        return
+
+    target_arg = context.args[0]
+    amount_text = context.args[1]
+    handle_norm = _normalize_telegram(target_arg)
+    if not handle_norm:
+        await message.reply_text("Provide a Telegram username like @username.")
+        return
+
+    try:
+        amount = float(amount_text)
+    except ValueError:
+        await message.reply_text("Amount must be a number.")
+        return
+
+    if amount <= 0:
+        await message.reply_text("Amount must be greater than zero.")
+        return
+
+    matches = await _emails_for_target(target_arg)
+    if not matches:
+        await message.reply_text(f"Could not find a scoreboard entry for @{handle_norm}.")
+        return
+
+    if len(matches) > 1:
+        emails = ", ".join(matches)
+        await message.reply_text(
+            f"Multiple ambassadors use @{handle_norm}: {emails}. "
+            "Please resolve manually via the admin panel."
+        )
+        return
+
+    email = matches[0]
+    try:
+        new_total = await redis_client.hincrbyfloat("score_pad", email, amount)
+    except Exception as exc:  # pragma: no cover - defensive logging only
+        logger.exception("Failed to increment score pad for %s: %s", email, exc)
+        await message.reply_text(f"Failed to update scorepad: {exc}")
+        return
+
+    data = await _get_cached_data(force_refresh=True)
+    total_points = None
+    if isinstance(data, dict):
+        for row in data.get("rows", []):
+            email_value = str(row.get("email", "")).strip().lower()
+            if email_value == email:
+                try:
+                    total_points = float(row.get("points", 0))
+                except (TypeError, ValueError):
+                    total_points = None
+                break
+
+    raw_target = target_arg.strip()
+    if raw_target.startswith("@"):
+        display_target = raw_target
+    elif "@" in raw_target:
+        display_target = raw_target
+    else:
+        display_target = f"@{handle_norm}"
+
+    response_parts = [
+        f"Added {amount:g} points to {display_target} ({email}).",
+        f"Score pad is now {new_total:g}.",
+    ]
+    if total_points is not None:
+        response_parts.append(f"Leaderboard points: {total_points:g}.")
+
+    await message.reply_text(" ".join(response_parts))
+
+
 async def hashrate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -490,6 +682,7 @@ def main() -> None:
     application.add_handler(CommandHandler("apply", apply_task))
     application.add_handler(CommandHandler("verify", verify))
     application.add_handler(CommandHandler("leaderboard", leaderboard))
+    application.add_handler(CommandHandler("pump", pump))
     application.add_handler(CommandHandler("hashrate", hashrate))
     application.add_handler(CommandHandler("logout", logout))
     application.add_error_handler(on_error)

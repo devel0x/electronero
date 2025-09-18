@@ -70,6 +70,7 @@ EXPECTED_COLUMNS = [
 
 redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
 CACHE_KEY = "leaderboard_cache"
+TELEGRAM_EMAIL_MAP_KEY = "telegram_email_map"
 
 # Remove/normalize invalid surrogate code points from Python strings.
 _SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
@@ -280,6 +281,8 @@ async def _load_csv() -> Dict[str, Any]:
 
     if "__email_norm" in df.columns:
         df = df.drop(columns="__email_norm")
+
+    await _rebuild_telegram_email_map(df)
 
     base_cols = [
         "rank",
@@ -582,6 +585,68 @@ def _normalize_telegram(handle: str) -> str:
     h = h.lstrip("@").lower()
     return f"@{h}"
 
+
+def _telegram_lookup_key(handle: str | None) -> str:
+    """Normalize a Telegram handle for lookups (lowercase without @)."""
+    if handle is None:
+        return ""
+    return str(handle).strip().lstrip("@").lower()
+
+
+async def record_telegram_email(
+    email: str, telegram: str | None, previous: str | None = None
+) -> None:
+    """Track Telegram→email relationships for quick admin lookups."""
+
+    email_key = str(email or "").strip().lower()
+    if not email_key:
+        return
+
+    new_handle = _telegram_lookup_key(telegram)
+    old_handle = _telegram_lookup_key(previous)
+
+    pipe = redis_client.pipeline()
+
+    if old_handle and old_handle != new_handle:
+        pipe.hdel(TELEGRAM_EMAIL_MAP_KEY, old_handle)
+
+    if new_handle:
+        pipe.hset(TELEGRAM_EMAIL_MAP_KEY, new_handle, email_key)
+
+    if pipe.command_stack:
+        await pipe.execute()
+
+
+async def _rebuild_telegram_email_map(df: pd.DataFrame) -> None:
+    """Recreate the Telegram lookup table from cached leaderboard + user data."""
+
+    entries: list[tuple[str, str]] = []
+
+    if "email" in df.columns:
+        for row in df.to_dict(orient="records"):
+            email_key = str(row.get("email", "")).strip().lower()
+            handle_key = _telegram_lookup_key(row.get("telegram", ""))
+            if email_key and handle_key:
+                entries.append((handle_key, email_key))
+
+    user_keys = await redis_client.keys("user:*")
+    for key in user_keys:
+        email_key = key.split(":", 1)[1].strip().lower()
+        if not email_key:
+            continue
+        telegram_value = await redis_client.hget(key, "telegram")
+        handle_key = _telegram_lookup_key(telegram_value)
+        if handle_key:
+            entries.append((handle_key, email_key))
+
+    pipe = redis_client.pipeline()
+    pipe.delete(TELEGRAM_EMAIL_MAP_KEY)
+    for handle_key, email_key in entries:
+        pipe.hset(TELEGRAM_EMAIL_MAP_KEY, handle_key, email_key)
+
+    if pipe.command_stack:
+        await pipe.execute()
+
 # serve /favicon.ico at the root
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
@@ -680,15 +745,18 @@ async def register(
             "register.html",
             {"request": request, "error": "Email not permitted"},
         )
+    old_value = await redis_client.hget(f"user:{email_norm}", "telegram")
+    new_value = _normalize_telegram(telegram)
     await redis_client.hset(
         f"user:{email_norm}",
         mapping={
             "password": _hash_password(password),
             "wallet": wallet.strip(),
-            "telegram": _normalize_telegram(telegram),
+            "telegram": new_value,
             "verified": 0,
         },
     )
+    await record_telegram_email(email_norm, new_value, previous=old_value)
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
 
 
@@ -1126,9 +1194,11 @@ async def admin_telegram_update(
 ) -> RedirectResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
-    await redis_client.hset(
-        f"user:{email}", "telegram", _normalize_telegram(telegram)
-    )
+    email_key = email.strip().lower()
+    old_value = await redis_client.hget(f"user:{email_key}", "telegram")
+    new_value = _normalize_telegram(telegram)
+    await redis_client.hset(f"user:{email_key}", "telegram", new_value)
+    await record_telegram_email(email_key, new_value, previous=old_value)
     return RedirectResponse("/admin", status_code=303)
 
 
