@@ -1584,19 +1584,18 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
 
 @app.get("/")
 async def index(request: Request) -> Any:
-    email = await _current_email(request)
-    if not email:
-        return RedirectResponse("/login")
     is_admin = await _current_admin(request)
     if await _maintenance_enabled() and not is_admin:
         return templates.TemplateResponse(
             "maintenance.html",
-            {
-                "request": request,
-                "email": email,
-            },
+            {"request": request},
             status_code=503,
         )
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
     user = await redis_client.hgetall(f"user:{email}")
     wallet = user.get("wallet") if user else ""
     data = await _get_cached_data()
