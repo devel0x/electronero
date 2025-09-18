@@ -533,12 +533,15 @@ async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     email = matches[0]
     try:
         new_total = await redis_client.hincrbyfloat("score_pad", email, amount)
-    except Exception as exc:  # pragma: no cover - defensive logging only
+        # 🔥 Invalidate leaderboard cache so change is visible immediately
+        await redis_client.delete("leaderboard_cache")
+        data = await _get_cached_data(force_refresh=True)
+    except Exception as exc:  # defensive logging
         logger.exception("Failed to increment score pad for %s: %s", email, exc)
         await message.reply_text(f"Failed to update scorepad: {exc}")
         return
 
-    data = await _get_cached_data(force_refresh=True)
+    # Look up the updated leaderboard points
     total_points = None
     if isinstance(data, dict):
         for row in data.get("rows", []):
