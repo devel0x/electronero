@@ -30,6 +30,136 @@
     </div>
 </nav>
 <div class="container py-4">
+    <div id="maintenance" class="glass-card p-3 mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Maintenance Mode</h1>
+                <p class="mb-0 text-muted small">
+                    {% if maintenance_enabled %}
+                    Ambassador dashboards are currently paused. They will see the maintenance notice and
+                    ambassador-facing APIs return a 503 response until you toggle this off.
+                    {% else %}
+                    Enable maintenance to pause ambassador access while you perform updates or data imports.
+                    {% endif %}
+                </p>
+            </div>
+            <form id="maintenance-form" method="post" action="/admin/maintenance" class="d-flex align-items-center gap-3">
+                <input type="hidden" name="enabled" value="{{ 1 if maintenance_enabled else 0 }}">
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="maintenance-toggle" {% if maintenance_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="maintenance-toggle">{{ 'On' if maintenance_enabled else 'Off' }}</label>
+                </div>
+                <span class="badge {% if maintenance_enabled %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                    {% if maintenance_enabled %}Active{% else %}Disabled{% endif %}
+                </span>
+            </form>
+        </div>
+    </div>
+    <div id="analytics" class="glass-card p-3 mb-4">
+        <h1 class="h5 text-uppercase">Analytics Overview</h1>
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-muted mb-1">Total Visits</p>
+                        <div class="fs-4 fw-bold">{{ analytics.total_visits }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-muted mb-1">Unique Visitors</p>
+                        <div class="fs-4 fw-bold">{{ analytics.unique_visitors }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-muted mb-1">Total Users</p>
+                        <div class="fs-4 fw-bold">{{ analytics.total_users }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-muted mb-1">Tracked Locations</p>
+                        <div class="fs-4 fw-bold">{{ analytics.top_locations|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <h2 class="h6 text-uppercase">Visitors</h2>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead class="table-light text-dark">
+                            <tr>
+                                <th scope="col">IP Address</th>
+                                <th scope="col">Location</th>
+                                <th scope="col" class="text-center">Visits</th>
+                                <th scope="col">Last Seen</th>
+                                <th scope="col">Last Path</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for visitor in analytics.visitor_details %}
+                            <tr>
+                                <td><code>{{ visitor.ip }}</code></td>
+                                <td>{{ visitor.label }}</td>
+                                <td class="text-center">{{ visitor.count }}</td>
+                                <td class="small">{{ visitor.last_seen }}</td>
+                                <td class="small text-break">{{ visitor.last_path or '—' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">No visitor data captured yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <h2 class="h6 text-uppercase">User Growth</h2>
+                <div class="bg-dark bg-opacity-75 border border-light rounded p-3">
+                    <canvas id="userGrowthChart" height="220"></canvas>
+                </div>
+                <div class="row mt-3 g-3">
+                    <div class="col-12">
+                        <h3 class="h6 text-uppercase mb-2">Top Locations</h3>
+                        <ul class="list-group list-group-flush small">
+                            {% for loc in analytics.top_locations %}
+                            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center text-light">
+                                <span>{{ loc.label }}</span>
+                                <span class="badge bg-info text-dark">{{ loc.count }}</span>
+                            </li>
+                            {% else %}
+                            <li class="list-group-item bg-transparent text-muted">No locations tracked yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="col-12">
+                        <h3 class="h6 text-uppercase mb-2">Recent Activity</h3>
+                        <ul class="list-group list-group-flush small">
+                            {% for entry in analytics.recent %}
+                            <li class="list-group-item bg-transparent text-light">
+                                <div class="fw-semibold">{{ entry.timestamp }}</div>
+                                <div>{{ entry.ip }} • {{ entry.location }}</div>
+                                <div class="text-muted">{{ entry.path }}{% if entry.user %} • {{ entry.user }}{% endif %}</div>
+                            </li>
+                            {% else %}
+                            <li class="list-group-item bg-transparent text-muted">No recent visits captured.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="recoveries" class="glass-card p-3 mb-4">
         <h1 class="h5">Password Recoveries</h1>
         <ul class="list-group list-group-flush">
@@ -271,8 +401,60 @@
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const maintenanceForm = document.getElementById('maintenance-form');
+    const maintenanceToggle = document.getElementById('maintenance-toggle');
+    if (maintenanceForm && maintenanceToggle) {
+        maintenanceToggle.addEventListener('change', () => {
+            const hidden = maintenanceForm.querySelector('input[name="enabled"]');
+            if (hidden) {
+                hidden.value = maintenanceToggle.checked ? '1' : '0';
+            }
+            maintenanceForm.submit();
+        });
+    }
+
+    const userGrowthData = {{ analytics.user_growth | tojson }};
+    const growthCanvas = document.getElementById('userGrowthChart');
+    if (growthCanvas && Array.isArray(userGrowthData) && userGrowthData.length) {
+        const labels = userGrowthData.map(item => item.date);
+        const totals = userGrowthData.map(item => item.count);
+        new Chart(growthCanvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Total Users',
+                    data: totals,
+                    fill: true,
+                    tension: 0.3,
+                    borderColor: '#0dcaf0',
+                    backgroundColor: 'rgba(13, 202, 240, 0.2)',
+                    pointBackgroundColor: '#0dcaf0',
+                    pointRadius: 3,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#ced4da' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#ced4da', precision: 0 },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                },
+            },
+        });
+    }
+
     function promptExport(fmt) {
         const ghost = prompt('Enter GHOST key');
         if (ghost) {
