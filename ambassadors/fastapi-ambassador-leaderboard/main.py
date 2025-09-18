@@ -1209,27 +1209,20 @@ async def admin_panel(request: Request) -> Any:
 
 
 @app.post("/admin/maintenance")
-async def admin_toggle_maintenance(
-    request: Request,
-    enabled: int = Form(...),
-    # ghost: str = Form(None),
-):
-    # Require admin user
+async def admin_maintenance_toggle(
+    request: Request, enabled: str = Form(...)
+) -> RedirectResponse:
+    
     if not await _current_admin(request):
-        raise HTTPException(status_code=403, detail="Not authorized")
+        return RedirectResponse("/admin/login", status_code=303)
 
+    is_enabled = str(enabled).strip().lower() in {"1", "true", "yes", "on"}
+    await _set_maintenance(is_enabled)
+
+    return RedirectResponse("/admin", status_code=303)
     # Require Ghost key (same pattern as scorepad/posts/tasks forms)
     # if not ghost or ghost != os.getenv("ADMIN_GHOST_KEY"):
     #     raise HTTPException(status_code=403, detail="Invalid ghost key")
-
-    # Set or clear Redis flag
-    if enabled == 1:
-        await redis_client.set("maintenance", "1")
-    else:
-        await redis_client.delete("maintenance")
-
-    # Redirect back to admin panel
-    return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/recovery/reset")
