@@ -90,6 +90,7 @@
                         </div>
                         <p class="mb-1"><strong>Wallet:</strong> {{ w.wallet if w.wallet else '—' }}</p>
                         <p class="mb-1"><strong>Pending Reward:</strong> {{ w.pending_reward }}</p>
+                        <p class="mb-1"><strong>Referrals:</strong> {{ w.referrals }}</p>
                         <p class="mb-1"><strong>Telegram:</strong>
                             <span class="telegram-display">
                             {% if w.tg_link %}

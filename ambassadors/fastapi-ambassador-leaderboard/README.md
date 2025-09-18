@@ -13,11 +13,13 @@ The wallet section includes export buttons so administrators can download all am
 
 Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
 
-Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, and pending reward. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
+Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, pending reward, and referral registrations. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
+
+Ambassadors can now generate unique referral links with a chosen username. Visits to these links are counted and new users who register through them are added to the leaderboard with 100 starting points. Each registration stores the user's IP address and only one registration is permitted per IP to discourage duplicates.
 
 ## Requirements
 - Python 3.11+
@@ -58,6 +60,9 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /raid` – table of verified posts with each submitter's wallet and Telegram handle.
 - `POST /proposals/submit` – submit a new proposal (authenticated users).
 - `POST /proposals/vote` – vote yes or no on a proposal (authenticated users).
+- `GET /referral` – generate and view referral links (authenticated users).
+- `POST /referral` – claim a referral username and obtain link (authenticated users).
+- `GET /r/{username}` – referral link that tracks clicks and redirects to registration.
 - `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts awaiting verification.
 - `POST /admin/proposals/verify` – approve a pending proposal and optionally add a funding wallet (admin).
 - `POST /admin/proposals/reject` – reject a pending proposal (admin).
