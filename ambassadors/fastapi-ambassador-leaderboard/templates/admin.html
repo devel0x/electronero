@@ -414,13 +414,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-        const maintenanceForm = document.getElementById('maintenance-form');
-        const toggle = document.getElementById('maintenance-toggle');
-        if (toggle) {
-            toggle.addEventListener('change', () => {
-                toggle.form.submit();
-            });
-        }
+    const maintenanceForm = document.getElementById('maintenance-form');
+    const toggle = document.getElementById('maintenance-toggle');
+    if (toggle && maintenanceForm) {
+        toggle.addEventListener('change', () => {
+            maintenanceForm.submit();
+        });
+    }
 
     const userGrowthData = {{ analytics.user_growth | tojson }};
     const growthCanvas = document.getElementById('userGrowthChart');
