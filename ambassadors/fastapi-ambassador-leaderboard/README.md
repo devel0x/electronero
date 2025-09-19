@@ -15,6 +15,12 @@ Admins may also apply a per-user score padding to audit or correct totals withou
 
 Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, and pending reward. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
 
+Administrators also gain new controls and insights:
+
+- **Maintenance mode toggle** – Flip the switch in the admin panel to pause the ambassador-facing dashboard and APIs. Ambassadors receive a dedicated maintenance screen and API calls return HTTP 503 while the toggle is on, but authenticated admins keep full access so back-office work can continue uninterrupted.
+- **Visitor analytics dashboard** – The admin landing view now summarizes total and unique visits, surfaces the latest visitor activity (including IP addresses, resolved city/region/country labels, and the most recent path hit), and highlights top locations so admins can spot traffic trends at a glance.
+- **User growth chart** – Registration timestamps are aggregated server-side to chart the cumulative number of ambassadors over time, giving admins a quick visual of community growth alongside the tabular analytics cards.
+
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
@@ -80,4 +86,11 @@ If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app
 A companion Telegram bot (`telegram_bot.py`) lets ambassadors interact via chat. Set `TELEGRAM_BOT_TOKEN` in your environment and run the bot to allow ambassadors to register via direct message using `/register <email>` or log in with `/checkin <email>`. Using `/register` in a group triggers a DM prompt; if the bot cannot DM you, it will ask publicly to message @xChiefMod_bot directly. During registration, the bot collects a password, Telegram username, and wallet address. After checking in, ambassadors can update their wallet with `/wallet`.
 
 Use `/hashrate` to query the network's 24‑hour average mining power.
+
+Set `TELEGRAM_ADMIN_IDS` (comma-separated Telegram user IDs) or
+`TELEGRAM_ADMIN_USERNAMES` (comma-separated usernames without the leading `@`)
+to enable admin-only bot commands. Configured admins can increment an
+ambassador's score padding via `/pump @username amount`, which adds to the
+existing pad instead of overwriting it—for example, `/pump @interchained 100`
+adds 100 points to @interchained's score pad.
 
