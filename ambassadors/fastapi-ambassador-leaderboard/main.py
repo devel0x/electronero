@@ -869,6 +869,9 @@ def _hash_password(password: str) -> str:
 
 @app.middleware("http")
 async def analytics_middleware(request: Request, call_next):
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
     response = await call_next(request)
     path = request.url.path
     if not _should_track_path(path):
