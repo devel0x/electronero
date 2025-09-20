@@ -123,6 +123,36 @@
                     </table>
                 </div>
             </div>
+            <!-- Pagination controls -->
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <div>
+                    <span class="small text-light">
+                        Showing {{ (analytics.page - 1) * analytics.limit + 1 }}
+                        –
+                        {{ [analytics.page * analytics.limit, analytics.total_visitors]|min }}
+                        of {{ analytics.total_visitors }} visitors
+                    </span>
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if analytics.page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ analytics.page - 1 }}&limit={{ analytics.limit }}">Previous</a>
+                        </li>
+                        {% endif %}
+                        <li class="page-item disabled">
+                            <span class="page-link">
+                                Page {{ analytics.page }} of {{ (analytics.total_visitors // analytics.limit) + (1 if analytics.total_visitors % analytics.limit else 0) }}
+                            </span>
+                        </li>
+                        {% if analytics.page * analytics.limit < analytics.total_visitors %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ analytics.page + 1 }}&limit={{ analytics.limit }}">Next</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
             <div class="col-lg-5">
                 <h2 class="h6 text-uppercase">User Growth</h2>
                 <div class="bg-dark bg-opacity-75 border border-light rounded p-3">
