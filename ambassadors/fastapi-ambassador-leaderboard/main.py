@@ -552,7 +552,7 @@ async def _user_growth_series() -> tuple[list[dict[str, Any]], int]:
     return series, total_users
 
 
-async def _analytics_dashboard() -> dict[str, Any]:
+async def _analytics_dashboard(page: int = 1, limit: int = 20) -> dict[str, Any]:
     total_visits_raw = await redis_client.get(ANALYTICS_TOTAL_VISITS_KEY)
     try:
         total_visits = int(total_visits_raw or 0)
@@ -562,6 +562,7 @@ async def _analytics_dashboard() -> dict[str, Any]:
     visitor_keys = await redis_client.keys("analytics:visitor:*")
     visitor_details: list[dict[str, Any]] = []
     location_totals: dict[str, int] = {}
+
     for key in visitor_keys:
         data = await redis_client.hgetall(key)
         if not data:
@@ -593,17 +594,22 @@ async def _analytics_dashboard() -> dict[str, Any]:
             }
         )
 
+    # Sort and paginate
     visitor_details.sort(key=lambda item: item.get("last_seen", ""), reverse=True)
-    visitor_details = visitor_details[:20]
+    total_visitors = len(visitor_details)
+    start = (page - 1) * limit
+    end = start + limit
+    visitor_details = visitor_details[start:end]
 
+    # Top locations (not paginated, but you could if needed)
     top_locations = [
         {"label": label, "count": count}
         for label, count in sorted(
             location_totals.items(), key=lambda x: x[1], reverse=True
-        )[:10]
+        )
     ]
 
-    raw_recent = await redis_client.lrange(ANALYTICS_VISITOR_KEY, 0, 19)
+    raw_recent = await redis_client.lrange(ANALYTICS_VISITOR_KEY, 0, limit - 1)
     recent: list[dict[str, Any]] = []
     for raw in raw_recent:
         try:
@@ -624,6 +630,9 @@ async def _analytics_dashboard() -> dict[str, Any]:
         "top_locations": top_locations,
         "user_growth": user_growth,
         "total_users": total_users,
+        "page": page,
+        "limit": limit,
+        "total_visitors": total_visitors,
     }
 
 
@@ -1202,12 +1211,17 @@ async def admin_logout(request: Request) -> RedirectResponse:
 async def admin_panel(request: Request) -> Any:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
+
+    # Pagination params
+    page = int(request.query_params.get("page", 1))
+    limit = int(request.query_params.get("limit", 20))
+
     wallets = await _all_wallets()
     posts = await _all_posts()
     tasks = await _all_tasks()
     proposals = await _pending_proposals()
     recoveries = await _all_recoveries()
-    analytics = await _analytics_dashboard()
+    analytics = await _analytics_dashboard(page=page, limit=limit)
     maintenance_enabled = await _maintenance_enabled()
     return templates.TemplateResponse(
         "admin.html",
