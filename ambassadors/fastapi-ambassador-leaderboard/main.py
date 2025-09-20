@@ -74,7 +74,7 @@ redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
 CACHE_KEY = "leaderboard_cache"
 
 ANALYTICS_VISITOR_KEY = "analytics:visits"
-ANALYTICS_VISITOR_LIMIT = 200
+ANALYTICS_VISITOR_LIMIT = 500
 ANALYTICS_GEO_CACHE_PREFIX = "analytics:geo:"
 ANALYTICS_UNIQUE_IPS_KEY = "analytics:unique_ips"
 ANALYTICS_TOTAL_VISITS_KEY = "analytics:total_visits"
