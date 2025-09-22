@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ project_name }} – Peer &amp; Node Health Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+
+    <style>
+        :root{
+          --bg1:#1e1e2f; --bg2:#141414; --itc-red:#ff3b4e; --itc-blue:#4aa3ff; --itc-gold:#ffd166;
+        }
+
+        body{
+          min-height:100vh;
+          background:linear-gradient(135deg,var(--bg1),var(--bg2));
+          color:#f5f5f5;
+          overflow-x:hidden;
+        }
+
+        .fx-wrap{
+          position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden;
+        }
+        .fx-stars{
+          position:absolute; inset:0;
+          background:
+             radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+             radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+             radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+          mix-blend-mode:screen;
+          opacity:.35;
+          filter: blur(.2px);
+        }
+        .fx-grid{
+          position:absolute; inset:-20% -20% -20% -20%;
+          background:
+            repeating-linear-gradient( to right,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+            repeating-linear-gradient( to bottom,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+          transform:rotate(1deg);
+          filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+          opacity:.35;
+        }
+        .fx-bloom{
+          position:absolute; width:60vmax; height:60vmax; border-radius:50%;
+          filter: blur(60px); opacity:.30; transform: translate(-50%, -50%) scale(1);
+          will-change: transform, opacity;
+          mix-blend-mode:screen;
+        }
+        .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:22%; top:28%; }
+        .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:78%; top:34%; }
+        .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:55%; top:78%; }
+
+        .glass-card{
+          background: rgba(255,255,255,0.08);
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:1rem;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 0 20px 50px rgba(0,0,0,.35);
+        }
+        .glass-card:hover{ transform: translateY(-1px); transition: transform .2s ease; }
+
+        .navbar{
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .stat-card{
+          background:rgba(0,0,0,0.35);
+          border:1px solid rgba(255,255,255,0.06);
+          border-radius:0.75rem;
+          padding:1rem;
+          height:100%;
+        }
+        .stat-label{
+          font-size:0.75rem;
+          text-transform:uppercase;
+          color:rgba(255,255,255,0.6);
+          letter-spacing:0.08em;
+        }
+        .stat-value{
+          font-size:1.25rem;
+          font-weight:600;
+        }
+        .status-pill{
+          display:inline-flex;
+          align-items:center;
+          gap:0.35rem;
+          border-radius:999px;
+          padding:0.25rem 0.75rem;
+          font-size:0.85rem;
+          font-weight:600;
+          background:rgba(255,255,255,0.08);
+        }
+        .status-pill.ok{ background:rgba(46,204,113,0.15); color:#2ecc71; }
+        .status-pill.error{ background:rgba(231,76,60,0.15); color:#ff6b6b; }
+        .status-pill.warn{ background:rgba(255,193,7,0.15); color:#ffc107; }
+        .status-pill.pending{ background:rgba(74,163,255,0.15); color:#4aa3ff; }
+        #node-warnings{ min-height:1.5rem; }
+        .peer-table small{ color:rgba(255,255,255,0.65); }
+
+        @media (prefers-reduced-motion: reduce){
+          .fx-grid, .fx-bloom, .fx-stars{ animation: none !important; }
+        }
+    </style>
+</head>
+<body>
+<!-- FX Layer -->
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="badge text-bg-secondary">Source: {{ source }}</span>
+      <span class="badge text-bg-success">Pool {{ '%.8f'|format(pool_balance) }}</span>
+      <span class="badge text-bg-info">TTL {{ ttl }}s</span>
+      <a href="/wallet" class="badge text-bg-warning text-dark">Wallet {{ wallet if wallet else '—' }}</a>
+      <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+      <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+      <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+      <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+      <a href="/network-health" class="btn btn-sm btn-light text-dark">Node Monitor</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="glass-card p-3" id="network-health-card">
+    <div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-2">
+      <div>
+        <h1 class="h4 mb-1">🔍 Peer &amp; Node Health Monitor</h1>
+        <p class="text-muted small mb-0">Track RPC uptime, peer reachability, and submit your node for reward checks.</p>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span id="node-status-pill" class="status-pill pending">Checking...</span>
+        <button id="node-refresh-btn" class="btn btn-sm btn-outline-light">Refresh</button>
+        <span class="badge text-bg-secondary" id="node-last-updated">--</span>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-label">Block Height</div>
+          <div class="stat-value" id="node-block-height">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-label">Version</div>
+          <div class="stat-value" id="node-version">—</div>
+          <small id="node-protocol" class="text-muted d-block mt-1"></small>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-label">Uptime</div>
+          <div class="stat-value" id="node-uptime">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-label">Connections</div>
+          <div class="stat-value" id="node-connections">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <div class="stat-label">Node warnings</div>
+      <div id="node-warnings" class="small text-muted">Loading…</div>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+      <div class="fw-semibold" id="peer-summary">Peers: —</div>
+      <div class="text-muted small">Live checks run on up to {{ peer_socket_limit }} peers every {{ node_health_refresh_seconds }}s.</div>
+    </div>
+
+    <div class="table-responsive peer-table mb-3">
+      <table class="table table-dark table-striped table-sm align-middle mb-0" id="peer-table">
+        <thead>
+          <tr>
+            <th scope="col">Peer</th>
+            <th scope="col">Software</th>
+            <th scope="col">Direction</th>
+            <th scope="col">Last Seen</th>
+            <th scope="col">Ping</th>
+            <th scope="col">Liveness</th>
+          </tr>
+        </thead>
+        <tbody id="peer-table-body">
+          <tr>
+            <td colspan="6" class="text-center text-muted small">Gathering peer data…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <hr class="opacity-50" />
+    <div class="fw-semibold mb-2">Submit your node IP to claim rewards</div>
+    <form id="peer-check-form" class="row g-2 align-items-end">
+      <div class="col-md-6 col-lg-4">
+        <label for="peer-check-ip" class="form-label small text-uppercase text-muted mb-1">Node IP</label>
+        <input type="text" class="form-control form-control-sm" id="peer-check-ip" name="ip" placeholder="1.2.3.4" required />
+      </div>
+      <div class="col-md-3 col-lg-2">
+        <label for="peer-check-port" class="form-label small text-uppercase text-muted mb-1">Port</label>
+        <input type="number" class="form-control form-control-sm" id="peer-check-port" name="port" value="{{ peer_default_port }}" min="1" max="65535" />
+      </div>
+      <div class="col-md-3 col-lg-2">
+        <label for="peer-check-timeout" class="form-label small text-uppercase text-muted mb-1">Timeout (s)</label>
+        <input type="number" class="form-control form-control-sm" id="peer-check-timeout" name="timeout" value="{{ peer_socket_timeout }}" min="0.5" step="0.5" />
+      </div>
+      <div class="col-md-12 col-lg-4">
+        <button type="submit" class="btn btn-outline-light w-100">Run Check</button>
+      </div>
+    </form>
+    <div id="peer-check-result" class="small mt-2 text-info"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+const nodeRefreshSeconds = {{ node_health_refresh_seconds|tojson }};
+const peerSocketTimeoutDefault = {{ peer_socket_timeout|tojson }};
+const initialHealth = {{ initial_health|tojson }};
+
+const nodeStatusPill = document.getElementById('node-status-pill');
+const nodeBlockHeightEl = document.getElementById('node-block-height');
+const nodeVersionEl = document.getElementById('node-version');
+const nodeProtocolEl = document.getElementById('node-protocol');
+const nodeUptimeEl = document.getElementById('node-uptime');
+const nodeConnectionsEl = document.getElementById('node-connections');
+const nodeWarningsEl = document.getElementById('node-warnings');
+const nodeLastUpdatedEl = document.getElementById('node-last-updated');
+const peerSummaryEl = document.getElementById('peer-summary');
+const peerTableBody = document.getElementById('peer-table-body');
+const nodeRefreshBtn = document.getElementById('node-refresh-btn');
+const peerCheckForm = document.getElementById('peer-check-form');
+const peerCheckResult = document.getElementById('peer-check-result');
+
+function setStatusPill(el, state, label) {
+  if (!el) return;
+  const classes = ['status-pill'];
+  if (state) classes.push(state);
+  el.className = classes.join(' ');
+  if (label !== undefined) {
+    el.textContent = label;
+  }
+}
+
+function formatPing(seconds) {
+  if (seconds === null || seconds === undefined) return '—';
+  const num = Number(seconds);
+  if (!Number.isFinite(num) || num < 0) return '—';
+  const ms = num * 1000;
+  if (ms >= 1000) return `${Math.round(ms)} ms`;
+  if (ms >= 100) return `${ms.toFixed(1)} ms`;
+  if (ms >= 10) return `${ms.toFixed(2)} ms`;
+  return `${ms.toFixed(2)} ms`;
+}
+
+function skipReasonLabel(reason) {
+  switch (reason) {
+    case 'non_public':
+      return 'Private IP';
+    case 'limit':
+      return 'Limit reached';
+    case 'duplicate':
+      return 'Duplicate peer';
+    case '':
+    case undefined:
+      return 'Skipped';
+    default:
+      return reason.replace(/_/g, ' ');
+  }
+}
+
+function renderPeerRows(peers) {
+  if (!peerTableBody) return;
+  peerTableBody.innerHTML = '';
+  if (!Array.isArray(peers) || peers.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6;
+    td.className = 'text-center text-muted small';
+    td.textContent = 'No active peers reported.';
+    tr.appendChild(td);
+    peerTableBody.appendChild(tr);
+    return;
+  }
+
+  peers.forEach(peer => {
+    const tr = document.createElement('tr');
+
+    const addrTd = document.createElement('td');
+    addrTd.textContent = peer.addr || '—';
+    if (peer.synced_blocks !== undefined && peer.synced_blocks !== null) {
+      const meta = document.createElement('small');
+      meta.textContent = `Synced: ${peer.synced_blocks}`;
+      addrTd.appendChild(document.createElement('br'));
+      addrTd.appendChild(meta);
+    }
+    tr.appendChild(addrTd);
+
+    const softwareTd = document.createElement('td');
+    if (peer.subver) {
+      softwareTd.textContent = peer.subver;
+    } else if (peer.version !== undefined && peer.version !== null) {
+      softwareTd.textContent = `v${peer.version}`;
+    } else {
+      softwareTd.textContent = '—';
+    }
+    tr.appendChild(softwareTd);
+
+    const dirTd = document.createElement('td');
+    dirTd.textContent = peer.inbound ? 'Inbound' : 'Outbound';
+    tr.appendChild(dirTd);
+
+    const lastSeenTd = document.createElement('td');
+    lastSeenTd.textContent = peer.lastrecv_ago || '—';
+    if (peer.lastrecv_iso) {
+      lastSeenTd.title = peer.lastrecv_iso;
+    }
+    tr.appendChild(lastSeenTd);
+
+    const pingTd = document.createElement('td');
+    const ping = peer.pingtime ?? peer.minping;
+    pingTd.textContent = formatPing(ping);
+    tr.appendChild(pingTd);
+
+    const liveTd = document.createElement('td');
+    const socketMeta = peer.socket || {};
+    const status = socketMeta.status;
+    let pillState = 'warn';
+    let pillLabel = 'Skipped';
+    if (status === 'ok') {
+      pillState = 'ok';
+      pillLabel = 'Reachable';
+    } else if (status === 'error') {
+      pillState = 'error';
+      pillLabel = socketMeta.checked ? 'Unreachable' : 'Error';
+    } else if (status === 'pending') {
+      pillState = 'pending';
+      pillLabel = 'Checking';
+    } else {
+      pillLabel = skipReasonLabel(socketMeta.reason);
+    }
+    const pill = document.createElement('span');
+    pill.className = `status-pill ${pillState}`;
+    pill.textContent = pillLabel;
+    const tooltip = socketMeta.error || skipReasonLabel(socketMeta.reason);
+    if (tooltip) {
+      pill.title = tooltip;
+    }
+    liveTd.appendChild(pill);
+    tr.appendChild(liveTd);
+
+    peerTableBody.appendChild(tr);
+  });
+}
+
+function updateNetworkPanel(health) {
+  if (!nodeStatusPill || !health) return;
+  const node = health.node || {};
+  if (node.rpc_ok) {
+    setStatusPill(nodeStatusPill, 'ok', 'RPC reachable');
+  } else {
+    setStatusPill(nodeStatusPill, 'error', 'RPC offline');
+  }
+  if (Array.isArray(health.errors) && health.errors.length) {
+    nodeStatusPill.title = health.errors.join(' | ');
+  } else {
+    nodeStatusPill.removeAttribute('title');
+  }
+
+  if (nodeBlockHeightEl) nodeBlockHeightEl.textContent = node.block_height ?? '—';
+  if (nodeVersionEl) nodeVersionEl.textContent = node.subversion || (node.version ? `v${node.version}` : '—');
+  if (nodeProtocolEl) {
+    const protoText = node.protocolversion ? `Protocol ${node.protocolversion}` : '';
+    nodeProtocolEl.textContent = protoText;
+    nodeProtocolEl.style.display = protoText ? 'block' : 'none';
+  }
+  if (nodeUptimeEl) nodeUptimeEl.textContent = node.uptime_human || '—';
+  if (nodeConnectionsEl) nodeConnectionsEl.textContent = node.connections ?? '—';
+
+  if (nodeWarningsEl) {
+    if (node.warnings) {
+      nodeWarningsEl.textContent = node.warnings;
+      nodeWarningsEl.classList.add('text-warning');
+      nodeWarningsEl.classList.remove('text-muted');
+    } else {
+      nodeWarningsEl.textContent = 'All clear';
+      nodeWarningsEl.classList.add('text-muted');
+      nodeWarningsEl.classList.remove('text-warning');
+    }
+  }
+
+  if (nodeLastUpdatedEl && health.cached_at) {
+    nodeLastUpdatedEl.textContent = new Date(health.cached_at).toLocaleString();
+  }
+
+  if (peerSummaryEl && health.peer_summary) {
+    const summary = health.peer_summary;
+    peerSummaryEl.textContent = `Peers: ${summary.total} • Reachable ${summary.reachable}/${summary.checked} (skipped ${summary.skipped})`;
+  }
+
+  renderPeerRows(health.peers || []);
+}
+
+async function refreshNetworkHealth(force = false) {
+  if (!nodeStatusPill) return;
+  const url = '/api/network-health' + (force ? '?refresh=true' : '');
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const payload = await resp.json();
+    if (!payload.ok) {
+      throw new Error(payload.error || 'Request denied');
+    }
+    updateNetworkPanel(payload.health || {});
+  } catch (err) {
+    console.error('Failed to load network health', err);
+    setStatusPill(nodeStatusPill, 'error', 'RPC unreachable');
+    if (nodeWarningsEl) {
+      nodeWarningsEl.textContent = 'Unable to load node status';
+      nodeWarningsEl.classList.add('text-warning');
+      nodeWarningsEl.classList.remove('text-muted');
+    }
+    if (peerSummaryEl) {
+      peerSummaryEl.textContent = 'Peers: —';
+    }
+    if (nodeLastUpdatedEl) {
+      nodeLastUpdatedEl.textContent = '--';
+    }
+    if (peerTableBody && !peerTableBody.children.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.className = 'text-center text-muted small';
+      td.textContent = 'Unable to load peer data';
+      tr.appendChild(td);
+      peerTableBody.appendChild(tr);
+    }
+  }
+}
+
+function setPeerCheckMessage(message, tone = 'info') {
+  if (!peerCheckResult) return;
+  peerCheckResult.textContent = message;
+  peerCheckResult.className = `small mt-2 text-${tone}`;
+}
+
+async function submitPeerCheck(event) {
+  event.preventDefault();
+  if (!peerCheckForm) return;
+  const formData = new FormData(peerCheckForm);
+  if (!formData.get('timeout')) {
+    formData.set('timeout', peerSocketTimeoutDefault);
+  }
+  setPeerCheckMessage('Running check...', 'info');
+  try {
+    const resp = await fetch('/api/network-health/check', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      const errMsg = data?.error || `Request failed (${resp.status})`;
+      setPeerCheckMessage(`❌ ${errMsg}`, 'danger');
+      return;
+    }
+    const result = data.result || {};
+    if (result.reachable) {
+      setPeerCheckMessage(`✅ ${result.ip}:${result.port} reachable (timeout ${result.timeout}s)`, 'success');
+      setTimeout(() => refreshNetworkHealth(true), 1000);
+    } else {
+      const detail = result.error ? `: ${result.error}` : '';
+      setPeerCheckMessage(`⚠️ ${result.ip}:${result.port} unreachable${detail}`, 'warning');
+    }
+  } catch (err) {
+    setPeerCheckMessage(`❌ Network check failed: ${err.message}`, 'danger');
+  }
+}
+
+if (peerCheckForm) {
+  peerCheckForm.addEventListener('submit', submitPeerCheck);
+}
+
+if (nodeStatusPill) {
+  if (initialHealth && typeof initialHealth === 'object') {
+    updateNetworkPanel(initialHealth);
+  }
+  refreshNetworkHealth();
+  const refreshMs = Math.max(nodeRefreshSeconds || 20, 10) * 1000;
+  setInterval(() => refreshNetworkHealth(true), refreshMs);
+  if (nodeRefreshBtn) {
+    nodeRefreshBtn.addEventListener('click', () => refreshNetworkHealth(true));
+  }
+}
+
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof gsap === 'undefined') return;
+
+  const grid = document.getElementById('fxGrid');
+  const b1 = document.getElementById('b1');
+  const b2 = document.getElementById('b2');
+  const b3 = document.getElementById('b3');
+
+  gsap.to(b1, { duration: 10, xPercent: -5, yPercent: 6, scale: 1.07, opacity: 0.35, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.to(b2, { duration: 12, xPercent: 4,  yPercent: -4, scale: 1.06, opacity: 0.33, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .3 });
+  gsap.to(b3, { duration: 14, xPercent: -2, yPercent: 3, scale: 1.08, opacity: 0.32, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .6 });
+
+  gsap.to(grid, { duration: 20, rotation: 3, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.to(document.body, { duration: 8, '--bg1': '#1e2338', '--bg2': '#111216', ease: 'sine.inOut', yoyo: true, repeat: -1 });
+
+  const parallax = (e) => {
+    const { innerWidth: w, innerHeight: h } = window;
+    const dx = (e.clientX - w/2) / w;
+    const dy = (e.clientY - h/2) / h;
+    gsap.to([b1,b2,b3], { duration: .6, x: dx * 30, y: dy * 30, ease: 'sine.out' });
+    gsap.to(grid, { duration: .8, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+  };
+  window.addEventListener('mousemove', parallax, { passive:true });
+})();
+</script>
+</body>
+</html>
