@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import socket
 import ipaddress
 import os, json, shutil, shlex, subprocess
 import secrets
@@ -57,6 +59,10 @@ REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
+NODE_HEALTH_CACHE_TTL_SECONDS: int = int(os.getenv("NODE_HEALTH_CACHE_TTL_SECONDS", "20"))
+PEER_SOCKET_TIMEOUT: float = float(os.getenv("PEER_SOCKET_TIMEOUT", "3.0"))
+PEER_SOCKET_LIMIT: int = int(os.getenv("PEER_SOCKET_LIMIT", "12"))
+PEER_DEFAULT_PORT: int = int(os.getenv("PEER_DEFAULT_PORT", "8333"))
 
 
 EXPECTED_COLUMNS = [
@@ -121,6 +127,9 @@ cache: Dict[str, Any] = {
     "source": "",
     "pool_balance": 0.0,
 }
+
+NODE_HEALTH_CACHE: Dict[str, Any] = {"data": None, "cached_at": None}
+NODE_HEALTH_LOCK = asyncio.Lock()
 
 async def _maintenance_guard(request: Request):
     if await _maintenance_enabled():
@@ -344,6 +353,350 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
     else:
         data = json.loads(raw)
     return data
+
+
+def _format_duration_seconds(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    try:
+        total_seconds = int(float(value))
+    except (TypeError, ValueError):
+        return ""
+    if total_seconds < 0:
+        total_seconds = abs(total_seconds)
+    if total_seconds == 0:
+        return "0s"
+    parts: list[str] = []
+    days, remainder = divmod(total_seconds, 86400)
+    if days:
+        parts.append(f"{days}d")
+    hours, remainder = divmod(remainder, 3600)
+    if hours:
+        parts.append(f"{hours}h")
+    minutes, seconds = divmod(remainder, 60)
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts[:3])
+
+
+def _format_epoch_iso(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    try:
+        ts = float(value)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        dt = datetime.utcfromtimestamp(ts)
+    except (ValueError, OSError):
+        return ""
+    return dt.replace(microsecond=0).isoformat() + "Z"
+
+
+def _format_timesince(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    try:
+        ts = float(value)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        dt = datetime.utcfromtimestamp(ts)
+    except (ValueError, OSError):
+        return ""
+    delta = datetime.utcnow() - dt
+    total_seconds = int(delta.total_seconds())
+    suffix = "ago"
+    if total_seconds < 0:
+        total_seconds = abs(total_seconds)
+        suffix = "from now"
+    if total_seconds < 1:
+        return "just now"
+    remaining = total_seconds
+    parts: list[str] = []
+    for label, unit in (("d", 86400), ("h", 3600), ("m", 60), ("s", 1)):
+        value, remaining = divmod(remaining, unit)
+        if value:
+            parts.append(f"{value}{label}")
+        if len(parts) == 2:
+            break
+    if not parts:
+        parts.append("0s")
+    return f"{' '.join(parts)} {suffix}"
+
+
+def _normalize_peer_host(host: str | None) -> str:
+    if not host:
+        return ""
+    cleaned = host.strip()
+    if not cleaned:
+        return ""
+    if "%" in cleaned:
+        cleaned = cleaned.split("%", 1)[0]
+    if cleaned.startswith("::ffff:"):
+        mapped = cleaned.split("::ffff:", 1)[1]
+        try:
+            ipaddress.ip_address(mapped)
+            return mapped
+        except ValueError:
+            pass
+    return cleaned
+
+
+def _parse_peer_address(addr: str | None) -> tuple[str | None, int | None]:
+    if not addr:
+        return None, None
+    address = addr.strip()
+    if not address:
+        return None, None
+    host = address
+    port: int | None = None
+    if address.startswith("["):
+        end = address.find("]")
+        if end != -1:
+            host = address[1:end]
+            remainder = address[end + 1 :]
+            if remainder.startswith(":"):
+                try:
+                    port = int(remainder[1:])
+                except ValueError:
+                    port = None
+    else:
+        if ":" in address:
+            host_part, port_part = address.rsplit(":", 1)
+            host = host_part
+            try:
+                port = int(port_part)
+            except ValueError:
+                port = None
+    return _normalize_peer_host(host), port
+
+
+def _is_public_ip(host: str) -> bool:
+    if not host:
+        return False
+    try:
+        ip_obj = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_reserved:
+        return False
+    if ip_obj.is_multicast or ip_obj.is_unspecified:
+        return False
+    return True
+
+
+async def _peer_socket_check(host: str, port: int, timeout: float) -> tuple[bool, str | None]:
+    loop = asyncio.get_running_loop()
+
+    def _attempt() -> tuple[bool, str | None]:
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True, None
+        except Exception as exc:
+            return False, str(exc)
+
+    return await loop.run_in_executor(None, _attempt)
+
+
+async def _collect_network_health() -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "ok": False,
+        "node": {
+            "rpc_ok": False,
+        },
+        "peers": [],
+        "peer_summary": {
+            "total": 0,
+            "checked": 0,
+            "reachable": 0,
+            "skipped": 0,
+        },
+        "errors": [],
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+    if not _daemon_ready():
+        result["errors"].append("daemon_unreachable")
+        return result
+
+    network_info: dict[str, Any] | None = None
+    blockchain_info: dict[str, Any] | None = None
+    uptime_seconds: int | None = None
+    peers_raw: list[dict[str, Any]] = []
+
+    try:
+        cp = _run_cli("getnetworkinfo")
+        network_info = json.loads(cp.stdout or "{}")
+    except Exception as exc:
+        result["errors"].append(f"getnetworkinfo: {exc}")
+
+    try:
+        cp = _run_cli("getblockchaininfo")
+        blockchain_info = json.loads(cp.stdout or "{}")
+    except Exception as exc:
+        result["errors"].append(f"getblockchaininfo: {exc}")
+
+    try:
+        cp = _run_cli("getpeerinfo")
+        peers_raw = json.loads(cp.stdout or "[]")
+    except Exception as exc:
+        result["errors"].append(f"getpeerinfo: {exc}")
+
+    try:
+        cp = _run_cli("uptime")
+        uptime_seconds = int(float(cp.stdout.strip()))
+    except Exception as exc:
+        result["errors"].append(f"uptime: {exc}")
+
+    node_status = {
+        "rpc_ok": bool(network_info),
+        "block_height": (blockchain_info or {}).get("blocks"),
+        "headers": (blockchain_info or {}).get("headers"),
+        "difficulty": (blockchain_info or {}).get("difficulty"),
+        "subversion": (network_info or {}).get("subversion"),
+        "version": (network_info or {}).get("version"),
+        "protocolversion": (network_info or {}).get("protocolversion"),
+        "connections": (network_info or {}).get("connections"),
+        "networkactive": (network_info or {}).get("networkactive"),
+        "warnings": (network_info or {}).get("warnings"),
+        "uptime": uptime_seconds,
+        "uptime_human": _format_duration_seconds(uptime_seconds),
+    }
+    result["node"] = node_status
+    result["ok"] = node_status["rpc_ok"]
+
+    peers: list[Dict[str, Any]] = []
+    check_targets: list[tuple[Dict[str, Any], str, int]] = []
+    seen_hosts: set[tuple[str, int]] = set()
+
+    for entry in peers_raw or []:
+        addr = str(entry.get("addr", ""))
+        host, port = _parse_peer_address(addr)
+        host = _normalize_peer_host(host)
+        port = port or PEER_DEFAULT_PORT
+
+        socket_meta = {
+            "status": "skipped",
+            "ok": False,
+            "checked": False,
+            "ip": host,
+            "port": port,
+            "error": "",
+            "reason": "",
+        }
+
+        if host and port:
+            key = (host, port)
+            if key in seen_hosts:
+                socket_meta["reason"] = "duplicate"
+            elif not _is_public_ip(host):
+                socket_meta["reason"] = "non_public"
+            elif len(check_targets) >= PEER_SOCKET_LIMIT:
+                socket_meta["reason"] = "limit"
+            else:
+                socket_meta["status"] = "pending"
+                socket_meta["reason"] = ""
+                check_targets.append((socket_meta, host, port))
+                seen_hosts.add(key)
+
+        peer_entry = {
+            "addr": addr,
+            "ip": host,
+            "port": port,
+            "subver": entry.get("subver"),
+            "version": entry.get("version"),
+            "inbound": entry.get("inbound"),
+            "synced_blocks": entry.get("synced_blocks"),
+            "startingheight": entry.get("startingheight"),
+            "pingtime": entry.get("pingtime"),
+            "minping": entry.get("minping"),
+            "lastrecv": entry.get("lastrecv"),
+            "lastrecv_iso": _format_epoch_iso(entry.get("lastrecv")),
+            "lastrecv_ago": _format_timesince(entry.get("lastrecv")),
+            "lastsend": entry.get("lastsend"),
+            "lastsend_iso": _format_epoch_iso(entry.get("lastsend")),
+            "lastsend_ago": _format_timesince(entry.get("lastsend")),
+            "bytesrecv_per_sec": entry.get("bytesrecv_per_sec"),
+            "bytessent_per_sec": entry.get("bytessent_per_sec"),
+            "socket": socket_meta,
+        }
+        peers.append(peer_entry)
+
+    if check_targets:
+        tasks = [
+            _peer_socket_check(host, port, PEER_SOCKET_TIMEOUT)
+            for (_meta, host, port) in check_targets
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (meta, host, port), outcome in zip(check_targets, results):
+            if isinstance(outcome, Exception):
+                meta.update(
+                    {
+                        "status": "error",
+                        "checked": True,
+                        "ok": False,
+                        "error": str(outcome),
+                    }
+                )
+                continue
+            ok, err = outcome
+            meta.update(
+                {
+                    "status": "ok" if ok else "error",
+                    "checked": True,
+                    "ok": bool(ok),
+                    "error": err or "",
+                }
+            )
+
+    total = len(peers)
+    checked = sum(1 for p in peers if p["socket"].get("checked"))
+    reachable = sum(1 for p in peers if p["socket"].get("checked") and p["socket"].get("ok"))
+    skipped = sum(1 for p in peers if p["socket"].get("status") == "skipped")
+
+    result["peers"] = peers
+    result["peer_summary"] = {
+        "total": total,
+        "checked": checked,
+        "reachable": reachable,
+        "skipped": skipped,
+    }
+    return result
+
+
+async def _get_network_health(force_refresh: bool = False) -> Dict[str, Any]:
+    now = datetime.utcnow()
+    cached = NODE_HEALTH_CACHE.get("data")
+    cached_at = NODE_HEALTH_CACHE.get("cached_at")
+    if (
+        not force_refresh
+        and cached
+        and cached_at
+        and now - cached_at < timedelta(seconds=NODE_HEALTH_CACHE_TTL_SECONDS)
+    ):
+        return cached
+
+    async with NODE_HEALTH_LOCK:
+        cached = NODE_HEALTH_CACHE.get("data")
+        cached_at = NODE_HEALTH_CACHE.get("cached_at")
+        now = datetime.utcnow()
+        if (
+            not force_refresh
+            and cached
+            and cached_at
+            and now - cached_at < timedelta(seconds=NODE_HEALTH_CACHE_TTL_SECONDS)
+        ):
+            return cached
+
+        data = await _collect_network_health()
+        timestamp = datetime.utcnow()
+        data["cached_at"] = timestamp.isoformat()
+        NODE_HEALTH_CACHE["data"] = data
+        NODE_HEALTH_CACHE["cached_at"] = timestamp
+        return data
 
 
 async def _current_email(request: Request) -> str | None:
@@ -1651,6 +2004,47 @@ async def index(request: Request) -> Any:
     )
 
 
+@app.get("/network-health")
+async def network_health_panel(request: Request) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
+    is_admin = await _current_admin(request)
+    if await _maintenance_enabled() and not is_admin:
+        return templates.TemplateResponse(
+            "maintenance.html",
+            {"request": request},
+            status_code=503,
+        )
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    user = await redis_client.hgetall(f"user:{email}")
+    wallet = user.get("wallet") if user else ""
+    leaderboard_data = await _get_cached_data()
+    node_refresh_seconds = max(NODE_HEALTH_CACHE_TTL_SECONDS, 15)
+    health_data = await _get_network_health() or {}
+
+    return templates.TemplateResponse(
+        "network_health.html",
+        {
+            "request": request,
+            "source": leaderboard_data["source"],
+            "ttl": CACHE_TTL_SECONDS,
+            "project_name": "Interchained × Elara – Ambassadors",
+            "pool_balance": leaderboard_data["pool_balance"],
+            "wallet": wallet,
+            "peer_socket_timeout": PEER_SOCKET_TIMEOUT,
+            "peer_socket_limit": PEER_SOCKET_LIMIT,
+            "peer_default_port": PEER_DEFAULT_PORT,
+            "node_health_refresh_seconds": node_refresh_seconds,
+            "initial_health": health_data,
+        },
+    )
+
+
 @app.get("/api/leaderboard.json")
 async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSONResponse:
     email = await _current_email(request)
@@ -1669,6 +2063,74 @@ async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSO
             "cached_at": data["cached_at"],
             "ttl": CACHE_TTL_SECONDS,
             "pool_balance": data["pool_balance"],
+        }
+    )
+
+
+@app.get("/api/network-health")
+async def api_network_health(request: Request, refresh: bool = Query(False)) -> JSONResponse:
+    email = await _current_email(request)
+    is_admin = await _current_admin(request)
+    if not is_admin and not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if await _maintenance_enabled() and not is_admin:
+        return JSONResponse({"ok": False, "error": "maintenance_mode"}, status_code=503)
+    data = await _get_network_health(force_refresh=refresh)
+    return JSONResponse({"ok": True, "health": data})
+
+
+@app.post("/api/network-health/check")
+async def api_network_health_check(
+    request: Request,
+    ip: str = Form(...),
+    port: int = Form(PEER_DEFAULT_PORT),
+    timeout: float | None = Form(None),
+) -> JSONResponse:
+    email = await _current_email(request)
+    is_admin = await _current_admin(request)
+    if not is_admin and not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if await _maintenance_enabled() and not is_admin:
+        return JSONResponse({"ok": False, "error": "maintenance_mode"}, status_code=503)
+
+    ip_clean = ip.strip()
+    if not ip_clean:
+        return JSONResponse({"ok": False, "error": "invalid_ip"}, status_code=400)
+    try:
+        ipaddress.ip_address(ip_clean)
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "invalid_ip"}, status_code=400)
+    if not _is_public_ip(ip_clean):
+        return JSONResponse({"ok": False, "error": "non_public_ip"}, status_code=400)
+
+    try:
+        port_int = int(port)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "invalid_port"}, status_code=400)
+    if port_int <= 0 or port_int > 65535:
+        return JSONResponse({"ok": False, "error": "invalid_port"}, status_code=400)
+
+    if timeout is None:
+        timeout_val = PEER_SOCKET_TIMEOUT
+    else:
+        try:
+            timeout_val = float(timeout)
+        except (TypeError, ValueError):
+            return JSONResponse({"ok": False, "error": "invalid_timeout"}, status_code=400)
+        if timeout_val <= 0:
+            timeout_val = PEER_SOCKET_TIMEOUT
+
+    ok, err = await _peer_socket_check(ip_clean, port_int, timeout_val)
+    return JSONResponse(
+        {
+            "ok": True,
+            "result": {
+                "ip": ip_clean,
+                "port": port_int,
+                "reachable": bool(ok),
+                "error": err or "",
+                "timeout": timeout_val,
+            },
         }
     )
 
