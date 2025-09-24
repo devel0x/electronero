@@ -221,30 +221,62 @@
     </div>
     <div id="wallets" class="glass-card p-3 mb-4">
         <h1 class="h5">Wallet Addresses</h1>
-        <div class="d-flex gap-2 mb-2">
+        <div class="d-flex flex-wrap gap-2 mb-2">
             <a href="#" id="export-json" class="btn btn-outline-light btn-sm">Export JSON</a>
             <a href="#" id="export-csv" class="btn btn-outline-light btn-sm">Export CSV</a>
             <button id="validate-wallets" class="btn btn-outline-light btn-sm">Validate Wallets</button>
+            <button form="activity-reset-form" class="btn btn-outline-light btn-sm" type="submit">Reset Activity</button>
         </div>
+        <form id="activity-reset-form" method="post" action="/admin/activity/reset" class="ghost-form">
+            <input type="hidden" name="ghost">
+        </form>
         <form id="pad-bulk-form" method="post" action="/admin/scorepad/reset" class="ghost-form">
             <input type="hidden" name="ghost">
         </form>
-        <div class="d-flex gap-2 mb-2">
+        <form id="pad-boost-form" method="post" action="/admin/scorepad/boost" class="ghost-form">
+            <input type="hidden" name="ghost">
+        </form>
+        <form id="pad-slash-form" method="post" action="/admin/scorepad/slash" class="ghost-form">
+            <input type="hidden" name="ghost">
+        </form>
+        <div class="d-flex flex-wrap gap-2 mb-2">
             <button form="pad-bulk-form" class="btn btn-warning btn-sm" type="submit">Reset Selected</button>
             <button form="pad-bulk-form" class="btn btn-danger btn-sm" name="reset_all" value="1" type="submit">Reset All</button>
+            <button form="pad-boost-form" class="btn btn-success btn-sm" type="submit">Boost Active (+1000)</button>
+            <button form="pad-slash-form" class="btn btn-outline-danger btn-sm" type="submit">Slash Inactive (0)</button>
         </div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge text-bg-success">Active {{ wallets_active|length }}</span>
+            <span class="badge text-bg-secondary">Inactive {{ wallets_inactive|length }}</span>
+            <span class="badge bg-light text-dark">Total {{ wallets|length }}</span>
+        </div>
+        {% for group_label, group in [
+            ('Active Users', wallets_active),
+            ('Inactive Users', wallets_inactive),
+        ] %}
+        {% if group %}
+        <h2 class="h6 text-uppercase {% if not loop.first %}mt-4{% else %}mt-2{% endif %}">{{ group_label }} ({{ group|length }})</h2>
         <div class="row row-cols-1 row-cols-md-2 g-3">
-            {% for w in wallets %}
+            {% for w in group %}
             <div class="col">
                 <div class="card h-100 user-card text-light">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">
-                                {{ w.email }}
-                                {% if not w.verified %}
-                                <span class="badge bg-warning text-dark ms-2">Unverified</span>
-                                {% endif %}
-                            </h5>
+                            <div>
+                                <h5 class="card-title mb-1">{{ w.email }}</h5>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    {% if w.verified %}
+                                    <span class="badge bg-success">Verified</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">Unverified</span>
+                                    {% endif %}
+                                    {% if w.active %}
+                                    <span class="badge bg-info text-dark">Active</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </div>
+                            </div>
                             <input class="form-check-input mt-1" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
                         </div>
                         <p class="mb-1"><strong>Wallet:</strong> {{ w.wallet if w.wallet else '—' }}</p>
@@ -276,6 +308,8 @@
             </div>
             {% endfor %}
         </div>
+        {% endif %}
+        {% endfor %}
         {% if not wallets %}
         <p class="text-muted">No wallets</p>
         {% endif %}

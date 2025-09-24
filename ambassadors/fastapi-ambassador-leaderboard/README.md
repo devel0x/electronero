@@ -9,11 +9,11 @@ Duplicate links are ignored—each ambassador can only submit a given URL once.
 
 A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
 
-The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, Telegram handles, verification status, and verified-post counts as JSON or CSV files. Downloads and reset actions prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable.
+The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, Telegram handles, verification status, weekly activity flags, and verified-post counts as JSON or CSV files. Downloads and reset actions prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable, and a dedicated activity reset button clears weekly activity markers when starting a new reporting cycle.
 
-Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once.
+Admins may also apply a per-user score padding to audit or correct totals without editing the underlying CSV. Padding points are added to the CSV score and reflected in each ambassador's pending reward. The admin panel provides bulk controls to reset padding to zero for selected ambassadors or for all entries at once, and quick "Boost"/"Slash" actions add 1,000 pad points to every active ambassador or zero out pads for inactive users in a single click.
 
-Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, and pending reward. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
+Each ambassador appears in the admin wallet list as a responsive profile card displaying their email, wallet, Telegram handle, padding, pending reward, and badges for both verification and weekly activity. Editing these fields uses asynchronous form submissions so updates apply instantly without reloading the page, and Telegram handles are normalized to lowercase and rendered as clickable links to the user's `t.me` profile.
 
 Administrators also gain new controls and insights:
 
@@ -73,7 +73,10 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /api/admin/tasks` – JSON dictionary of task applications grouped by user (admin only).
 - `GET /api/admin/wallets` – JSON list of all registered emails, wallets, Telegram handles, and pending rewards (admin only).
 - `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
-- `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, Telegram handles, verification flags, and verified-post counts (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/scorepad/boost` – add 1,000 pad points to every active ambassador (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/scorepad/slash` – reset pad points to zero for every inactive ambassador (admin only, requires `GHOST_EXPORT_KEY`).
+- `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, Telegram handles, verification flags, weekly activity status, and verified-post counts (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/activity/reset` – clear weekly activity state for all ambassadors (admin only, requires `GHOST_EXPORT_KEY`).
 - Admin reset actions also require the `GHOST_EXPORT_KEY`.
 
 If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app tracks the pool's balance and displays each ambassador's pending reward in both the HTML table and the JSON API response.
