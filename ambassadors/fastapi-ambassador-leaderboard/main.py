@@ -122,6 +122,31 @@ cache: Dict[str, Any] = {
     "pool_balance": 0.0,
 }
 
+ACTIVITY_ZSET_PREFIX = "activity:posts:"
+ACTIVITY_RESET_KEY = "activity:last_reset"
+SCOREPAD_BOOST_POINTS = 1000.0
+
+
+def _monday_start(dt: datetime | None = None) -> datetime:
+    dt = dt or datetime.utcnow()
+    monday = dt - timedelta(days=dt.weekday())
+    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def _activity_window_bounds(now: datetime | None = None) -> tuple[float, float]:
+    now = now or datetime.utcnow()
+    week_start = _monday_start(now)
+    week_end = week_start + timedelta(days=7)
+    reset_raw = await redis_client.get(ACTIVITY_RESET_KEY)
+    if reset_raw:
+        try:
+            reset_dt = datetime.fromisoformat(reset_raw)
+            if reset_dt > week_start:
+                week_start = reset_dt
+        except ValueError:
+            pass
+    return week_start.timestamp(), week_end.timestamp()
+
 async def _maintenance_guard(request: Request):
     if await _maintenance_enabled():
         # let admins bypass
@@ -657,6 +682,8 @@ async def _all_wallets() -> list[dict[str, Any]]:
     data = await _get_cached_data()
     rows = data.get("rows", [])
 
+    activity_start_ts, activity_end_ts = await _activity_window_bounds()
+
     # Build lookup maps by email AND telegram (normalized)
     email_map: dict[str, dict[str, float]] = {}
     tg_map: dict[str, dict[str, float]] = {}
@@ -716,6 +743,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
         # persist computed status
         await redis_client.hset(f"user:{email}", "verified", int(is_verified))
 
+        activity_key = f"{ACTIVITY_ZSET_PREFIX}{email}"
+        weekly_posts = await redis_client.zcount(activity_key, activity_start_ts, activity_end_ts)
+        is_active = weekly_posts > 0
+        activity_label = "active" if is_active else "inactive"
+        await redis_client.hset(f"user:{email}", "activity", activity_label)
+
         wallets.append(
             {
                 "email": email,
@@ -727,6 +760,8 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "pad": pad_val,
                 "verified": is_verified,
                 "verified_posts": verified_posts,
+                "active": is_active,
+                "activity": activity_label,
             }
         )
 
@@ -1217,6 +1252,12 @@ async def admin_panel(request: Request) -> Any:
     limit = int(request.query_params.get("limit", 20))
 
     wallets = await _all_wallets()
+    wallets_active = sorted(
+        [w for w in wallets if w.get("active")], key=lambda w: w.get("email", "")
+    )
+    wallets_inactive = sorted(
+        [w for w in wallets if not w.get("active")], key=lambda w: w.get("email", "")
+    )
     posts = await _all_posts()
     tasks = await _all_tasks()
     proposals = await _pending_proposals()
@@ -1228,6 +1269,8 @@ async def admin_panel(request: Request) -> Any:
         {
             "request": request,
             "wallets": wallets,
+            "wallets_active": wallets_active,
+            "wallets_inactive": wallets_inactive,
             "posts": posts,
             "tasks": tasks,
             "recoveries": recoveries,
@@ -1279,6 +1322,32 @@ async def admin_recovery_reset(
                 f"user:{email_norm}", mapping={"password": _hash_password(code)}
             )
             await redis_client.delete(key)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/activity/reset")
+async def admin_activity_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    await redis_client.set(ACTIVITY_RESET_KEY, _monday_start(datetime.utcnow()).isoformat())
+
+    activity_keys = [
+        key async for key in redis_client.scan_iter(f"{ACTIVITY_ZSET_PREFIX}*")
+    ]
+    if activity_keys:
+        await redis_client.delete(*activity_keys)
+
+    pipe = redis_client.pipeline()
+    async for user_key in redis_client.scan_iter("user:*"):
+        pipe.hset(user_key, "activity", "inactive")
+    if pipe.command_stack:
+        await pipe.execute()
+
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -1334,6 +1403,7 @@ async def api_admin_export(
             "pending_reward": float(w.get("pending_reward", 0.0)),
             "verified": bool(w.get("verified", False)),
             "posts": int(w.get("verified_posts", 0)),
+            "activity": str(w.get("activity", "inactive")),
         }
         for w in wallets
     ]
@@ -1347,6 +1417,7 @@ async def api_admin_export(
             "pending_reward",
             "verified",
             "posts",
+            "activity",
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -1404,6 +1475,10 @@ async def admin_post_verify(
                     pipe.sadd(f"posts_verified:{eml_key}", u)
                     pipe.srem(f"posts_rejected:{eml_key}", u)
                     pipe.lrem(f"posts:{eml_key}", 0, u)
+                    pipe.zadd(
+                        f"{ACTIVITY_ZSET_PREFIX}{eml_key}",
+                        {u: datetime.utcnow().timestamp()},
+                    )
 
     else:
         # Selected checkboxes and/or single email+url
@@ -1422,11 +1497,17 @@ async def admin_post_verify(
                 touched_emails.add(eml_key)
                 pipe.srem(f"posts_rejected:{eml_key}", u)
                 pipe.lrem(f"posts:{eml_key}", 0, u)
+                pipe.zadd(
+                    f"{ACTIVITY_ZSET_PREFIX}{eml_key}",
+                    {u: datetime.utcnow().timestamp()},
+                )
 
     if pipe.command_stack:
         await pipe.execute()
         for eml in touched_emails:
-            await redis_client.hset(f"user:{eml}", "verified", 1)
+            await redis_client.hset(
+                f"user:{eml}", mapping={"verified": 1, "activity": "active"}
+            )
 
     return RedirectResponse("/admin", status_code=303)
 
@@ -1442,6 +1523,7 @@ async def admin_post_reject(
     await redis_client.lrem(f"posts:{email_key}", 0, url_clean)
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
     await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
+    await redis_client.zrem(f"{ACTIVITY_ZSET_PREFIX}{email_key}", url_clean)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -1497,6 +1579,58 @@ async def admin_scorepad(
     await redis_client.hset("score_pad", email_key, pad_val)
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/scorepad/boost")
+async def admin_scorepad_boost(
+    request: Request, ghost: str = Form("")
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    wallets = await _all_wallets()
+    pipe = redis_client.pipeline()
+    for wallet in wallets:
+        email = str(wallet.get("email", "")).strip().lower()
+        if not email or not wallet.get("active"):
+            continue
+        pipe.hincrbyfloat("score_pad", email, SCOREPAD_BOOST_POINTS)
+
+    if pipe.command_stack:
+        await pipe.execute()
+        await _load_csv()
+
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/scorepad/slash")
+async def admin_scorepad_slash(
+    request: Request, ghost: str = Form("")
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    wallets = await _all_wallets()
+    pipe = redis_client.pipeline()
+    for wallet in wallets:
+        email = str(wallet.get("email", "")).strip().lower()
+        if not email or wallet.get("active"):
+            continue
+        pipe.hset("score_pad", email, 0.0)
+
+    if pipe.command_stack:
+        await pipe.execute()
+        await _load_csv()
+
     return RedirectResponse("/admin", status_code=303)
 
 
