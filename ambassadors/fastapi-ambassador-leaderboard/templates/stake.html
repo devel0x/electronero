@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stake Rewards</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+  <style>
+    :root { --bg1:#1e1e2f; --bg2:#141414; }
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      color: #f5f5f5;
+      overflow-x: hidden;
+    }
+    .fx-wrap { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+    .fx-stars {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+        radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+      mix-blend-mode: screen;
+      opacity: .35;
+      filter: blur(.2px);
+    }
+    .fx-grid {
+      position: absolute; inset: -20% -20% -20% -20%;
+      background:
+        repeating-linear-gradient(to right, rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+      transform: rotate(1deg);
+      opacity: .35;
+      filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+    }
+    .fx-bloom {
+      position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%;
+      filter: blur(60px); opacity: .30; mix-blend-mode: screen;
+      transform: translate(-50%, -50%);
+    }
+    .b1 { background: radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left: 22%; top: 28%; }
+    .b2 { background: radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left: 78%; top: 34%; }
+    .b3 { background: radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left: 52%; top: 78%; }
+
+    .glass-card {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 1rem;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .navbar {
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .badge-status { font-size: 0.75rem; }
+    .table-dark tbody tr:hover { background-color: rgba(255,255,255,0.05); }
+    .form-text-muted { color: rgba(255,255,255,.7); font-size: 0.85rem; }
+    .text-muted-light { color: rgba(255,255,255,.65); }
+    @media (prefers-reduced-motion: reduce) {
+      .fx-grid, .fx-bloom, .fx-stars { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/stake" class="btn btn-sm btn-outline-light active">Stake</a>
+      <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+      <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+      <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+      <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+<div class="container py-4">
+  <div class="glass-card p-4 mb-4">
+    <h1 class="h3 mb-3">Stake Pending Rewards</h1>
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="bg-dark bg-opacity-75 border border-light rounded p-3 h-100">
+          <p class="text-uppercase small text-muted-light mb-1">Pending Reward</p>
+          <div class="fs-5 fw-semibold" id="summary-pending">0.00000000</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="bg-dark bg-opacity-75 border border-light rounded p-3 h-100">
+          <p class="text-uppercase small text-muted-light mb-1">Locked in Stakes</p>
+          <div class="fs-5 fw-semibold" id="summary-locked">0.00000000</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="bg-dark bg-opacity-75 border border-light rounded p-3 h-100">
+          <p class="text-uppercase small text-muted-light mb-1">Available to Stake</p>
+          <div class="fs-5 fw-semibold" id="summary-available">0.00000000</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="bg-dark bg-opacity-75 border border-light rounded p-3 h-100">
+          <p class="text-uppercase small text-muted-light mb-1">Points Snapshot</p>
+          <div class="fs-5 fw-semibold" id="summary-points">0.0000</div>
+        </div>
+      </div>
+    </div>
+    <form id="stake-form" class="row gy-2 gx-3 align-items-end">
+      <div class="col-sm-6 col-lg-4">
+        <label for="stake-amount" class="form-label small">Amount to stake (ITC)</label>
+        <input id="stake-amount" name="amount" type="number" min="0" step="0.00000001" class="form-control" placeholder="0.00000000" required>
+        <div class="form-text form-text-muted">25% pays out immediately. Remaining unlocks with daily compounding after {{ summary.minimum_days }} days at {{ summary.daily_interest_percent }}% daily interest.</div>
+      </div>
+      <div class="col-sm-3 col-lg-2">
+        <button type="submit" class="btn btn-primary w-100">Stake</button>
+      </div>
+      <div class="col-sm-3 col-lg-2">
+        <button type="button" id="refresh-stakes" class="btn btn-outline-light w-100">Refresh</button>
+      </div>
+    </form>
+    <div id="stake-message" class="alert alert-danger mt-3 d-none" role="alert"></div>
+  </div>
+
+  <div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h4 mb-0">Stake History</h2>
+      <span class="small text-muted-light" id="stakes-count">0 stakes</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Amount</th>
+            <th scope="col">Upfront</th>
+            <th scope="col">Projected Final</th>
+            <th scope="col">Unlock Date</th>
+            <th scope="col">Status</th>
+            <th scope="col">Claimable</th>
+            <th scope="col" class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody id="stake-table-body">
+          <tr><td colspan="7" class="text-center text-muted">No stakes yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+const initialSummary = {{ summary | tojson }};
+const userId = {{ user_email | tojson }};
+
+const fmtAmount = (value, digits = 8) => Number(value || 0).toFixed(digits);
+const fmtDate = (value) => {
+  if (!value) return '—';
+  try { return new Date(value).toLocaleString(); } catch (err) { return value; }
+};
+const fmtStatus = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'claimed': return '<span class="badge bg-success badge-status">Claimed</span>';
+    case 'unlocked': return '<span class="badge bg-info text-dark badge-status">Unlocked</span>';
+    default: return '<span class="badge bg-warning text-dark badge-status">Locked</span>';
+  }
+};
+
+const summaryEls = {
+  pending: document.getElementById('summary-pending'),
+  locked: document.getElementById('summary-locked'),
+  available: document.getElementById('summary-available'),
+  points: document.getElementById('summary-points'),
+};
+const tableBody = document.getElementById('stake-table-body');
+const messageBox = document.getElementById('stake-message');
+const stakesCount = document.getElementById('stakes-count');
+
+function showMessage(text, variant = 'danger') {
+  if (!messageBox) return;
+  if (!text) {
+    messageBox.classList.add('d-none');
+    messageBox.textContent = '';
+    return;
+  }
+  messageBox.className = `alert alert-${variant} mt-3`;
+  messageBox.textContent = text;
+}
+
+function renderSummary(data) {
+  if (!data) return;
+  summaryEls.pending.textContent = fmtAmount(data.pending_reward);
+  summaryEls.locked.textContent = fmtAmount(data.staked_locked);
+  summaryEls.available.textContent = fmtAmount(data.available_pending);
+  summaryEls.points.textContent = fmtAmount(data.points, 4);
+}
+
+function renderStakes(stakes) {
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  if (!Array.isArray(stakes) || !stakes.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="7" class="text-center text-muted">No stakes yet.</td>';
+    tableBody.appendChild(tr);
+    stakesCount.textContent = '0 stakes';
+    return;
+  }
+  stakesCount.textContent = `${stakes.length} stake${stakes.length === 1 ? '' : 's'}`;
+  stakes.forEach(stake => {
+    const tr = document.createElement('tr');
+    const claimable = stake.status === 'claimed'
+      ? fmtAmount(stake.claimed_amount)
+      : fmtAmount(stake.payout_on_claim);
+    const seconds = Number(stake.seconds_until_unlock || 0);
+    let countdown = '';
+    if (stake.status === 'locked' && seconds > 0) {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      countdown = `<div class="small text-muted-light">${days}d ${hours}h remaining</div>`;
+    } else if (stake.status === 'claimed' && stake.claimed_at) {
+      countdown = `<div class="small text-muted-light">Claimed ${fmtDate(stake.claimed_at)}</div>`;
+    }
+    let actionHtml = '';
+    if (stake.status === 'claimed') {
+      actionHtml = '<span class="badge bg-success">Paid</span>';
+    } else {
+      const btnClass = stake.status === 'locked' ? 'btn-outline-light' : 'btn-success';
+      actionHtml = `<button class="btn btn-sm ${btnClass}" data-claim="${stake.stake_id}">Claim</button>`;
+    }
+    tr.innerHTML = `
+      <td>${fmtAmount(stake.amount)}</td>
+      <td>${fmtAmount(stake.upfront_paid)}</td>
+      <td>${fmtAmount(stake.projected_final)}</td>
+      <td>${fmtDate(stake.unlock_at)}</td>
+      <td>${fmtStatus(stake.status)}${countdown}</td>
+      <td>${claimable}</td>
+      <td class="text-end">${actionHtml}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+function hydrate(summary) {
+  renderSummary(summary);
+  renderStakes(summary?.stakes || []);
+}
+
+hydrate(initialSummary);
+
+async function refreshStakes() {
+  try {
+    const resp = await fetch(`/stakes/${encodeURIComponent(userId)}`);
+    const data = await resp.json();
+    if (!data.ok) {
+      showMessage('Failed to load stake data.');
+      return;
+    }
+    showMessage('');
+    hydrate(data.summary);
+  } catch (err) {
+    console.error('refresh failed', err);
+    showMessage('Error refreshing stake data.');
+  }
+}
+
+async function submitStake(evt) {
+  evt.preventDefault();
+  const form = evt.target;
+  const amountField = form.querySelector('input[name="amount"]');
+  const amount = parseFloat(amountField?.value || '0');
+  if (!amount || amount <= 0) {
+    showMessage('Enter a valid amount greater than zero.');
+    return;
+  }
+  showMessage('');
+  try {
+    const resp = await fetch('/stake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      const error = data.error || 'Unable to stake right now.';
+      if (error === 'insufficient_pending' && data.available !== undefined) {
+        showMessage(`Insufficient pending rewards. Available: ${fmtAmount(data.available)} ITC.`);
+      } else if (error === 'invalid_amount') {
+        showMessage('Enter a valid stake amount.');
+      } else {
+        showMessage(error.replace(/_/g, ' '));
+      }
+      return;
+    }
+    amountField.value = '';
+    hydrate(data.summary);
+    showMessage('Stake created successfully!', 'success');
+  } catch (err) {
+    console.error('stake failed', err);
+    showMessage('Error submitting stake.');
+  }
+}
+
+async function handleClaim(stakeId) {
+  try {
+    const resp = await fetch(`/stakes/${encodeURIComponent(stakeId)}/claim`, { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      const error = data.error || 'Unable to claim stake.';
+      if (error === 'stake_locked' && data.seconds_remaining) {
+        const hours = Math.ceil(Number(data.seconds_remaining) / 3600);
+        showMessage(`Stake still locked for about ${hours}h.`, 'warning');
+      } else {
+        showMessage(error.replace(/_/g, ' '));
+      }
+      return;
+    }
+    hydrate(data.summary);
+    showMessage('Stake claimed successfully!', 'success');
+  } catch (err) {
+    console.error('claim failed', err);
+    showMessage('Error claiming stake.');
+  }
+}
+
+if (document.getElementById('stake-form')) {
+  document.getElementById('stake-form').addEventListener('submit', submitStake);
+}
+
+document.getElementById('refresh-stakes')?.addEventListener('click', refreshStakes);
+
+tableBody?.addEventListener('click', (evt) => {
+  const btn = evt.target.closest('[data-claim]');
+  if (!btn) return;
+  const stakeId = btn.getAttribute('data-claim');
+  if (stakeId) {
+    handleClaim(stakeId);
+  }
+});
+
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof gsap === 'undefined') return;
+  const grid = document.getElementById('fxGrid');
+  const b1 = document.getElementById('b1');
+  const b2 = document.getElementById('b2');
+  const b3 = document.getElementById('b3');
+  gsap.to(b1, { duration: 10, xPercent: -5, yPercent: 6, scale: 1.07, opacity: 0.35, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.to(b2, { duration: 12, xPercent: 4, yPercent: -4, scale: 1.06, opacity: 0.33, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .3 });
+  gsap.to(b3, { duration: 14, xPercent: -2, yPercent: 3, scale: 1.08, opacity: 0.32, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .6 });
+  gsap.to(grid, { duration: 20, rotation: 3, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  window.addEventListener('mousemove', e => {
+    const dx = (e.clientX - window.innerWidth / 2) / window.innerWidth;
+    const dy = (e.clientY - window.innerHeight / 2) / window.innerHeight;
+    gsap.to([b1, b2, b3], { duration: .6, x: dx * 30, y: dy * 30, ease: 'sine.out' });
+    gsap.to(grid, { duration: .8, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>
