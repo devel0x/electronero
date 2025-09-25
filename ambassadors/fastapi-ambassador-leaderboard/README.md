@@ -25,6 +25,13 @@ The app also provides a tasks panel where ambassadors can apply to various commu
 
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
 
+## Ambassador staking
+- A dedicated **Stake** tab lets ambassadors lock a portion of their pending rewards for a 30-day term. The system snapshots their points, deducts the chosen amount from the available pending balance, and immediately credits 25% of the stake as an upfront payout.
+- Each stake accrues **daily compounding interest** based on a configurable percentage (default 5%). The projected final payout is calculated with `final = principal * (1 + rate) ** days` and recorded alongside the upfront amount so ambassadors can see the bonus interest they will unlock later.
+- Stakes are stored in Redis using email-scoped keys and a companion lock key that expires after the minimum staking period. Once the timer elapses, the stake is marked as unlocked and ambassadors can trigger the claim endpoint to receive the remaining 75% plus earned interest.
+- The stake history endpoint (`GET /stakes/{user_id}`) returns every stake with amount, upfront paid, projected final amount, unlock timestamp, and status so ambassadors can review their portfolio directly in the UI.
+- Admins can inspect aggregate staking metrics, including total staked value, unlocked-but-unclaimed totals, claimed payouts, and issued bonus interest via `GET /admin/stats/staking`. A Ghost export (`GET /admin/export/ghost`) now adds `staked_amount`, `staking_status`, and a JSON snapshot of each ambassador’s stakes for downstream reporting.
+
 ## Requirements
 - Python 3.11+
 - Pinned Python dependencies are listed in `requirements.txt`.

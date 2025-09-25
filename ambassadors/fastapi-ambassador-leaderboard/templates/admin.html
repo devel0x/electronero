@@ -21,6 +21,7 @@
         <div class="collapse navbar-collapse" id="adminNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="#wallets">Wallets</a></li>
+                <li class="nav-item"><a class="nav-link" href="#staking">Staking</a></li>
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
@@ -185,6 +186,98 @@
                             {% endfor %}
                         </ul>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="staking" class="glass-card p-3 mb-4">
+        <h1 class="h5 text-uppercase">Staking Overview</h1>
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-light mb-1">Total Staked</p>
+                        <div class="fs-4 fw-bold text-light" id="staking-total">0.00000000</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-light mb-1">Unlocked Pending Claim</p>
+                        <div class="fs-4 fw-bold text-light" id="staking-unlocked">0.00000000</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-light mb-1">Claimed Payouts</p>
+                        <div class="fs-4 fw-bold text-light" id="staking-claimed">0.00000000</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <p class="text-uppercase small text-light mb-1">Bonus Interest Issued</p>
+                        <div class="fs-4 fw-bold text-light" id="staking-interest">0.00000000</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <h2 class="h6 text-uppercase">Breakdown by Ambassador</h2>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead class="table-light text-dark">
+                            <tr>
+                                <th scope="col">Ambassador</th>
+                                <th scope="col" class="text-end">Total</th>
+                                <th scope="col" class="text-end">Locked</th>
+                                <th scope="col" class="text-end">Unlocked</th>
+                                <th scope="col" class="text-end">Claimed</th>
+                                <th scope="col" class="text-end">Bonus Interest</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staking-breakdown-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading staking data…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <h2 class="h6 text-uppercase">Staked vs Claimed Rewards</h2>
+                <div class="bg-dark bg-opacity-75 border border-light rounded p-3 mb-3">
+                    <canvas id="stakingChart" height="240"></canvas>
+                </div>
+                <div class="small text-muted" id="staking-last-updated"></div>
+            </div>
+        </div>
+        <div class="row g-4 mt-1">
+            <div class="col-12">
+                <h2 class="h6 text-uppercase">Recent Staking Claims</h2>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle mb-0">
+                        <thead class="table-light text-dark">
+                            <tr>
+                                <th scope="col">Ambassador</th>
+                                <th scope="col">Wallet</th>
+                                <th scope="col" class="text-end">Amount Due</th>
+                                <th scope="col" class="text-end">Days Staked</th>
+                                <th scope="col" class="text-end">Daily %</th>
+                                <th scope="col">Claimed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staking-claims-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">No claims yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -524,10 +617,148 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const stakingTotals = {
+        total: document.getElementById('staking-total'),
+        unlocked: document.getElementById('staking-unlocked'),
+        claimed: document.getElementById('staking-claimed'),
+        interest: document.getElementById('staking-interest'),
+    };
+    const stakingTableBody = document.getElementById('staking-breakdown-body');
+    const stakingChartCanvas = document.getElementById('stakingChart');
+    const stakingUpdated = document.getElementById('staking-last-updated');
+    const stakingClaimsBody = document.getElementById('staking-claims-body');
+    let stakingChartInstance = null;
+
+    const fmtAmount = (value) => Number(value || 0).toFixed(8);
+    const fmtDateTime = (value) => {
+        if (!value) return '—';
+        const dt = new Date(value);
+        return Number.isNaN(dt.getTime()) ? value : dt.toLocaleString();
+    };
+
+    function renderBreakdown(entries) {
+        if (!stakingTableBody) return;
+        stakingTableBody.innerHTML = '';
+        if (!entries.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="6" class="text-center text-muted">No staking activity yet.</td>';
+            stakingTableBody.appendChild(tr);
+            return;
+        }
+        entries.forEach(entry => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${entry.email}</td>
+                <td class="text-end">${fmtAmount(entry.total_staked)}</td>
+                <td class="text-end">${fmtAmount(entry.locked)}</td>
+                <td class="text-end">${fmtAmount(entry.unlocked)}</td>
+                <td class="text-end">${fmtAmount(entry.claimed)}</td>
+                <td class="text-end">${fmtAmount(entry.bonus_interest)}</td>
+            `;
+            stakingTableBody.appendChild(tr);
+        });
+    }
+
+    function renderStakingChart(points) {
+        if (!stakingChartCanvas) return;
+        if (stakingChartInstance) {
+            stakingChartInstance.destroy();
+            stakingChartInstance = null;
+        }
+        if (!Array.isArray(points) || !points.length) {
+            return;
+        }
+        const labels = points.map(p => p.date);
+        stakingChartInstance = new Chart(stakingChartCanvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Staked',
+                        data: points.map(p => p.staked),
+                        borderColor: '#ffc107',
+                        backgroundColor: 'rgba(255, 193, 7, 0.25)',
+                        tension: 0.3,
+                        fill: true,
+                    },
+                    {
+                        label: 'Claimed',
+                        data: points.map(p => p.claimed),
+                        borderColor: '#20c997',
+                        backgroundColor: 'rgba(32, 201, 151, 0.25)',
+                        tension: 0.3,
+                        fill: true,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: true, labels: { color: '#ced4da' } },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#ced4da' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#ced4da' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                },
+            },
+        });
+    }
+
+    function renderClaims(entries) {
+        if (!stakingClaimsBody) return;
+        stakingClaimsBody.innerHTML = '';
+        if (!Array.isArray(entries) || !entries.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="6" class="text-center text-muted">No claims yet.</td>';
+            stakingClaimsBody.appendChild(tr);
+            return;
+        }
+        entries.forEach(entry => {
+            const tr = document.createElement('tr');
+            const wallet = entry.wallet ? `<code>${entry.wallet}</code>` : '—';
+            tr.innerHTML = `
+                <td>${entry.email}</td>
+                <td>${wallet}</td>
+                <td class="text-end">${fmtAmount(entry.amount_due)}</td>
+                <td class="text-end">${Number(entry.days_staked || 0).toFixed(2)}</td>
+                <td class="text-end">${Number(entry.daily_interest_percent || 0).toFixed(2)}%</td>
+                <td>${fmtDateTime(entry.claimed_at)}</td>
+            `;
+            stakingClaimsBody.appendChild(tr);
+        });
+    }
+
+    async function loadStakingStats() {
+        try {
+            const resp = await fetch('/admin/stats/staking');
+            const data = await resp.json();
+            if (!data.ok) return;
+            const summary = data.summary || {};
+            if (stakingTotals.total) stakingTotals.total.textContent = fmtAmount(summary.total_staked);
+            if (stakingTotals.unlocked) stakingTotals.unlocked.textContent = fmtAmount(summary.unlocked_pending);
+            if (stakingTotals.claimed) stakingTotals.claimed.textContent = fmtAmount(summary.claimed_payouts);
+            if (stakingTotals.interest) stakingTotals.interest.textContent = fmtAmount(summary.bonus_interest);
+            renderBreakdown(data.by_user || []);
+            renderStakingChart(data.timeline || []);
+            renderClaims(data.claims || []);
+            if (stakingUpdated) stakingUpdated.textContent = `Updated ${new Date().toLocaleString()}`;
+        } catch (err) {
+            console.error('Failed to load staking stats', err);
+        }
+    }
+
     function promptExport(fmt) {
         const ghost = prompt('Enter GHOST key');
         if (ghost) {
-            window.location = `/api/admin/export?fmt=${fmt}&ghost=${encodeURIComponent(ghost)}`;
+            window.location = `/admin/export/ghost?fmt=${fmt}&ghost=${encodeURIComponent(ghost)}`;
         }
     }
 
@@ -540,6 +771,8 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         promptExport('csv');
     });
+
+    loadStakingStats();
 
     document.getElementById('validate-wallets')?.addEventListener('click', async e => {
         e.preventDefault();
