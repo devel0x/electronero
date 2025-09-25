@@ -11,7 +11,7 @@ import csv
 import io
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 import pandas as pd
 import httpx
@@ -57,6 +57,16 @@ REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
+
+STAKE_MIN_DAYS = max(int(os.getenv("STAKE_MIN_DAYS", "7")), 1)
+STAKE_TTL_SECONDS = STAKE_MIN_DAYS * 24 * 60 * 60
+STAKE_DAILY_INTEREST_PERCENT = max(float(os.getenv("STAKE_DAILY_INTEREST_PERCENT", "5")), 0.0)
+STAKE_DAILY_INTEREST = STAKE_DAILY_INTEREST_PERCENT / 100.0
+STAKE_UPFRONT_RATIO = float(os.getenv("STAKE_UPFRONT_RATIO", "0.25"))
+if STAKE_UPFRONT_RATIO < 0:
+    STAKE_UPFRONT_RATIO = 0.0
+elif STAKE_UPFRONT_RATIO > 1:
+    STAKE_UPFRONT_RATIO = 1.0
 
 
 EXPECTED_COLUMNS = [
@@ -677,6 +687,352 @@ async def _pending_rewards_map() -> dict[str, float]:
     return mapping
 
 
+def _stake_lock_key(email: str, stake_id: str) -> str:
+    return f"stake:{email}:{stake_id}"
+
+
+def _stake_data_key(stake_id: str) -> str:
+    return f"stake:data:{stake_id}"
+
+
+def _stake_index_key(email: str) -> str:
+    return f"stakes:{email}"
+
+
+def _stake_deduction_key(email: str) -> str:
+    return f"stake:deduction:{email}"
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            return float(value.replace(",", "").strip())
+    except Exception:
+        return default
+    return default
+
+
+async def _user_leaderboard_stats(email: str) -> dict[str, float]:
+    data = await _get_cached_data()
+    rows: Iterable[dict[str, Any]] = data.get("rows", [])
+    for row in rows:
+        row_email = str(row.get("email", "")).strip().lower()
+        if row_email == email:
+            points = _safe_float(row.get("points"))
+            pending_reward = _safe_float(row.get("pending_reward"))
+            return {"points": points, "pending_reward": pending_reward}
+    return {"points": 0.0, "pending_reward": 0.0}
+
+
+async def _stake_deduction(email: str) -> float:
+    raw = await redis_client.get(_stake_deduction_key(email))
+    return _safe_float(raw)
+
+
+async def _normalize_deduction(email: str) -> None:
+    value = await _stake_deduction(email)
+    if abs(value) < 1e-9:
+        await redis_client.delete(_stake_deduction_key(email))
+
+
+def _stake_financials(
+    amount: float,
+    days: float | None = None,
+    daily_interest: float | None = None,
+) -> dict[str, float]:
+    days = days if days is not None else float(STAKE_MIN_DAYS)
+    rate = daily_interest if daily_interest is not None else STAKE_DAILY_INTEREST
+    projected_final = amount * ((1 + rate) ** days)
+    upfront = amount * STAKE_UPFRONT_RATIO
+    payout_on_claim = projected_final - upfront
+    bonus_interest = projected_final - amount
+    return {
+        "projected_final": projected_final,
+        "upfront_paid": upfront,
+        "payout_on_claim": payout_on_claim,
+        "bonus_interest": bonus_interest,
+    }
+
+
+async def _stake_status(email: str, stake_id: str, meta: dict[str, Any]) -> tuple[str, int]:
+    stored_status = meta.get("status", "locked")
+    if stored_status == "claimed":
+        return "claimed", -2
+    ttl = await redis_client.ttl(_stake_lock_key(email, stake_id))
+    if ttl is None:
+        ttl = -2
+    if ttl > 0:
+        return "locked", ttl
+    return "unlocked", ttl
+
+
+async def _load_stake_meta(stake_id: str) -> dict[str, Any]:
+    data = await redis_client.hgetall(_stake_data_key(stake_id))
+    if not data:
+        return {}
+    meta: dict[str, Any] = {**data}
+    meta["stake_id"] = stake_id
+    meta["amount"] = _safe_float(meta.get("amount"))
+    meta["points_snapshot"] = _safe_float(meta.get("points_snapshot"))
+    meta["pending_snapshot"] = _safe_float(meta.get("pending_snapshot"))
+    meta["projected_final"] = _safe_float(meta.get("projected_final"))
+    meta["upfront_paid"] = _safe_float(meta.get("upfront_paid"))
+    meta["payout_on_claim"] = _safe_float(meta.get("payout_on_claim"))
+    meta["bonus_interest"] = _safe_float(meta.get("bonus_interest"))
+    meta["claimed_amount"] = _safe_float(meta.get("claimed_amount"))
+    meta["minimum_days"] = _safe_float(meta.get("minimum_days"), float(STAKE_MIN_DAYS))
+    meta["daily_interest_percent"] = _safe_float(
+        meta.get("daily_interest_percent"), float(STAKE_DAILY_INTEREST_PERCENT)
+    )
+    meta["daily_interest_rate"] = _safe_float(
+        meta.get("daily_interest_rate"), float(STAKE_DAILY_INTEREST)
+    )
+    meta["days_staked"] = _safe_float(meta.get("days_staked"))
+    return meta
+
+
+async def _user_stakes(email: str) -> list[dict[str, Any]]:
+    stake_ids = await redis_client.lrange(_stake_index_key(email), 0, -1)
+    stakes: list[dict[str, Any]] = []
+    for stake_id in stake_ids:
+        meta = await _load_stake_meta(stake_id)
+        if not meta or meta.get("user") != email:
+            continue
+        status, ttl = await _stake_status(email, stake_id, meta)
+        meta["status"] = status
+        meta["seconds_until_unlock"] = ttl if ttl and ttl > 0 else max(ttl, 0)
+        stakes.append(meta)
+    stakes.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return stakes
+
+
+async def _stake_summary(email: str) -> dict[str, Any]:
+    stats = await _user_leaderboard_stats(email)
+    deduction = await _stake_deduction(email)
+    pending_reward = stats["pending_reward"]
+    available = max(pending_reward - deduction, 0.0)
+    stakes = await _user_stakes(email)
+    return {
+        "email": email,
+        "points": stats["points"],
+        "pending_reward": pending_reward,
+        "staked_locked": max(deduction, 0.0),
+        "available_pending": available,
+        "stakes": stakes,
+        "minimum_days": float(STAKE_MIN_DAYS),
+        "daily_interest_percent": float(STAKE_DAILY_INTEREST_PERCENT),
+        "upfront_ratio_percent": float(STAKE_UPFRONT_RATIO * 100),
+    }
+
+
+async def _all_stakes_meta() -> list[dict[str, Any]]:
+    stakes: list[dict[str, Any]] = []
+    async for key in redis_client.scan_iter("stake:data:*"):
+        stake_id = key.split(":", 2)[2]
+        meta = await _load_stake_meta(stake_id)
+        if meta:
+            email = meta.get("user", "")
+            if email:
+                status, ttl = await _stake_status(email, stake_id, meta)
+                meta["status"] = status
+                meta["seconds_until_unlock"] = ttl if ttl and ttl > 0 else max(ttl, 0)
+            stakes.append(meta)
+    stakes.sort(key=lambda x: x.get("created_at", ""))
+    return stakes
+
+
+def _public_stake_record(stake: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "stake_id": stake.get("stake_id"),
+        "user": stake.get("user"),
+        "amount": round(float(stake.get("amount", 0.0)), 8),
+        "points_snapshot": round(float(stake.get("points_snapshot", 0.0)), 4),
+        "pending_snapshot": round(float(stake.get("pending_snapshot", 0.0)), 8),
+        "projected_final": round(float(stake.get("projected_final", 0.0)), 8),
+        "upfront_paid": round(float(stake.get("upfront_paid", 0.0)), 8),
+        "payout_on_claim": round(float(stake.get("payout_on_claim", 0.0)), 8),
+        "bonus_interest": round(float(stake.get("bonus_interest", 0.0)), 8),
+        "claimed_amount": round(float(stake.get("claimed_amount", 0.0)), 8),
+        "created_at": stake.get("created_at"),
+        "unlock_at": stake.get("unlock_at"),
+        "claimed_at": stake.get("claimed_at"),
+        "status": stake.get("status", "locked"),
+        "seconds_until_unlock": int(stake.get("seconds_until_unlock", 0) or 0),
+        "minimum_days": round(float(stake.get("minimum_days", STAKE_MIN_DAYS)), 4),
+        "daily_interest_percent": round(
+            float(stake.get("daily_interest_percent", STAKE_DAILY_INTEREST_PERCENT)), 6
+        ),
+        "daily_interest_rate": round(
+            float(stake.get("daily_interest_rate", STAKE_DAILY_INTEREST)), 8
+        ),
+        "wallet_snapshot": stake.get("wallet_snapshot"),
+        "claimed_wallet": stake.get("claimed_wallet"),
+        "days_staked": round(float(stake.get("days_staked", 0.0)), 4),
+    }
+
+
+def _public_stake_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "email": summary.get("email"),
+        "points": round(float(summary.get("points", 0.0)), 4),
+        "pending_reward": round(float(summary.get("pending_reward", 0.0)), 8),
+        "staked_locked": round(float(summary.get("staked_locked", 0.0)), 8),
+        "available_pending": round(float(summary.get("available_pending", 0.0)), 8),
+        "stakes": [_public_stake_record(stake) for stake in summary.get("stakes", [])],
+        "minimum_days": int(float(summary.get("minimum_days", STAKE_MIN_DAYS))),
+        "daily_interest_percent": round(
+            float(summary.get("daily_interest_percent", STAKE_DAILY_INTEREST_PERCENT)), 6
+        ),
+        "upfront_ratio_percent": round(
+            float(summary.get("upfront_ratio_percent", STAKE_UPFRONT_RATIO * 100)), 4
+        ),
+    }
+
+
+async def _staking_admin_overview() -> dict[str, Any]:
+    stakes = await _all_stakes_meta()
+    total_staked = sum(stake.get("amount", 0.0) for stake in stakes)
+    unlocked_pending = sum(
+        stake.get("payout_on_claim", 0.0)
+        for stake in stakes
+        if stake.get("status") == "unlocked"
+    )
+    claimed_payouts = sum(
+        stake.get("claimed_amount", 0.0) or stake.get("payout_on_claim", 0.0)
+        for stake in stakes
+        if stake.get("status") == "claimed"
+    )
+    bonus_interest = sum(
+        stake.get("bonus_interest", 0.0)
+        for stake in stakes
+        if stake.get("status") == "claimed"
+    )
+
+    per_user: dict[str, dict[str, Any]] = {}
+    wallet_cache: dict[str, str] = {}
+    claims: list[dict[str, Any]] = []
+    for stake in stakes:
+        email = stake.get("user") or ""
+        if not email:
+            continue
+        entry = per_user.setdefault(
+            email,
+            {
+                "email": email,
+                "total_staked": 0.0,
+                "locked": 0.0,
+                "unlocked": 0.0,
+                "claimed": 0.0,
+                "claimed_payouts": 0.0,
+                "bonus_interest": 0.0,
+            },
+        )
+        amount = stake.get("amount", 0.0)
+        entry["total_staked"] += amount
+        status = stake.get("status")
+        if status == "locked":
+            entry["locked"] += amount
+        elif status == "unlocked":
+            entry["unlocked"] += amount
+        elif status == "claimed":
+            entry["claimed"] += amount
+            entry["claimed_payouts"] += (
+                stake.get("claimed_amount", 0.0)
+                or stake.get("payout_on_claim", 0.0)
+            )
+            entry["bonus_interest"] += stake.get("bonus_interest", 0.0)
+            wallet_value = (
+                stake.get("claimed_wallet")
+                or stake.get("wallet_snapshot")
+                or ""
+            )
+            if not wallet_value:
+                cached = wallet_cache.get(email)
+                if cached is None:
+                    user_meta = await redis_client.hgetall(f"user:{email}")
+                    cached = (user_meta.get("wallet", "") if user_meta else "").strip()
+                    wallet_cache[email] = cached
+                wallet_value = cached
+            claims.append(
+                {
+                    "stake_id": stake.get("stake_id"),
+                    "email": email,
+                    "wallet": wallet_value,
+                    "amount_due": round(
+                        stake.get("claimed_amount", 0.0)
+                        or stake.get("payout_on_claim", 0.0),
+                        8,
+                    ),
+                    "claimed_at": stake.get("claimed_at"),
+                    "days_staked": round(stake.get("days_staked", 0.0), 4),
+                    "upfront_paid": round(stake.get("upfront_paid", 0.0), 8),
+                    "projected_final": round(stake.get("projected_final", 0.0), 8),
+                    "daily_interest_percent": round(
+                        stake.get("daily_interest_percent", STAKE_DAILY_INTEREST_PERCENT),
+                        6,
+                    ),
+                }
+            )
+
+    breakdown = [
+        {
+            **entry,
+            "total_staked": round(entry["total_staked"], 8),
+            "locked": round(entry["locked"], 8),
+            "unlocked": round(entry["unlocked"], 8),
+            "claimed": round(entry["claimed"], 8),
+            "claimed_payouts": round(entry["claimed_payouts"], 8),
+            "bonus_interest": round(entry["bonus_interest"], 8),
+        }
+        for entry in per_user.values()
+    ]
+    breakdown.sort(key=lambda x: (-x["total_staked"], x["email"]))
+
+    timeline: dict[str, dict[str, float]] = {}
+    for stake in stakes:
+        created = stake.get("created_at") or ""
+        if created:
+            date_key = created[:10]
+            bucket = timeline.setdefault(date_key, {"staked": 0.0, "claimed": 0.0})
+            bucket["staked"] += stake.get("amount", 0.0)
+        if stake.get("status") == "claimed" and stake.get("claimed_at"):
+            claim_date = stake["claimed_at"][:10]
+            bucket = timeline.setdefault(claim_date, {"staked": 0.0, "claimed": 0.0})
+            bucket["claimed"] += (
+                stake.get("claimed_amount", 0.0)
+                or stake.get("payout_on_claim", 0.0)
+            )
+
+    timeline_points = [
+        {
+            "date": key,
+            "staked": round(value["staked"], 8),
+            "claimed": round(value["claimed"], 8),
+        }
+        for key, value in sorted(timeline.items())
+    ]
+
+    sorted_claims = sorted(
+        claims,
+        key=lambda entry: entry.get("claimed_at") or "",
+        reverse=True,
+    )
+
+    return {
+        "summary": {
+            "total_staked": round(total_staked, 8),
+            "unlocked_pending": round(unlocked_pending, 8),
+            "claimed_payouts": round(claimed_payouts, 8),
+            "bonus_interest": round(bonus_interest, 8),
+        },
+        "stakes": [_public_stake_record(stake) for stake in stakes],
+        "by_user": breakdown,
+        "timeline": timeline_points,
+        "claims": sorted_claims,
+    }
+
 async def _all_wallets() -> list[dict[str, Any]]:
     wallets: list[dict[str, Any]] = []
     data = await _get_cached_data()
@@ -729,6 +1085,14 @@ async def _all_wallets() -> list[dict[str, Any]]:
         if not stats:
             stats = {"points": 0.0, "pending_reward": 0.0}
 
+        deduction = await _stake_deduction(email)
+        available_pending = max(stats.get("pending_reward", 0.0) - deduction, 0.0)
+        stats = {
+            "points": stats.get("points", 0.0),
+            "pending_reward": available_pending,
+            "staked_locked": max(deduction, 0.0),
+        }
+
         # padding is keyed by normalized email (as you already do)
         try:
             pad_val = float(pad_map.get(email, 0.0))
@@ -757,6 +1121,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "tg_link": f"https://t.me/{tele_norm}" if tele_norm else "",
                 "points": stats["points"],
                 "pending_reward": f"{stats['pending_reward']:.8f}",
+                "staked_locked": f"{stats['staked_locked']:.8f}",
                 "pad": pad_val,
                 "verified": is_verified,
                 "verified_posts": verified_posts,
@@ -1072,6 +1437,188 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
     return RedirectResponse("/", status_code=303)
 
 
+@app.get("/stake")
+async def stake_panel(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    summary = await _stake_summary(email)
+    return templates.TemplateResponse(
+        "stake.html",
+        {
+            "request": request,
+            "summary": _public_stake_summary(summary),
+            "user_email": email,
+        },
+    )
+
+
+@app.post("/stake")
+async def create_stake(request: Request) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        form = await request.form()
+        payload = dict(form)
+    amount = _safe_float(payload.get("amount"))
+    if amount <= 0:
+        return JSONResponse({"ok": False, "error": "invalid_amount"}, status_code=400)
+    summary = await _stake_summary(email)
+    available = summary["available_pending"]
+    if amount > available + 1e-8:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "insufficient_pending",
+                "available": round(float(available), 8),
+            },
+            status_code=400,
+        )
+
+    now = datetime.utcnow()
+    unlock_at = now + timedelta(days=STAKE_MIN_DAYS)
+    stake_id = secrets.token_hex(8)
+    financials = _stake_financials(amount, float(STAKE_MIN_DAYS), STAKE_DAILY_INTEREST)
+    user_meta = await redis_client.hgetall(f"user:{email}")
+    wallet_snapshot = (user_meta.get("wallet", "") if user_meta else "").strip()
+
+    meta = {
+        "stake_id": stake_id,
+        "user": email,
+        "amount": f"{amount:.8f}",
+        "points_snapshot": f"{summary['points']:.4f}",
+        "pending_snapshot": f"{summary['pending_reward']:.8f}",
+        "projected_final": f"{financials['projected_final']:.8f}",
+        "upfront_paid": f"{financials['upfront_paid']:.8f}",
+        "payout_on_claim": f"{financials['payout_on_claim']:.8f}",
+        "bonus_interest": f"{financials['bonus_interest']:.8f}",
+        "created_at": now.isoformat(),
+        "unlock_at": unlock_at.isoformat(),
+        "status": "locked",
+        "minimum_days": f"{float(STAKE_MIN_DAYS):.4f}",
+        "daily_interest_percent": f"{float(STAKE_DAILY_INTEREST_PERCENT):.8f}",
+        "daily_interest_rate": f"{float(STAKE_DAILY_INTEREST):.8f}",
+        "wallet_snapshot": wallet_snapshot,
+    }
+    await redis_client.hset(_stake_data_key(stake_id), mapping=meta)
+    await redis_client.set(
+        _stake_lock_key(email, stake_id), "locked", ex=STAKE_TTL_SECONDS
+    )
+    await redis_client.lpush(_stake_index_key(email), stake_id)
+    await redis_client.incrbyfloat(_stake_deduction_key(email), amount)
+    await redis_client.incrbyfloat("staking:total_staked", amount)
+    await redis_client.incrbyfloat("staking:total_upfront", financials["upfront_paid"])
+    await redis_client.incrbyfloat(
+        "staking:projected_interest", financials["bonus_interest"]
+    )
+
+    summary = await _stake_summary(email)
+    await _normalize_deduction(email)
+    public_summary = _public_stake_summary(summary)
+    new_stake = public_summary["stakes"][0] if public_summary["stakes"] else None
+    return JSONResponse({"ok": True, "summary": public_summary, "stake": new_stake})
+
+
+@app.get("/stakes/{user_id}")
+async def get_stakes(request: Request, user_id: str) -> JSONResponse:
+    email = await _current_email(request)
+    user_id_norm = user_id.strip().lower()
+    if not email or email != user_id_norm:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    summary = await _stake_summary(email)
+    return JSONResponse({"ok": True, "summary": _public_stake_summary(summary)})
+
+
+@app.post("/stakes/{stake_id}/claim")
+async def claim_stake(request: Request, stake_id: str) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    meta = await _load_stake_meta(stake_id)
+    if not meta or meta.get("user") != email:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    if meta.get("status") == "claimed":
+        return JSONResponse({"ok": False, "error": "already_claimed"}, status_code=400)
+
+    amount = _safe_float(meta.get("amount"))
+    upfront = _safe_float(meta.get("upfront_paid"))
+    created_at = meta.get("created_at")
+    now = datetime.utcnow()
+    try:
+        created_dt = datetime.fromisoformat(created_at) if created_at else now
+    except Exception:
+        created_dt = now
+    elapsed_days = max((now - created_dt).total_seconds() / 86400.0, 0.0)
+    minimum_days = meta.get("minimum_days") or float(STAKE_MIN_DAYS)
+    if minimum_days <= 0:
+        minimum_days = float(STAKE_MIN_DAYS)
+    ttl = await redis_client.ttl(_stake_lock_key(email, stake_id))
+    if ttl is None:
+        ttl = -2
+    if elapsed_days + 1e-9 < minimum_days:
+        seconds_remaining = ttl if ttl > 0 else int(
+            round((minimum_days - elapsed_days) * 86400)
+        )
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "stake_locked",
+                "seconds_remaining": max(seconds_remaining, 0),
+            },
+            status_code=400,
+        )
+    days_staked = max(elapsed_days, minimum_days)
+    rate_percent = meta.get("daily_interest_percent") or float(STAKE_DAILY_INTEREST_PERCENT)
+    daily_rate = meta.get("daily_interest_rate") or float(STAKE_DAILY_INTEREST)
+    if daily_rate <= 0 and rate_percent:
+        daily_rate = float(rate_percent) / 100.0
+
+    financials = _stake_financials(amount, days_staked, daily_rate)
+    final_amount = financials["projected_final"]
+    payout = financials["payout_on_claim"]
+    bonus_interest = financials["bonus_interest"]
+    claimed_at = now.isoformat()
+
+    user_meta = await redis_client.hgetall(f"user:{email}")
+    current_wallet = (user_meta.get("wallet", "") if user_meta else "").strip()
+    claim_wallet = current_wallet or str(meta.get("wallet_snapshot", "")).strip()
+
+    await redis_client.hset(
+        _stake_data_key(stake_id),
+        mapping={
+            "status": "claimed",
+            "claimed_at": claimed_at,
+            "claimed_amount": f"{payout:.8f}",
+            "projected_final": f"{final_amount:.8f}",
+            "payout_on_claim": f"{payout:.8f}",
+            "bonus_interest": f"{bonus_interest:.8f}",
+            "daily_interest_percent": f"{float(rate_percent):.8f}",
+            "daily_interest_rate": f"{float(daily_rate):.8f}",
+            "days_staked": f"{float(days_staked):.4f}",
+            "claimed_wallet": claim_wallet,
+            "minimum_days": f"{float(minimum_days):.4f}",
+        },
+    )
+    await redis_client.delete(_stake_lock_key(email, stake_id))
+    await redis_client.incrbyfloat("staking:claimed_payouts", payout)
+    await redis_client.incrbyfloat("staking:claimed_final", final_amount)
+    await redis_client.incrbyfloat("staking:claimed_interest", bonus_interest)
+    await redis_client.incrbyfloat(_stake_deduction_key(email), -amount)
+    await _normalize_deduction(email)
+
+    summary = await _stake_summary(email)
+    public_summary = _public_stake_summary(summary)
+    updated = next(
+        (s for s in public_summary["stakes"] if s.get("stake_id") == stake_id),
+        None,
+    )
+    return JSONResponse({"ok": True, "summary": public_summary, "stake": updated})
+
+
 @app.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("session")
@@ -1325,6 +1872,14 @@ async def admin_recovery_reset(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.get("/admin/stats/staking")
+async def admin_staking_stats(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    overview = await _staking_admin_overview()
+    return JSONResponse({"ok": True, **overview})
+
+
 @app.post("/admin/activity/reset")
 async def admin_activity_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
     if not await _current_admin(request):
@@ -1427,6 +1982,90 @@ async def api_admin_export(
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=ambassadors.csv"},
         )
+    return JSONResponse({"ok": True, "ambassadors": export_rows})
+
+
+@app.get("/admin/export/ghost")
+async def admin_export_ghost(
+    request: Request, fmt: str = Query("json"), ghost: str = Query("")
+) -> Response:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    wallets = await _all_wallets()
+    staking_overview = await _staking_admin_overview()
+    per_user = {entry["email"]: entry for entry in staking_overview.get("by_user", [])}
+    snapshot_map: dict[str, list[dict[str, Any]]] = {}
+    for stake in staking_overview.get("stakes", []):
+        email = stake.get("user")
+        if not email:
+            continue
+        snapshot_map.setdefault(email, []).append(stake)
+
+    export_rows: list[dict[str, Any]] = []
+    for w in wallets:
+        email = w.get("email", "")
+        breakdown = per_user.get(email, {})
+        user_snapshot = snapshot_map.get(email, [])
+        outstanding = round(
+            breakdown.get("locked", 0.0) + breakdown.get("unlocked", 0.0), 8
+        )
+        status = "claimed"
+        if user_snapshot:
+            if any(stake.get("status") == "locked" for stake in user_snapshot):
+                status = "locked"
+            elif any(stake.get("status") == "unlocked" for stake in user_snapshot):
+                status = "unlocked"
+            elif any(stake.get("status") == "claimed" for stake in user_snapshot):
+                status = "claimed"
+        export_rows.append(
+            {
+                "email": email,
+                "wallet": w.get("wallet", ""),
+                "telegram": w.get("telegram", ""),
+                "points": w.get("points", 0.0),
+                "pending_reward": float(w.get("pending_reward", 0.0)),
+                "verified": bool(w.get("verified", False)),
+                "posts": int(w.get("verified_posts", 0)),
+                "activity": str(w.get("activity", "inactive")),
+                "staked_amount": outstanding,
+                "staking_status": status,
+                "stakes_snapshot": user_snapshot,
+            }
+        )
+
+    if fmt.lower() == "csv":
+        output = io.StringIO()
+        fieldnames = [
+            "email",
+            "wallet",
+            "telegram",
+            "points",
+            "pending_reward",
+            "verified",
+            "posts",
+            "activity",
+            "staked_amount",
+            "staking_status",
+            "stakes_snapshot",
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in export_rows:
+            csv_row = dict(row)
+            csv_row["stakes_snapshot"] = json.dumps(row["stakes_snapshot"])
+            writer.writerow(csv_row)
+        return Response(
+            output.getvalue(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=ambassadors_staking.csv"
+            },
+        )
+
     return JSONResponse({"ok": True, "ambassadors": export_rows})
 
 
