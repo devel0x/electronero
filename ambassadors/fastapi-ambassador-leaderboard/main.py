@@ -1421,7 +1421,20 @@ async def api_transfers_rolodex(request: Request, q: str = Query("")) -> JSONRes
         )
 
     results.sort(key=lambda item: float(item.get("points", 0.0)), reverse=True)
-    return JSONResponse({"ok": True, "results": results[:50]})
+    return JSONResponse({"ok": True, "results": results})
+    # limit = int(request.query_params.get("limit", 100))
+    # page = int(request.query_params.get("page", 1))
+    # start = (page - 1) * limit
+    # end = start + limit
+
+    # results.sort(key=lambda item: float(item.get("points", 0.0)), reverse=True)
+    # return JSONResponse({
+    #     "ok": True,
+    #     "results": results[start:end],
+    #     "total": len(results),
+    #     "page": page,
+    #     "limit": limit
+    # })
 
 
 @app.get("/logout")
