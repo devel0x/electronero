@@ -276,6 +276,9 @@
                                     {% else %}
                                     <span class="badge bg-secondary">Inactive</span>
                                     {% endif %}
+                                    {% if w.guardian %}
+                                    <span class="badge bg-danger">Guardian</span>
+                                    {% endif %}
                                 </div>
                             </div>
                             <input class="form-check-input mt-1" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
@@ -297,6 +300,14 @@
                                 <input type="hidden" name="email" value="{{ w.email }}">
                                 <input type="text" name="telegram" value="{{ w.telegram }}" class="form-control form-control-sm" placeholder="@handle">
                                 <button class="btn btn-primary btn-sm">Update</button>
+                            </form>
+                            <form method="post" action="/admin/guardians/toggle" class="d-flex gap-1 ghost-form">
+                                <input type="hidden" name="email" value="{{ w.email }}">
+                                <input type="hidden" name="enable" value="{{ 0 if w.guardian else 1 }}">
+                                <input type="hidden" name="ghost">
+                                <button class="btn btn-sm {% if w.guardian %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                                    {% if w.guardian %}Deactivate Guardian{% else %}Make Guardian{% endif %}
+                                </button>
                             </form>
                             <form method="post" action="/admin/scorepad" class="d-flex gap-1">
                                 <input type="hidden" name="email" value="{{ w.email }}">
