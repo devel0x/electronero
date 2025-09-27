@@ -876,12 +876,10 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
         stats = {"points": pts, "pending_reward": rew}
 
-        # normalized email key
         eml = str(row.get("email", "")).strip().lower()
         if eml:
             email_map[eml] = stats
 
-        # normalized telegram key: lowercase, strip @
         tg = str(row.get("telegram", "")).strip()
         if tg:
             tg_norm = tg.lstrip("@").lower()
@@ -892,31 +890,33 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
     keys = await redis_client.keys("user:*")
     for key in keys:
-        email = key.split(":", 1)[1]  # already stored lowercased
+        email = key.split(":", 1)[1].strip().lower()
+        if email not in REGISTERED_EMAILS:   # 🚨 filter unregistered
+            continue
+
         udata = await redis_client.hgetall(key)
 
-        # show telegram with leading @ for UI, but use normalized for lookup
         tele_raw = udata.get("telegram", "")
         tele_norm = str(tele_raw).strip().lstrip("@").lower()
         tele_display = f"@{tele_norm}" if tele_norm else ""
 
-        # Prefer email join; if missing, fall back to telegram join
         stats = email_map.get(email) or (tg_map.get(tele_norm) if tele_norm else None)
         if not stats:
             stats = {"points": 0.0, "pending_reward": 0.0}
 
-        # padding is keyed by normalized email (as you already do)
         try:
             pad_val = float(pad_map.get(email, 0.0))
         except Exception:
             pad_val = 0.0
 
-        # verification: check redis for verified posts or tasks
         verified_posts = await redis_client.scard(f"posts_verified:{email}")
         task_statuses = await redis_client.hvals(f"tasks:{email}")
         task_verified = any(v == "verified" for v in task_statuses)
-        is_verified = verified_posts > 0 or task_verified or str(udata.get("verified")) == "1"
-        # persist computed status
+        is_verified = (
+            verified_posts > 0
+            or task_verified
+            or str(udata.get("verified")) == "1"
+        )
         await redis_client.hset(f"user:{email}", "verified", int(is_verified))
 
         activity_key = f"{ACTIVITY_ZSET_PREFIX}{email}"
