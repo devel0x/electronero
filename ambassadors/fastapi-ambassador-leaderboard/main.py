@@ -391,7 +391,7 @@ async def _load_csv() -> Dict[str, Any]:
     ]
     df = df[[c for c in base_cols if c in df.columns]]
 
-    df = df.fillna("")
+    df = df.fillna("").infer_objects(copy=False)
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
 
     data = {
