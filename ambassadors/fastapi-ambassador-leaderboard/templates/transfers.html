@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transfers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+  <style>
+    :root { --bg1:#1e1e2f; --bg2:#141414; }
+    body {
+      min-height:100vh;
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));
+      color:#f5f5f5;
+      overflow-x:hidden;
+    }
+    .fx-wrap{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+    .fx-stars{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+        radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+      mix-blend-mode:screen; opacity:.35; filter: blur(.2px);
+    }
+    .fx-grid{
+      position:absolute; inset:-20% -20% -20% -20%;
+      background:
+        repeating-linear-gradient(to right, rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+      transform:rotate(1deg); opacity:.35; filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+    }
+    .fx-bloom{ position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter: blur(60px); opacity:.30; mix-blend-mode:screen; transform: translate(-50%,-50%); }
+    .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:22%; top:28%; }
+    .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:78%; top:34%; }
+    .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:52%; top:78%; }
+
+    .glass-card{
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:1rem;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .glass-subcard{
+      background: rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:0.75rem;
+    }
+    .navbar{ backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); }
+    .list-group-item{ background:transparent; color:#f5f5f5; border-color:rgba(255,255,255,.12); }
+    .list-group-item:hover{ background:rgba(255,255,255,.08); cursor:pointer; }
+    .list-group-item.active{ background:rgba(74,163,255,.35); border-color:rgba(74,163,255,.6); }
+    .stat-card{ background:rgba(255,255,255,0.05); border-radius:0.75rem; padding:1rem; }
+    .stat-card h2{ font-size:0.9rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,.75); }
+    .stat-card .value{ font-size:1.6rem; font-weight:700; color:#fff; }
+    @media (prefers-reduced-motion: reduce){ .fx-grid,.fx-bloom,.fx-stars{ animation:none !important; } }
+  </style>
+</head>
+<body>
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/transfers" class="btn btn-sm btn-light text-dark">Transfers</a>
+      <a href="/wallet" class="btn btn-sm btn-outline-light">Wallet</a>
+      <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+      <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+      <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+      <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="glass-card p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-3 gap-3">
+      <div>
+        <h1 class="h4 mb-1">Ambassador Transfers</h1>
+        {% if guardian_mode %}
+        <p class="mb-0 text-light small">You are operating in guardian mode. Transfers draw from your admin allocation and will not impact leaderboard totals for any ambassador.</p>
+        {% else %}
+        <p class="mb-0 text-light small">Move a portion of your earned points to another ambassador. Transfers instantly adjust scorepads and are recorded for transparency.</p>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-3">
+        <div class="stat-card text-center">
+          <h2>{{ 'Guardian Balance' if guardian_mode else 'Available Points' }}</h2>
+          <div class="value">{{ '%.2f'|format(available_points or 0) }}</div>
+          {% if guardian_mode %}
+          <div class="small text-info mt-2">No leaderboard impact.</div>
+          {% endif %}
+        </div>
+        {% if guardian_mode %}
+        <div class="stat-card text-center">
+          <h2>Leaderboard Points</h2>
+          <div class="value text-warning">{{ '%.2f'|format(leaderboard_points or 0) }}</div>
+        </div>
+        {% endif %}
+        <div class="stat-card text-center">
+          <h2>Total Sent</h2>
+          <div class="value text-warning">{{ '%.2f'|format(totals.sent or 0) }}</div>
+        </div>
+        <div class="stat-card text-center">
+          <h2>Total Received</h2>
+          <div class="value text-success">{{ '%.2f'|format(totals.received or 0) }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success" role="alert">{{ success }}</div>
+    {% endif %}
+
+    <form method="post" class="mb-4" id="transfer-form">
+      <div class="mb-3">
+        <label for="rolodex-search" class="form-label">Destination Ambassador</label>
+        <input type="hidden" name="destination" id="destination-input" required />
+        <div class="input-group">
+          <span class="input-group-text bg-dark text-light">@</span>
+          <input type="text" id="rolodex-search" class="form-control" placeholder="Search by Telegram, name, or email" autocomplete="off" />
+        </div>
+        <div class="form-text text-light">Selected: <span id="destination-display" class="fw-semibold">None</span></div>
+      </div>
+      <div class="mb-3">
+        <label for="amount" class="form-label">Amount to Transfer</label>
+        <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount" placeholder="10" required />
+        <div class="form-text text-light">You can transfer any amount up to your available balance.</div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <small class="text-light">
+          Transfers cannot be reversed. Double-check the recipient.
+          {% if guardian_mode %}<span class="text-info">Guardian transfers bypass the leaderboard.</span>{% endif %}
+        </small>
+        <button type="submit" class="btn btn-primary" id="submit-transfer" disabled>Send Points</button>
+      </div>
+    </form>
+
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="glass-subcard p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h6 mb-0">Rolodex</h2>
+            <span class="badge bg-secondary" id="rolodex-count">0</span>
+          </div>
+          <div id="rolodex-results" class="list-group small" style="max-height:360px; overflow:auto;">
+            <div class="text-center text-muted py-3">Search ambassadors by Telegram handle to begin.</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="glass-subcard p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h6 mb-0">Transfer History</h2>
+            <span class="badge bg-info text-dark">Latest {{ history|length }}</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-dark table-striped table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Direction</th>
+                  <th scope="col">Counterparty</th>
+                  <th scope="col" class="text-end">Amount</th>
+                  <th scope="col" class="text-end">Balance After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in history %}
+                <tr>
+                  <td class="small">{{ entry.timestamp.replace('T', ' ') if entry.timestamp else '—' }}</td>
+                  <td>
+                    {% if entry.direction == 'sent' %}
+                      <span class="badge bg-warning text-dark">Sent</span>
+                    {% else %}
+                      <span class="badge bg-success">Received</span>
+                    {% endif %}
+                    {% if entry.mode == 'guardian' or (entry.impacts_leaderboard is defined and not entry.impacts_leaderboard) %}
+                      <div class="small text-info">No leaderboard impact</div>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if entry.direction == 'sent' %}
+                      {% set tg = entry.to_telegram or '' %}
+                      {% if tg %}<a href="https://t.me/{{ tg.lstrip('@') }}" target="_blank" class="link-light">{{ tg }}</a>{% endif %}
+                      <div class="small text-muted">{{ entry.to or '—' }}</div>
+                    {% else %}
+                      {% set tg = entry.from_telegram or '' %}
+                      {% if tg %}<a href="https://t.me/{{ tg.lstrip('@') }}" target="_blank" class="link-light">{{ tg }}</a>{% endif %}
+                      <div class="small text-muted">{{ entry.from or '—' }}</div>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">{{ '%.2f'|format(entry.amount or 0) }}</td>
+                  <td class="text-end">{{ '%.2f'|format(entry.balance_after or 0) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">No transfers recorded yet. Share points with a teammate to see history here.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce && typeof gsap !== 'undefined') {
+    const grid = document.getElementById('fxGrid');
+    const b1 = document.getElementById('b1');
+    const b2 = document.getElementById('b2');
+    const b3 = document.getElementById('b3');
+    gsap.to(b1, { duration:10, xPercent:-5, yPercent:6, scale:1.07, opacity:.35, ease:'sine.inOut', yoyo:true, repeat:-1 });
+    gsap.to(b2, { duration:12, xPercent:4, yPercent:-4, scale:1.06, opacity:.33, ease:'sine.inOut', yoyo:true, repeat:-1, delay:.3 });
+    gsap.to(b3, { duration:14, xPercent:-2, yPercent:3, scale:1.08, opacity:.32, ease:'sine.inOut', yoyo:true, repeat:-1, delay:.6 });
+    gsap.to(grid, { duration:20, rotation:3, ease:'sine.inOut', yoyo:true, repeat:-1 });
+    window.addEventListener('mousemove', e => {
+      const dx=(e.clientX-innerWidth/2)/innerWidth, dy=(e.clientY-innerHeight/2)/innerHeight;
+      gsap.to([b1,b2,b3], { duration:.6, x:dx*30, y:dy*30, ease:'sine.out' });
+      gsap.to(grid, { duration:.8, x:dx*20, y:dy*20, ease:'sine.out' });
+    }, { passive:true });
+  }
+})();
+</script>
+<script>
+(function(){
+  const searchInput = document.getElementById('rolodex-search');
+  const resultsEl = document.getElementById('rolodex-results');
+  const destinationInput = document.getElementById('destination-input');
+  const destinationDisplay = document.getElementById('destination-display');
+  const submitBtn = document.getElementById('submit-transfer');
+  const countBadge = document.getElementById('rolodex-count');
+
+  const renderResults = (entries=[]) => {
+    resultsEl.innerHTML = '';
+    countBadge.textContent = entries.length;
+    if (!entries.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-center text-muted py-3';
+      empty.textContent = 'No ambassadors match your search yet.';
+      resultsEl.appendChild(empty);
+      return;
+    }
+    entries.forEach(entry => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+      item.dataset.identifier = entry.identifier;
+      const primary = entry.telegram || entry.name || entry.email_display || entry.email || entry.identifier;
+      const secondaryCandidate = entry.email_display && entry.email_display !== primary
+        ? entry.email_display
+        : (entry.name && entry.name !== primary ? entry.name : '');
+      item.innerHTML = `
+        <span>
+          <strong>${primary}</strong>
+          ${secondaryCandidate ? `<br /><span class="text-muted">${secondaryCandidate}</span>` : ''}
+        </span>
+        <span class="badge bg-primary rounded-pill">${Number(entry.points || 0).toFixed(2)}</span>
+      `;
+      item.addEventListener('click', () => {
+        Array.from(resultsEl.querySelectorAll('.list-group-item')).forEach(btn => btn.classList.remove('active'));
+        item.classList.add('active');
+        destinationInput.value = entry.identifier;
+        destinationDisplay.textContent = primary;
+        submitBtn.disabled = false;
+      });
+      resultsEl.appendChild(item);
+    });
+  };
+
+  const fetchRolodex = async (query='') => {
+    try {
+      const resp = await fetch(`/api/transfers/rolodex?q=${encodeURIComponent(query)}`);
+      if (!resp.ok) throw new Error('Failed');
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Failed');
+      renderResults(data.results || []);
+    } catch (err) {
+      console.error(err);
+      renderResults([]);
+    }
+  };
+
+  const debounce = (fn, delay=250) => {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), delay);
+    };
+  };
+
+  searchInput.addEventListener('input', debounce((ev) => {
+    destinationInput.value = '';
+    destinationDisplay.textContent = 'None';
+    submitBtn.disabled = true;
+    fetchRolodex(ev.target.value);
+  }, 250));
+
+  fetchRolodex('');
+})();
+</script>
+</body>
+</html>

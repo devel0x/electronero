@@ -7,7 +7,7 @@ The application is protected by an email/password login screen. Only addresses l
 Ambassadors can submit links to their social posts for verification, and an admin panel guarded by a password lets administrators review registered emails, wallets, Telegram handles, pending rewards, and submitted posts awaiting verification. Pending posts now show both the submitter's email and a link to their Telegram handle. Verified posts disappear from the queue, and admins may verify or reject each submission. The panel includes navigation links between wallets, posts, and tasks.
 Duplicate links are ignored—each ambassador can only submit a given URL once.
 
-A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids.
+A public Raid panel lists every verified post alongside the submitting ambassador's wallet and Telegram handle so the community can coordinate raids. Ambassadors can also redistribute part of their own score to teammates through a dedicated transfer workspace that enforces balance checks, records a per-user ledger, and surfaces every send/receive event in a searchable history table.
 
 The wallet section includes export buttons so administrators can download all ambassadors' scores, pending rewards, wallets, emails, Telegram handles, verification status, weekly activity flags, and verified-post counts as JSON or CSV files. Downloads and reset actions prompt for a password defined in the `GHOST_EXPORT_KEY` environment variable, and a dedicated activity reset button clears weekly activity markers when starting a new reporting cycle.
 
@@ -20,6 +20,16 @@ Administrators also gain new controls and insights:
 - **Maintenance mode toggle** – Flip the switch in the admin panel to pause the ambassador-facing dashboard and APIs. Ambassadors receive a dedicated maintenance screen and API calls return HTTP 503 while the toggle is on, but authenticated admins keep full access so back-office work can continue uninterrupted.
 - **Visitor analytics dashboard** – The admin landing view now summarizes total and unique visits, surfaces the latest visitor activity (including IP addresses, resolved city/region/country labels, and the most recent path hit), and highlights top locations so admins can spot traffic trends at a glance.
 - **User growth chart** – Registration timestamps are aggregated server-side to chart the cumulative number of ambassadors over time, giving admins a quick visual of community growth alongside the tabular analytics cards.
+- **Transfer ledger** – Every ambassador-to-ambassador point transfer is streamed into an admin-facing ledger with the source, destination, Telegram handles, timestamps, and amounts so finance and ops teams can audit scorepad movements without querying Redis directly.
+- **Guardian allocations** – A dedicated Guardian section lets head admins, with the ghost key, assign guardian roles to other admins. Guardians receive an isolated transfer balance whose movements are logged without adding or subtracting leaderboard points.
+
+## Ambassador transfer workflow
+
+- Visit **Transfers** in the ambassador navigation to open the glassmorphism-styled transfer desk.
+- Use the Rolodex search to look up teammates by Telegram handle (with or without `@`), display name, or email. When an entry is missing an email in the CSV, the app backfills it from cached Telegram registrations so every transfer lands on a deliverable address.
+- Select a destination from the live-updating results list to populate the transfer form; the panel shows your currently available balance, lifetime sent amount, and lifetime received amount pulled from the Redis-backed ledger.
+- Enter an amount up to your available points. Submissions are validated server-side to reject negative numbers, self-transfers, and attempts above the current balance. Successful ambassador transfers immediately decrement the sender's score pad, increment the recipient's score pad, and push mirrored `sent`/`received` entries plus a global log for admins. Guardians operate from a separate balance that never touches leaderboard totals but is still recorded in every ledger.
+- Review the on-page history table to confirm the movement. Each row includes direction badges, Telegram shortcuts, and the post-transfer balance snapshot for traceability.
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
@@ -60,10 +70,13 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /health` – simple health check.
 - `GET /verify` – page for ambassadors to submit post URLs.
 - `GET /tasks` – task checklist for ambassadors with apply buttons.
+- `GET /transfers` – authenticated transfer panel showing available balance, rolodex search, and personal history.
 - `GET /proposals` – list active proposals and submit new ones.
 - `GET /raid` – table of verified posts with each submitter's wallet and Telegram handle.
 - `POST /proposals/submit` – submit a new proposal (authenticated users).
 - `POST /proposals/vote` – vote yes or no on a proposal (authenticated users).
+- `POST /transfers` – submit a points transfer to another ambassador (authenticated users; enforces balance checks, guardian admins draw from a separate non-leaderboard balance).
+- `GET /api/transfers/rolodex` – JSON rolodex search results for the transfer panel (authenticated users).
 - `GET /admin` – password-protected admin panel to view emails, wallets, pending rewards, and posts awaiting verification.
 - `POST /admin/proposals/verify` – approve a pending proposal and optionally add a funding wallet (admin).
 - `POST /admin/proposals/reject` – reject a pending proposal (admin).
@@ -75,6 +88,8 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /api/admin/posts` – JSON dictionary of submitted posts grouped by user (admin only).
 - `POST /admin/scorepad/boost` – add 1,000 pad points to every active ambassador (admin only, requires `GHOST_EXPORT_KEY`).
 - `POST /admin/scorepad/slash` – reset pad points to zero for every inactive ambassador (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/guardians/save` – assign or update a guardian admin balance (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/guardians/remove` – revoke guardian access for an admin (admin only, requires `GHOST_EXPORT_KEY`).
 - `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, Telegram handles, verification flags, weekly activity status, and verified-post counts (admin only, requires `GHOST_EXPORT_KEY`).
 - `POST /admin/activity/reset` – clear weekly activity state for all ambassadors (admin only, requires `GHOST_EXPORT_KEY`).
 - Admin reset actions also require the `GHOST_EXPORT_KEY`.

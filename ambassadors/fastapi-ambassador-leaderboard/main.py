@@ -12,6 +12,7 @@ import io
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import quote_plus
 
 import pandas as pd
 import httpx
@@ -125,6 +126,15 @@ cache: Dict[str, Any] = {
 ACTIVITY_ZSET_PREFIX = "activity:posts:"
 ACTIVITY_RESET_KEY = "activity:last_reset"
 SCOREPAD_BOOST_POINTS = 1000.0
+TRANSFER_HISTORY_LIMIT = int(os.getenv("TRANSFER_HISTORY_LIMIT", "100"))
+GLOBAL_TRANSFER_HISTORY_LIMIT = int(os.getenv("GLOBAL_TRANSFER_HISTORY_LIMIT", "500"))
+TRANSFER_GLOBAL_LOG_KEY = "transfers:global"
+GUARDIAN_SCOREPAD_KEY = "guardian_score_pad"
+GUARDIAN_ROLES_KEY = "transfers:guardians"
+
+
+def _normalize_email(value: str) -> str:
+    return str(value or "").strip().lower()
 
 
 def _monday_start(dt: datetime | None = None) -> datetime:
@@ -360,6 +370,221 @@ def _to_lower_headers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip().lower() for c in df.columns]
     return df
+
+
+async def _leaderboard_entries(force_refresh: bool = False) -> list[dict[str, Any]]:
+    data = await _get_cached_data(force_refresh=force_refresh)
+    entries: list[dict[str, Any]] = []
+    for raw in data.get("rows", []):
+        email_raw = str(raw.get("email", "")).strip()
+        email_norm = email_raw.lower()
+        telegram_raw = str(raw.get("telegram", "")).strip()
+        telegram_norm = telegram_raw.lstrip("@").lower()
+        try:
+            points_val = float(raw.get("points", 0) or 0)
+        except Exception:
+            try:
+                points_val = float(str(raw.get("points", "0")).replace(",", ""))
+            except Exception:
+                points_val = 0.0
+        entries.append(
+            {
+                "email": email_norm,
+                "email_display": email_raw,
+                "telegram": telegram_raw,
+                "telegram_norm": telegram_norm,
+                "name": raw.get("name", ""),
+                "tier": raw.get("tier", ""),
+                "points": points_val,
+            }
+        )
+    return entries
+
+
+async def _ambassador_entry_by_email(email: str) -> dict[str, Any] | None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return None
+    entries = await _leaderboard_entries()
+    match = next((row for row in entries if row.get("email") == email_norm), None)
+    if match:
+        return match
+    # Fall back to telegram lookup using stored profile data
+    user = await redis_client.hgetall(f"user:{email_norm}")
+    telegram_norm = str(user.get("telegram", "")).strip().lstrip("@").lower()
+    if telegram_norm:
+        return next(
+            (row for row in entries if row.get("telegram_norm") == telegram_norm),
+            None,
+        )
+    return None
+
+
+async def _email_from_telegram(telegram_norm: str) -> str | None:
+    handle = str(telegram_norm or "").strip().lstrip("@").lower()
+    if not handle:
+        return None
+    async for key in redis_client.scan_iter("user:*"):
+        data = await redis_client.hgetall(key)
+        tele_norm = str(data.get("telegram", "")).strip().lstrip("@").lower()
+        if tele_norm == handle:
+            return key.split(":", 1)[1]
+    return None
+
+
+async def _ambassador_entry_by_identifier(identifier: str) -> dict[str, Any] | None:
+    ident = str(identifier or "").strip()
+    if not ident:
+        return None
+    ident_norm = ident.lower()
+    telegram_norm = ident.lstrip("@").lower()
+    entries = await _leaderboard_entries()
+    entry = next(
+        (
+            row
+            for row in entries
+            if row.get("email") == ident_norm
+            or row.get("telegram_norm") == telegram_norm
+        ),
+        None,
+    )
+    if entry and not entry.get("email") and telegram_norm:
+        email_from_store = await _email_from_telegram(telegram_norm)
+        if email_from_store:
+            entry = {
+                **entry,
+                "email": email_from_store,
+                "email_display": email_from_store,
+            }
+    return entry
+
+
+async def _guardian_points_map() -> dict[str, float]:
+    raw = await redis_client.hgetall(GUARDIAN_SCOREPAD_KEY)
+    guardian_map: dict[str, float] = {}
+    for key, value in raw.items():
+        email_key = _normalize_email(key)
+        if not email_key:
+            continue
+        try:
+            guardian_map[email_key] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return guardian_map
+
+
+async def _guardian_balance(email: str) -> float:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return 0.0
+    value = await redis_client.hget(GUARDIAN_SCOREPAD_KEY, email_norm)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+async def _guardian_roles() -> set[str]:
+    members = await redis_client.smembers(GUARDIAN_ROLES_KEY)
+    return {_normalize_email(m) for m in members if _normalize_email(m)}
+
+
+async def _transfer_history(email: str) -> list[dict[str, Any]]:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return []
+    key = f"transfers:{email_norm}"
+    entries = await redis_client.lrange(key, 0, TRANSFER_HISTORY_LIMIT - 1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        history.append(entry)
+    return history
+
+
+async def _all_transfer_history() -> list[dict[str, Any]]:
+    entries = await redis_client.lrange(
+        TRANSFER_GLOBAL_LOG_KEY, 0, GLOBAL_TRANSFER_HISTORY_LIMIT - 1
+    )
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        history.append(entry)
+    return history
+
+
+async def _record_transfer(
+    source: dict[str, Any],
+    destination: dict[str, Any],
+    amount: float,
+    sender_total_before: float,
+    receiver_total_before: float,
+    *,
+    impacts_leaderboard: bool = True,
+    mode: str | None = None,
+) -> None:
+    timestamp = datetime.utcnow().isoformat()
+    sender_email = source.get("email", "")
+    dest_email = destination.get("email", "")
+    sender_after = max(sender_total_before - amount, 0.0)
+    if impacts_leaderboard:
+        receiver_after = receiver_total_before + amount
+    else:
+        receiver_after = receiver_total_before
+    mode_value = mode or ("leaderboard" if impacts_leaderboard else "guardian")
+
+    sent_entry = {
+        "direction": "sent",
+        "amount": amount,
+        "timestamp": timestamp,
+        "to": destination.get("email_display") or dest_email,
+        "to_telegram": destination.get("telegram"),
+        "to_name": destination.get("name", ""),
+        "balance_after": sender_after,
+        "impacts_leaderboard": impacts_leaderboard,
+        "mode": mode_value,
+    }
+    received_entry = {
+        "direction": "received",
+        "amount": amount,
+        "timestamp": timestamp,
+        "from": source.get("email_display") or sender_email,
+        "from_telegram": source.get("telegram"),
+        "from_name": source.get("name", ""),
+        "balance_after": receiver_after,
+        "impacts_leaderboard": impacts_leaderboard,
+        "mode": mode_value,
+    }
+    global_entry = {
+        "timestamp": timestamp,
+        "amount": amount,
+        "source": sender_email,
+        "source_telegram": source.get("telegram"),
+        "source_name": source.get("name", ""),
+        "destination": dest_email,
+        "destination_telegram": destination.get("telegram"),
+        "destination_name": destination.get("name", ""),
+        "impacts_leaderboard": impacts_leaderboard,
+        "mode": mode_value,
+    }
+
+    pipe = redis_client.pipeline()
+    if sender_email:
+        pipe.lpush(f"transfers:{sender_email}", json.dumps(sent_entry))
+        pipe.ltrim(f"transfers:{sender_email}", 0, TRANSFER_HISTORY_LIMIT - 1)
+    if dest_email:
+        pipe.lpush(f"transfers:{dest_email}", json.dumps(received_entry))
+        pipe.ltrim(f"transfers:{dest_email}", 0, TRANSFER_HISTORY_LIMIT - 1)
+    pipe.lpush(TRANSFER_GLOBAL_LOG_KEY, json.dumps(global_entry))
+    pipe.ltrim(TRANSFER_GLOBAL_LOG_KEY, 0, GLOBAL_TRANSFER_HISTORY_LIMIT - 1)
+    if pipe.command_stack:
+        await pipe.execute()
 
 
 async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
@@ -1072,6 +1297,228 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
     return RedirectResponse("/", status_code=303)
 
 
+def _transfer_totals(history: list[dict[str, Any]]) -> dict[str, float]:
+    sent = sum(float(entry.get("amount", 0) or 0) for entry in history if entry.get("direction") == "sent")
+    received = sum(
+        float(entry.get("amount", 0) or 0) for entry in history if entry.get("direction") == "received"
+    )
+    return {"sent": sent, "received": received}
+
+
+@app.get("/transfers")
+async def transfers_page(request: Request, success: str | None = None, error: str | None = None) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _ambassador_entry_by_email(email)
+    if not profile:
+        history = []
+        totals = {"sent": 0.0, "received": 0.0}
+        return templates.TemplateResponse(
+            "transfers.html",
+            {
+                "request": request,
+                "error": error or "No leaderboard profile found. Contact an administrator.",
+                "success": success or "",
+                "available_points": 0.0,
+                "guardian_mode": False,
+                "guardian_balance": 0.0,
+                "leaderboard_points": 0.0,
+                "history": history,
+                "totals": totals,
+            },
+        )
+
+    history = await _transfer_history(email)
+    totals = _transfer_totals(history)
+    leaderboard_points = float(profile.get("points", 0.0))
+    email_norm = _normalize_email(email)
+    is_admin_user = await _current_admin(request)
+    guardian_map = await _guardian_points_map()
+    guardian_balance = guardian_map.get(email_norm, 0.0)
+    guardian_mode = is_admin_user and email_norm in guardian_map
+    available_points = guardian_balance if guardian_mode else leaderboard_points
+    success_msg = success or request.query_params.get("success", "")
+    error_msg = error or request.query_params.get("error", "")
+
+    return templates.TemplateResponse(
+        "transfers.html",
+        {
+            "request": request,
+            "error": error_msg,
+            "success": success_msg,
+            "available_points": available_points,
+            "guardian_mode": guardian_mode,
+            "guardian_balance": guardian_balance,
+            "leaderboard_points": leaderboard_points,
+            "profile": profile,
+            "history": history,
+            "totals": totals,
+        },
+    )
+
+
+@app.post("/transfers")
+async def transfers_submit(
+    request: Request,
+    destination: str = Form(...),
+    amount: str = Form(...),
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    error_message = ""
+    try:
+        amount_value = float(str(amount).strip())
+    except Exception:
+        amount_value = -1.0
+    if amount_value <= 0:
+        error_message = "Enter a positive amount to transfer."
+
+    source_profile = await _ambassador_entry_by_email(email)
+    if not source_profile:
+        error_message = "Unable to locate your leaderboard profile."
+
+    destination_profile = None
+    if not error_message:
+        destination_profile = await _ambassador_entry_by_identifier(destination)
+        if not destination_profile:
+            error_message = "Destination ambassador not found."
+
+    if not error_message and destination_profile.get("email") == email:
+        error_message = "You cannot transfer points to yourself."
+
+    if error_message:
+        return await transfers_page(request, error=error_message)
+
+    source_points = float(source_profile.get("points", 0.0))
+    email_norm = _normalize_email(email)
+    is_admin_user = await _current_admin(request)
+    guardian_map = await _guardian_points_map()
+    guardian_balance = guardian_map.get(email_norm, 0.0)
+    guardian_mode = is_admin_user and email_norm in guardian_map
+    available_points = guardian_balance if guardian_mode else source_points
+    if amount_value > available_points:
+        return await transfers_page(
+            request,
+            error="Transfer exceeds your available points.",
+        )
+
+    receiver_email = destination_profile.get("email") or ""
+    if not receiver_email:
+        return await transfers_page(request, error="Destination ambassador is missing an email. Contact support.")
+
+    receiver_points_before = float(destination_profile.get("points", 0.0))
+
+    if guardian_mode:
+        new_balance = await redis_client.hincrbyfloat(
+            GUARDIAN_SCOREPAD_KEY,
+            email_norm,
+            -amount_value,
+        )
+        try:
+            if float(new_balance) < 0:
+                await redis_client.hset(GUARDIAN_SCOREPAD_KEY, email_norm, 0.0)
+        except (TypeError, ValueError):
+            await redis_client.hset(GUARDIAN_SCOREPAD_KEY, email_norm, 0.0)
+
+        await redis_client.hincrbyfloat("score_pad", receiver_email, amount_value)
+
+        try:
+            await _load_csv()
+        except Exception as exc:
+            print(f"[transfer] failed to refresh leaderboard cache: {exc}")
+    else:
+        pipe = redis_client.pipeline()
+        pipe.hincrbyfloat("score_pad", email, -amount_value)
+        pipe.hincrbyfloat("score_pad", receiver_email, amount_value)
+        await pipe.execute()
+
+        try:
+            await _load_csv()
+        except Exception as exc:
+            print(f"[transfer] failed to refresh leaderboard cache: {exc}")
+
+    await _record_transfer(
+        source_profile,
+        destination_profile,
+        amount_value,
+        sender_total_before=guardian_balance if guardian_mode else source_points,
+        receiver_total_before=receiver_points_before,
+        impacts_leaderboard=True,
+        mode="guardian" if guardian_mode else None,
+    )
+
+    dest_display = destination_profile.get("telegram") or destination_profile.get("email_display") or receiver_email
+    if guardian_mode:
+        success_message = (
+            f"Transferred {amount_value:.2f} guardian points to {dest_display} (leaderboard updated)"
+        )
+    else:
+        success_message = f"Transferred {amount_value:.2f} points to {dest_display}"
+    return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
+
+
+@app.get("/api/transfers/rolodex")
+async def api_transfers_rolodex(request: Request, q: str = Query("")) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    search = str(q or "").strip().lower()
+    handle_search = search.lstrip("@") if search else ""
+    entries = await _leaderboard_entries()
+    results: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry.get("email") == email:
+            continue
+        telegram_norm = entry.get("telegram_norm", "")
+        telegram_display = str(entry.get("telegram", ""))
+        name = str(entry.get("name", ""))
+        email_display = entry.get("email_display")
+
+        if search:
+            search_hit = False
+            if telegram_norm and handle_search and handle_search in telegram_norm:
+                search_hit = True
+            elif telegram_norm and search in f"@{telegram_norm}":
+                search_hit = True
+            elif telegram_display and search in telegram_display.lower():
+                search_hit = True
+            elif search in name.lower():
+                search_hit = True
+            elif email_display and search in str(email_display).lower():
+                search_hit = True
+            if not search_hit:
+                continue
+
+        email_value = entry.get("email")
+        if (not email_value) and telegram_norm:
+            email_lookup = await _email_from_telegram(telegram_norm)
+            if email_lookup:
+                email_value = email_lookup
+                email_display = email_display or email_lookup
+
+        identifier = email_value or telegram_display or (f"@{telegram_norm}" if telegram_norm else "")
+        if not identifier:
+            continue
+        results.append(
+            {
+                "email": email_value,
+                "email_display": email_display or email_value,
+                "name": name,
+                "telegram": telegram_display,
+                "points": entry.get("points", 0.0),
+                "identifier": identifier,
+            }
+        )
+
+    results.sort(key=lambda item: float(item.get("points", 0.0)), reverse=True)
+    return JSONResponse({"ok": True, "results": results[:50]})
+
+
 @app.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("session")
@@ -1264,6 +1711,18 @@ async def admin_panel(request: Request) -> Any:
     recoveries = await _all_recoveries()
     analytics = await _analytics_dashboard(page=page, limit=limit)
     maintenance_enabled = await _maintenance_enabled()
+    transfers = await _all_transfer_history()
+    guardian_map = await _guardian_points_map()
+    guardian_roles = await _guardian_roles()
+    guardian_emails = sorted(set(guardian_map.keys()) | guardian_roles)
+    guardians = [
+        {
+            "email": email_value,
+            "balance": guardian_map.get(email_value, 0.0),
+        }
+        for email_value in guardian_emails
+    ]
+    guardian_total = sum(g.get("balance", 0.0) for g in guardians)
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -1278,6 +1737,9 @@ async def admin_panel(request: Request) -> Any:
             "proposals": proposals,
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
+            "transfers": transfers,
+            "guardians": guardians,
+            "guardian_total": guardian_total,
         },
     )
 
@@ -1656,6 +2118,69 @@ async def admin_scorepad_reset(
             await pipe.execute()
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/guardians/save")
+async def admin_guardians_save(
+    request: Request,
+    email: str = Form(...),
+    balance: str = Form(...),
+    ghost: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return RedirectResponse("/admin", status_code=303)
+
+    try:
+        balance_value = float(balance)
+    except Exception:
+        balance_value = 0.0
+
+    pipe = redis_client.pipeline()
+    if balance_value <= 0:
+        pipe.hdel(GUARDIAN_SCOREPAD_KEY, email_norm)
+        pipe.srem(GUARDIAN_ROLES_KEY, email_norm)
+    else:
+        pipe.hset(GUARDIAN_SCOREPAD_KEY, email_norm, balance_value)
+        pipe.sadd(GUARDIAN_ROLES_KEY, email_norm)
+
+    if pipe.command_stack:
+        await pipe.execute()
+
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/guardians/remove")
+async def admin_guardians_remove(
+    request: Request,
+    email: str = Form(...),
+    ghost: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return RedirectResponse("/admin", status_code=303)
+
+    pipe = redis_client.pipeline()
+    pipe.hdel(GUARDIAN_SCOREPAD_KEY, email_norm)
+    pipe.srem(GUARDIAN_ROLES_KEY, email_norm)
+    if pipe.command_stack:
+        await pipe.execute()
+
     return RedirectResponse("/admin", status_code=303)
 
 
