@@ -129,12 +129,47 @@ SCOREPAD_BOOST_POINTS = 1000.0
 TRANSFER_HISTORY_LIMIT = int(os.getenv("TRANSFER_HISTORY_LIMIT", "100"))
 GLOBAL_TRANSFER_HISTORY_LIMIT = int(os.getenv("GLOBAL_TRANSFER_HISTORY_LIMIT", "500"))
 TRANSFER_GLOBAL_LOG_KEY = "transfers:global"
+GUARDIAN_SET_KEY = "guardians:emails"
+GUARDIAN_USER_FIELD = "guardian"
 
 
 def _monday_start(dt: datetime | None = None) -> datetime:
     dt = dt or datetime.utcnow()
     monday = dt - timedelta(days=dt.weekday())
     return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def _guardian_emails() -> set[str]:
+    members = await redis_client.smembers(GUARDIAN_SET_KEY)
+    guardians: set[str] = set()
+    for member in members:
+        if not member:
+            continue
+        guardians.add(str(member).strip().lower())
+    return guardians
+
+
+async def _set_guardian_status(email: str, enabled: bool) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+    if enabled:
+        await redis_client.sadd(GUARDIAN_SET_KEY, email_norm)
+        await redis_client.hset(f"user:{email_norm}", GUARDIAN_USER_FIELD, "1")
+    else:
+        await redis_client.srem(GUARDIAN_SET_KEY, email_norm)
+        await redis_client.hdel(f"user:{email_norm}", GUARDIAN_USER_FIELD)
+
+
+async def _scorepad_balance(email: str) -> float:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return 0.0
+    raw = await redis_client.hget("score_pad", email_norm)
+    try:
+        return float(raw or 0.0)
+    except Exception:
+        return 0.0
 
 
 async def _activity_window_bounds(now: datetime | None = None) -> tuple[float, float]:
@@ -274,6 +309,8 @@ async def _load_csv() -> Dict[str, Any]:
         except Exception:
             continue
 
+    guardians = await _guardian_emails()
+
     if "email" in df.columns:
         df["email"] = df["email"].astype(str).str.strip().str.lower()
         df["__email_norm"] = df["email"]  # already normalized
@@ -283,6 +320,7 @@ async def _load_csv() -> Dict[str, Any]:
         df["points"] = df["points"] + df["__email_norm"].map(norm_map).fillna(0)
     else:
         df["points"] = pd.to_numeric(df.get("points"), errors="coerce").fillna(0)
+        df["__email_norm"] = ""
 
 
     if "rank" in df.columns:
@@ -320,16 +358,23 @@ async def _load_csv() -> Dict[str, Any]:
 
     # ---- DENSE RANK: 1,1,2,3... by unique points ----
     # (no gaps no matter how many users share a score)
-    uniq = sorted(df["points"].unique(), reverse=True)
-    rank_map = {v: i + 1 for i, v in enumerate(uniq)}
-    df["rank"] = df["points"].map(rank_map).astype(int)
+    guardian_mask = df["__email_norm"].isin(guardians)
+    non_guardian_mask = ~guardian_mask
+    df["rank"] = ""
+    if non_guardian_mask.any():
+        uniq = sorted(df.loc[non_guardian_mask, "points"].unique(), reverse=True)
+        rank_map = {v: i + 1 for i, v in enumerate(uniq)}
+        df.loc[non_guardian_mask, "rank"] = (
+            df.loc[non_guardian_mask, "points"].map(rank_map).astype(int)
+        )
 
     pool_balance = round(_get_pool_balance(), 8)
-    total_points = float(df["points"].sum())
+    total_points = float(df.loc[non_guardian_mask, "points"].sum())
+    df["pending_reward"] = 0.0
     if total_points > 0:
-        df["pending_reward"] = (df["points"] / total_points) * pool_balance
-    else:
-        df["pending_reward"] = 0.0
+        df.loc[non_guardian_mask, "pending_reward"] = (
+            df.loc[non_guardian_mask, "points"] / total_points
+        ) * pool_balance
     df["pending_reward"] = df["pending_reward"].astype(float).round(8)
 
     if "__email_norm" in df.columns:
@@ -346,7 +391,7 @@ async def _load_csv() -> Dict[str, Any]:
     ]
     df = df[[c for c in base_cols if c in df.columns]]
 
-    df = df.fillna("")
+    df = df.fillna("").infer_objects(copy=False)
     df["pending_reward"] = df["pending_reward"].apply(lambda x: f"{x:.8f}")
 
     data = {
@@ -369,6 +414,7 @@ def _to_lower_headers(df: pd.DataFrame) -> pd.DataFrame:
 async def _leaderboard_entries(force_refresh: bool = False) -> list[dict[str, Any]]:
     data = await _get_cached_data(force_refresh=force_refresh)
     entries: list[dict[str, Any]] = []
+    guardians = await _guardian_emails()
     for raw in data.get("rows", []):
         email_raw = str(raw.get("email", "")).strip()
         email_norm = email_raw.lower()
@@ -381,6 +427,7 @@ async def _leaderboard_entries(force_refresh: bool = False) -> list[dict[str, An
                 points_val = float(str(raw.get("points", "0")).replace(",", ""))
             except Exception:
                 points_val = 0.0
+        is_guardian = email_norm in guardians if email_norm else False
         entries.append(
             {
                 "email": email_norm,
@@ -390,6 +437,7 @@ async def _leaderboard_entries(force_refresh: bool = False) -> list[dict[str, An
                 "name": raw.get("name", ""),
                 "tier": raw.get("tier", ""),
                 "points": points_val,
+                "guardian": is_guardian,
             }
         )
     return entries
@@ -859,6 +907,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
     rows = data.get("rows", [])
 
     activity_start_ts, activity_end_ts = await _activity_window_bounds()
+    guardians = await _guardian_emails()
 
     # Build lookup maps by email AND telegram (normalized)
     email_map: dict[str, dict[str, float]] = {}
@@ -876,12 +925,10 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
         stats = {"points": pts, "pending_reward": rew}
 
-        # normalized email key
         eml = str(row.get("email", "")).strip().lower()
         if eml:
             email_map[eml] = stats
 
-        # normalized telegram key: lowercase, strip @
         tg = str(row.get("telegram", "")).strip()
         if tg:
             tg_norm = tg.lstrip("@").lower()
@@ -892,31 +939,33 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
     keys = await redis_client.keys("user:*")
     for key in keys:
-        email = key.split(":", 1)[1]  # already stored lowercased
+        email = key.split(":", 1)[1].strip().lower()
+        if email not in REGISTERED_EMAILS:   # 🚨 filter unregistered
+            continue
+
         udata = await redis_client.hgetall(key)
 
-        # show telegram with leading @ for UI, but use normalized for lookup
         tele_raw = udata.get("telegram", "")
         tele_norm = str(tele_raw).strip().lstrip("@").lower()
         tele_display = f"@{tele_norm}" if tele_norm else ""
 
-        # Prefer email join; if missing, fall back to telegram join
         stats = email_map.get(email) or (tg_map.get(tele_norm) if tele_norm else None)
         if not stats:
             stats = {"points": 0.0, "pending_reward": 0.0}
 
-        # padding is keyed by normalized email (as you already do)
         try:
             pad_val = float(pad_map.get(email, 0.0))
         except Exception:
             pad_val = 0.0
 
-        # verification: check redis for verified posts or tasks
         verified_posts = await redis_client.scard(f"posts_verified:{email}")
         task_statuses = await redis_client.hvals(f"tasks:{email}")
         task_verified = any(v == "verified" for v in task_statuses)
-        is_verified = verified_posts > 0 or task_verified or str(udata.get("verified")) == "1"
-        # persist computed status
+        is_verified = (
+            verified_posts > 0
+            or task_verified
+            or str(udata.get("verified")) == "1"
+        )
         await redis_client.hset(f"user:{email}", "verified", int(is_verified))
 
         activity_key = f"{ACTIVITY_ZSET_PREFIX}{email}"
@@ -924,6 +973,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
         is_active = weekly_posts > 0
         activity_label = "active" if is_active else "inactive"
         await redis_client.hset(f"user:{email}", "activity", activity_label)
+
+        is_guardian = email in guardians
+        if is_guardian:
+            await redis_client.hset(f"user:{email}", GUARDIAN_USER_FIELD, "1")
+        else:
+            await redis_client.hdel(f"user:{email}", GUARDIAN_USER_FIELD)
 
         wallets.append(
             {
@@ -938,6 +993,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "verified_posts": verified_posts,
                 "active": is_active,
                 "activity": activity_label,
+                "guardian": is_guardian,
             }
         )
 
@@ -1280,7 +1336,10 @@ async def transfers_page(request: Request, success: str | None = None, error: st
 
     history = await _transfer_history(email)
     totals = _transfer_totals(history)
+    pad_balance = await _scorepad_balance(email)
     available_points = float(profile.get("points", 0.0))
+    if profile.get("guardian"):
+        available_points = max(pad_balance, 0.0)
     success_msg = success or request.query_params.get("success", "")
     error_msg = error or request.query_params.get("error", "")
 
@@ -1294,6 +1353,7 @@ async def transfers_page(request: Request, success: str | None = None, error: st
             "profile": profile,
             "history": history,
             "totals": totals,
+            "scorepad_balance": pad_balance,
         },
     )
 
@@ -1325,6 +1385,8 @@ async def transfers_submit(
         destination_profile = await _ambassador_entry_by_identifier(destination)
         if not destination_profile:
             error_message = "Destination ambassador not found."
+        elif destination_profile.get("guardian"):
+            error_message = "Guardians cannot receive scorepad transfers."
 
     if not error_message and destination_profile.get("email") == email:
         error_message = "You cannot transfer points to yourself."
@@ -1332,7 +1394,10 @@ async def transfers_submit(
     if error_message:
         return await transfers_page(request, error=error_message)
 
+    source_pad_balance = await _scorepad_balance(email)
     available_points = float(source_profile.get("points", 0.0))
+    if source_profile.get("guardian"):
+        available_points = max(source_pad_balance, 0.0)
     if amount_value > available_points:
         return await transfers_page(
             request,
@@ -1342,6 +1407,11 @@ async def transfers_submit(
     receiver_email = destination_profile.get("email") or ""
     if not receiver_email:
         return await transfers_page(request, error="Destination ambassador is missing an email. Contact support.")
+
+    dest_pad_balance = await _scorepad_balance(receiver_email)
+    receiver_points_before = float(destination_profile.get("points", 0.0))
+    if destination_profile.get("guardian"):
+        receiver_points_before = max(dest_pad_balance, 0.0)
 
     pipe = redis_client.pipeline()
     pipe.hincrbyfloat("score_pad", email, -amount_value)
@@ -1357,8 +1427,8 @@ async def transfers_submit(
         source_profile,
         destination_profile,
         amount_value,
-        sender_total_before=float(source_profile.get("points", 0.0)),
-        receiver_total_before=float(destination_profile.get("points", 0.0)),
+        sender_total_before=available_points,
+        receiver_total_before=receiver_points_before,
     )
 
     dest_display = destination_profile.get("telegram") or destination_profile.get("email_display") or receiver_email
@@ -1378,6 +1448,8 @@ async def api_transfers_rolodex(request: Request, q: str = Query("")) -> JSONRes
     results: list[dict[str, Any]] = []
     for entry in entries:
         if entry.get("email") == email:
+            continue
+        if entry.get("guardian"):
             continue
         telegram_norm = entry.get("telegram_norm", "")
         telegram_display = str(entry.get("telegram", ""))
@@ -1949,6 +2021,37 @@ async def admin_scorepad(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/guardians/toggle")
+async def admin_guardian_toggle(
+    request: Request,
+    email: str = Form(...),
+    enable: str = Form("1"),
+    ghost: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return RedirectResponse("/admin", status_code=303)
+    if email_norm not in REGISTERED_EMAILS:
+        return RedirectResponse("/admin", status_code=303)
+
+    enable_flag = str(enable).strip().lower() in {"1", "true", "yes", "on"}
+    await _set_guardian_status(email_norm, enable_flag)
+
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[guardian] failed to refresh leaderboard cache: {exc}")
+
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/admin/scorepad/boost")
 async def admin_scorepad_boost(
     request: Request, ghost: str = Form("")
@@ -2134,8 +2237,14 @@ async def index(request: Request) -> Any:
     user = await redis_client.hgetall(f"user:{email}")
     wallet = user.get("wallet") if user else ""
     data = await _get_cached_data()
+    guardians = await _guardian_emails()
     columns = [c for c in data["columns"] if c != "email"]
-    rows = [{k: row.get(k, "") for k in columns} for row in data["rows"]]
+    filtered_rows = [
+        row
+        for row in data["rows"]
+        if str(row.get("email", "")).strip().lower() not in guardians
+    ]
+    rows = [{k: row.get(k, "") for k in columns} for row in filtered_rows]
     return templates.TemplateResponse(
         "index.html",
         {
@@ -2161,11 +2270,17 @@ async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSO
     if await _maintenance_enabled() and not is_admin:
         return JSONResponse({"ok": False, "error": "maintenance_mode"}, status_code=503)
     data = await _get_cached_data(force_refresh=refresh)
+    guardians = await _guardian_emails()
+    filtered_rows = [
+        row
+        for row in data["rows"]
+        if str(row.get("email", "")).strip().lower() not in guardians
+    ]
     return JSONResponse(
         {
             "ok": True,
             "columns": data["columns"],
-            "rows": data["rows"],
+            "rows": filtered_rows,
             "source": data["source"],
             "cached_at": data["cached_at"],
             "ttl": CACHE_TTL_SECONDS,
