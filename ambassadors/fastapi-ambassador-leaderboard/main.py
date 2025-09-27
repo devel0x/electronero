@@ -2031,7 +2031,7 @@ async def admin_guardian_toggle(
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
-    expected = os.getenv("ADMIN_GHOST_KEY")
+    expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
         return RedirectResponse("/admin", status_code=303)
 
