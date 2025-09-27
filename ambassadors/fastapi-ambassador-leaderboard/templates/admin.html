@@ -24,6 +24,8 @@
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
+                <li class="nav-item"><a class="nav-link" href="#guardians">Guardians</a></li>
+                <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
         </div>
@@ -453,6 +455,129 @@
         {% if not tasks %}
         <p class="text-muted">No task applications</p>
         {% endif %}
+    </div>
+    <div id="guardians" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-3 gap-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Guardian Allocations</h1>
+                <p class="small text-light mb-0">
+                    Designate trusted admins as guardians with their own transfer balance. Guardian transfers are logged but never
+                    change leaderboard totals.
+                </p>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-secondary">{{ guardians|length }} guardians</span>
+                <div class="small text-light mt-1">Total guardian balance: {{ '%.2f'|format(guardian_total or 0) }}</div>
+            </div>
+        </div>
+        <form class="row g-3 mb-4" method="post" action="/admin/guardians/save">
+            <div class="col-md-4">
+                <label class="form-label text-uppercase small">Guardian Email</label>
+                <input type="email" class="form-control" name="email" placeholder="admin@example.com" required />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label text-uppercase small">Allocation</label>
+                <input type="number" class="form-control" name="balance" step="0.01" min="0" placeholder="250" required />
+                <div class="form-text text-light">Set to 0 to revoke access.</div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label text-uppercase small">Ghost Key</label>
+                <input type="password" class="form-control" name="ghost" placeholder="Required" required />
+                <div class="form-text text-light">Matches the admin ghost export key.</div>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" type="submit">Save Guardian</button>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-dark table-striped table-sm align-middle mb-0">
+                <thead class="table-light text-dark">
+                    <tr>
+                        <th scope="col">Guardian</th>
+                        <th scope="col" class="text-end">Balance</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for guardian in guardians %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ guardian.email }}</div>
+                            <div class="small text-muted">Guardian transfers bypass leaderboard adjustments.</div>
+                        </td>
+                        <td class="text-end">{{ '%.2f'|format(guardian.balance or 0) }}</td>
+                        <td>
+                            <form class="row g-2 align-items-center" method="post" action="/admin/guardians/remove">
+                                <input type="hidden" name="email" value="{{ guardian.email }}" />
+                                <div class="col-auto">
+                                    <input type="password" class="form-control form-control-sm" name="ghost" placeholder="Ghost key" required />
+                                </div>
+                                <div class="col-auto">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-4">No guardians assigned yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div id="transfers" class="glass-card p-3 mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h5 text-uppercase mb-0">Transfer Ledger</h1>
+            <span class="badge bg-info text-dark">{{ transfers|length }} entries</span>
+        </div>
+        <p class="small text-light mb-3">
+            Every ambassador-to-ambassador point transfer is recorded here. Use this ledger to audit movement between scorepads.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-dark table-striped table-sm align-middle mb-0">
+                <thead class="table-light text-dark">
+                    <tr>
+                        <th scope="col">Timestamp (UTC)</th>
+                        <th scope="col">Source</th>
+                        <th scope="col">Destination</th>
+                        <th scope="col" class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in transfers %}
+                    <tr>
+                        <td class="small">{{ entry.timestamp.replace('T',' ') if entry.timestamp else '—' }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ entry.source_name or entry.source or '—' }}</div>
+                            {% if entry.source %}<div class="small text-muted">{{ entry.source }}</div>{% endif %}
+                            {% if entry.source_telegram %}
+                            <div class="small"><a class="link-light" href="https://t.me/{{ entry.source_telegram.lstrip('@') }}" target="_blank">{{ entry.source_telegram }}</a></div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ entry.destination_name or entry.destination or '—' }}</div>
+                            {% if entry.destination %}<div class="small text-muted">{{ entry.destination }}</div>{% endif %}
+                            {% if entry.destination_telegram %}
+                            <div class="small"><a class="link-light" href="https://t.me/{{ entry.destination_telegram.lstrip('@') }}" target="_blank">{{ entry.destination_telegram }}</a></div>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {{ '%.2f'|format(entry.amount or 0) }}
+                            {% if entry.mode == 'guardian' or (entry.impacts_leaderboard is defined and not entry.impacts_leaderboard) %}
+                            <div class="small text-info">Guardian transfer</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">No transfers recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 <div class="modal fade" id="walletValidationModal" tabindex="-1" aria-hidden="true">
