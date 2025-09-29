@@ -128,6 +128,7 @@ ACTIVITY_RESET_KEY = "activity:last_reset"
 SCOREPAD_BOOST_POINTS = 1000.0
 TRANSFER_HISTORY_LIMIT = int(os.getenv("TRANSFER_HISTORY_LIMIT", "100"))
 GLOBAL_TRANSFER_HISTORY_LIMIT = int(os.getenv("GLOBAL_TRANSFER_HISTORY_LIMIT", "500"))
+VERIFIED_SEARCH_LIMIT = int(os.getenv("VERIFIED_SEARCH_LIMIT", "50"))
 TRANSFER_GLOBAL_LOG_KEY = "transfers:global"
 GUARDIAN_SET_KEY = "guardians:emails"
 GUARDIAN_USER_FIELD = "guardian"
@@ -1035,20 +1036,32 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
     return posts
 
 
-async def _all_verified_posts() -> list[dict[str, str]]:
+async def _all_verified_posts(include_email: bool = False) -> list[dict[str, str]]:
     """Return list of verified posts with associated wallet and Telegram."""
     entries: list[dict[str, str]] = []
     keys = await redis_client.keys("posts_verified:*")
     for key in keys:
-        email = key.split(":", 1)[1]
+        email = key.split(":", 1)[1].strip().lower()
         urls = await redis_client.smembers(key)
         udata = await redis_client.hgetall(f"user:{email}")
-        tele = udata.get("telegram", "")
-        if tele and not tele.startswith("@"):
-            tele = f"@{tele.lstrip('@')}"
-        wallet = udata.get("wallet", "")
-        for url in urls:
-            entries.append({"url": url, "telegram": tele, "wallet": wallet})
+        tele_raw = udata.get("telegram", "")
+        tele_norm = str(tele_raw or "").strip().lstrip("@").lower()
+        telegram = f"@{tele_norm}" if tele_norm else ""
+        tg_link = f"https://t.me/{tele_norm}" if tele_norm else ""
+        wallet = str(udata.get("wallet", "") or "")
+        for raw_url in urls:
+            url = str(raw_url or "").strip()
+            if not url:
+                continue
+            entry: dict[str, str] = {
+                "url": url,
+                "telegram": telegram,
+                "tg_link": tg_link,
+                "wallet": wallet,
+            }
+            if include_email:
+                entry["email"] = email
+            entries.append(entry)
     return entries
 
 async def _all_tasks() -> dict[str, dict[str, str]]:
@@ -1717,6 +1730,7 @@ async def admin_panel(request: Request) -> Any:
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
             "transfers": transfers,
+            "verified_search_limit": VERIFIED_SEARCH_LIMIT,
         },
     )
 
@@ -1875,6 +1889,76 @@ async def api_admin_posts(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     posts = await _all_posts()
     return JSONResponse({"ok": True, "posts": posts})
+
+
+@app.get("/api/admin/posts/search")
+async def api_admin_posts_search(request: Request, q: str = Query("")) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    query = str(q or "").strip()
+    if not query:
+        return JSONResponse({"ok": True, "results": [], "count": 0, "limit": VERIFIED_SEARCH_LIMIT})
+
+    entries = await _all_verified_posts(include_email=True)
+    if not entries:
+        return JSONResponse({"ok": True, "results": [], "count": 0, "limit": VERIFIED_SEARCH_LIMIT})
+
+    wallet_lookup: dict[str, dict[str, Any]] = {}
+    for wallet in await _all_wallets():
+        email = str(wallet.get("email", "")).strip().lower()
+        if email and email not in wallet_lookup:
+            wallet_lookup[email] = wallet
+
+    query_lower = query.lower()
+    results: list[dict[str, Any]] = []
+    total_matches = 0
+
+    for entry in entries:
+        url = entry.get("url", "")
+        if not url:
+            continue
+        if query_lower in url.lower():
+            total_matches += 1
+            if len(results) >= VERIFIED_SEARCH_LIMIT:
+                continue
+
+            email = entry.get("email", "")
+            telegram = entry.get("telegram", "")
+            tg_link = entry.get("tg_link", "")
+            wallet = entry.get("wallet", "")
+
+            result: dict[str, Any] = {
+                "url": url,
+                "email": email,
+                "telegram": telegram,
+                "tg_link": tg_link,
+                "wallet": wallet,
+            }
+
+            wallet_info = wallet_lookup.get(email)
+            if wallet_info:
+                result["card"] = {
+                    "wallet": wallet_info.get("wallet", ""),
+                    "telegram": wallet_info.get("telegram", ""),
+                    "tg_link": wallet_info.get("tg_link", ""),
+                    "pad": wallet_info.get("pad", 0.0),
+                    "pending_reward": wallet_info.get("pending_reward", ""),
+                    "points": wallet_info.get("points", 0.0),
+                    "verified": bool(wallet_info.get("verified")),
+                    "active": bool(wallet_info.get("active")),
+                    "guardian": bool(wallet_info.get("guardian")),
+                }
+            results.append(result)
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "results": results,
+            "count": total_matches,
+            "limit": VERIFIED_SEARCH_LIMIT,
+        }
+    )
 
 
 @app.post("/admin/posts/verify")
