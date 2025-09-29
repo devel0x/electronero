@@ -333,13 +333,17 @@
             <button id="posts-select-all" type="button" class="btn btn-outline-light btn-sm">Select All</button>
             <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
             <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
+            <button form="posts-bulk-form" class="btn btn-danger btn-sm" type="submit" formaction="/admin/posts/reject-selected">Reject Selected</button>
         </div>
         {% for email, pdata in posts.items() %}
         <div class="card user-card mb-3 text-light">
             <div class="card-body">
                 <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-2">
                     <div>
-                        <h5 class="card-title mb-0">{{ email }}</h5>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <h5 class="card-title mb-0">{{ email }}</h5>
+                            <button type="button" class="btn btn-outline-light btn-sm posts-user-toggle">Select All</button>
+                        </div>
                         <p class="small mb-1 d-flex flex-wrap align-items-center gap-2 mt-1">
                             {% if pdata.telegram %}
                                 {% if pdata.tg_link %}
@@ -366,7 +370,7 @@
                             {% for p in pdata.urls %}
                             <tr class="post-row">
                                 <td class="d-flex align-items-center gap-2 text-break">
-                                    <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
+                                    <input class="form-check-input posts-user-checkbox" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
                                     <a href="{{ p.url }}" target="_blank" class="link-light">{{ p.url }}</a>
                                 </td>
                                 <td class="text-end">
@@ -649,10 +653,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const updateToggleLabel = (button) => {
+        const card = button.closest('.user-card');
+        if (!card) {
+            return;
+        }
+        const checkboxes = card.querySelectorAll('input.posts-user-checkbox');
+        if (!checkboxes.length) {
+            button.disabled = true;
+            button.textContent = 'Select All';
+            return;
+        }
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        button.textContent = allChecked ? 'Deselect All' : 'Select All';
+    };
+
+    document.querySelectorAll('.posts-user-toggle').forEach(button => {
+        button.addEventListener('click', () => {
+            const card = button.closest('.user-card');
+            if (!card) {
+                return;
+            }
+            const checkboxes = card.querySelectorAll('input.posts-user-checkbox');
+            if (!checkboxes.length) {
+                button.disabled = true;
+                return;
+            }
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            updateToggleLabel(button);
+        });
+
+        const card = button.closest('.user-card');
+        card?.querySelectorAll('input.posts-user-checkbox').forEach(cb => {
+            cb.addEventListener('change', () => updateToggleLabel(button));
+        });
+
+        updateToggleLabel(button);
+    });
+
     document.getElementById('posts-select-all')?.addEventListener('click', () => {
         document.querySelectorAll('input[form="posts-bulk-form"][type="checkbox"]').forEach(cb => {
             cb.checked = true;
         });
+        document.querySelectorAll('.posts-user-toggle').forEach(button => updateToggleLabel(button));
     });
 
     document.getElementById('tasks-select-all')?.addEventListener('click', () => {

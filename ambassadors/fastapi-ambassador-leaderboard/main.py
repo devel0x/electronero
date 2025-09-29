@@ -1966,6 +1966,41 @@ async def admin_post_reject(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/posts/reject-selected")
+async def admin_post_reject_selected(
+    request: Request,
+    selected: list[str] = Form([]),
+    email: str | None = Form(None),
+    url: str | None = Form(None),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    items = list(selected)
+    if email and url:
+        items.append(f"{email.strip().lower()}||{url.strip()}")
+
+    pipe = redis_client.pipeline()
+
+    for item in items:
+        if not item or "||" not in item:
+            continue
+        eml, raw_url = item.split("||", 1)
+        email_key = eml.strip().lower()
+        url_clean = str(raw_url).strip()
+        if not email_key or not url_clean:
+            continue
+        pipe.lrem(f"posts:{email_key}", 0, url_clean)
+        pipe.srem(f"posts_verified:{email_key}", url_clean)
+        pipe.sadd(f"posts_rejected:{email_key}", url_clean)
+        pipe.zrem(f"{ACTIVITY_ZSET_PREFIX}{email_key}", url_clean)
+
+    if pipe.command_stack:
+        await pipe.execute()
+
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/admin/proposals/verify")
 async def admin_proposal_verify(
     request: Request,
