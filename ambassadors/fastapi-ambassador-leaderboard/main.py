@@ -1582,6 +1582,19 @@ async def verify_submit(request: Request, url: str = Form(...)) -> RedirectRespo
     return RedirectResponse("/verify", status_code=303)
 
 
+@app.post("/verify/delete")
+async def verify_delete(request: Request, url: str = Form(...)) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    url_clean = url.strip()
+    if url_clean:
+        await redis_client.lrem(f"posts:{email}", 0, url_clean)
+        await redis_client.sadd(f"posts_rejected:{email}", url_clean)
+        await redis_client.srem(f"posts_verified:{email}", url_clean)
+    return RedirectResponse("/verify", status_code=303)
+
+
 @app.get("/raid")
 async def raid_page(request: Request) -> Any:
     email = await _current_email(request)
