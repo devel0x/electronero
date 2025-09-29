@@ -99,9 +99,15 @@
         <h2 class="h5">Your submissions</h2>
         <ul class="list-group list-group-flush" id="postList">
             {% for u in pending %}
-            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
-                <a href="{{ u }}" target="_blank">{{ u }}</a>
-                <span class="badge bg-secondary">pending</span>
+            <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center gap-2">
+                <a href="{{ u }}" target="_blank" class="flex-grow-1 text-truncate">{{ u }}</a>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <span class="badge bg-secondary">pending</span>
+                    <form method="post" action="/verify/delete" class="m-0" data-ajax data-remove="li">
+                        <input type="hidden" name="url" value="{{ u }}">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    </form>
+                </div>
             </li>
             {% endfor %}
             {% for u in verified %}
@@ -161,7 +167,7 @@
 })();
 </script>
 <script>
-document.querySelectorAll('form[data-ajax]').forEach(form => {
+const attachAjaxHandler = form => {
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(form);
@@ -171,19 +177,39 @@ document.querySelectorAll('form[data-ajax]').forEach(form => {
       redirect: 'manual'
     });
     if (resp.status < 400) {
-      const list = document.querySelector(form.dataset.add);
-      const url = form.querySelector('input[name="url"]').value.trim();
-      if (list && url) {
-        const li = document.createElement('li');
-        li.className = 'list-group-item bg-transparent';
-        li.innerHTML = `<a href="${url}" target="_blank">${url}</a>`;
-        list.querySelector('.placeholder')?.remove();
-        list.prepend(li);
-        form.reset();
+      const addSelector = form.dataset.add;
+      if (addSelector) {
+        const list = document.querySelector(addSelector);
+        const url = form.querySelector('input[name="url"]').value.trim();
+        if (list && url) {
+          const li = document.createElement('li');
+          li.className = 'list-group-item bg-transparent d-flex justify-content-between align-items-center gap-2';
+          li.innerHTML = `
+            <a href="${url}" target="_blank" class="flex-grow-1 text-truncate">${url}</a>
+            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+              <span class="badge bg-secondary">pending</span>
+              <form method="post" action="/verify/delete" class="m-0" data-ajax data-remove="li">
+                <input type="hidden" name="url" value="${url}">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+              </form>
+            </div>
+          `;
+          list.querySelector('.placeholder')?.remove();
+          list.prepend(li);
+          li.querySelectorAll('form[data-ajax]').forEach(attachAjaxHandler);
+          form.reset();
+        }
+      }
+      const removeSelector = form.dataset.remove;
+      if (removeSelector) {
+        const target = form.closest(removeSelector);
+        target?.remove();
       }
     }
   });
-});
+};
+
+document.querySelectorAll('form[data-ajax]').forEach(attachAjaxHandler);
 </script>
 </body>
 </html>
