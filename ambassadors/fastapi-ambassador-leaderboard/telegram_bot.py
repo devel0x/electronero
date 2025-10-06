@@ -476,16 +476,33 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"Failed to fetch leaderboard: {exc}")
         return
 
-    rows = data.get("rows", [])[:5]
+    # --- Guardian filter (hide Jeff, Interchained, and others) ---
+    guardians = {"jeff", "interchained", "guardian", "guardianbot"}
+    rows = []
+    for row in data.get("rows", []):
+        email = str(row.get("email", "")).strip().lower()
+        name = str(row.get("name", "")).strip().lower()
+        if any(g in email or g in name for g in guardians):
+            continue
+        rows.append(row)
+    rows = rows[:5]
+    # -------------------------------------------------------------
+
     if not rows:
         await update.message.reply_text("No leaderboard data yet.")
         return
 
-    lines = ["Top leaderboard:"]
+    lines = ["🏆 *Top Ambassadors*"]
     for row in rows:
-        lines.append(f"{row.get('rank')}. {row.get('name')} - {row.get('points')} pts")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+        name = row.get("name", "Unknown")
+        pts = row.get("points", 0)
+        lines.append(f"{row.get('rank')}. {name} — {pts} pts")
 
+    await update.message.reply_text(
+        "\n".join(lines),
+        disable_web_page_preview=True,
+        parse_mode="Markdown"
+    )
 
 async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
