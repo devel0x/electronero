@@ -621,7 +621,48 @@ async def _set_maintenance(enabled: bool) -> None:
     else:
         await redis_client.delete(MAINTENANCE_FLAG_KEY)
 
-        
+
+async def _move_key(old_key: str, new_key: str) -> None:
+    """Rename a Redis key, merging contents when the destination exists."""
+    if old_key == new_key:
+        return
+    if not await redis_client.exists(old_key):
+        return
+    if not await redis_client.exists(new_key):
+        await redis_client.rename(old_key, new_key)
+        return
+
+    old_type = await redis_client.type(old_key)
+    new_type = await redis_client.type(new_key)
+    if old_type != new_type:
+        await redis_client.delete(old_key)
+        return
+
+    if old_type == "hash":
+        data = await redis_client.hgetall(old_key)
+        if data:
+            await redis_client.hset(new_key, mapping=data)
+    elif old_type == "set":
+        members = await redis_client.smembers(old_key)
+        if members:
+            await redis_client.sadd(new_key, *members)
+    elif old_type == "list":
+        values = await redis_client.lrange(old_key, 0, -1)
+        if values:
+            await redis_client.rpush(new_key, *reversed(values))
+    elif old_type == "zset":
+        members = await redis_client.zrange(old_key, 0, -1, withscores=True)
+        if members:
+            mapping = {member: score for member, score in members}
+            await redis_client.zadd(new_key, mapping)
+    else:
+        value = await redis_client.get(old_key)
+        if value is not None:
+            await redis_client.set(new_key, value)
+
+    await redis_client.delete(old_key)
+
+
 def _should_track_path(path: str) -> bool:
     for prefix in ANALYTICS_IGNORE_PREFIXES:
         if path.startswith(prefix):
@@ -2133,6 +2174,47 @@ async def admin_telegram_update(
     await redis_client.hset(
         f"user:{email}", "telegram", _normalize_telegram(telegram)
     )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/email/update")
+async def admin_email_update(
+    request: Request,
+    current_email: str = Form(...),
+    new_email: str = Form(...),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    old_norm = str(current_email or "").strip().lower()
+    new_norm = str(new_email or "").strip().lower()
+    if not old_norm or not new_norm or old_norm == new_norm:
+        return RedirectResponse("/admin", status_code=303)
+
+    await _move_key(f"user:{old_norm}", f"user:{new_norm}")
+    await _move_key(f"posts:{old_norm}", f"posts:{new_norm}")
+    await _move_key(f"posts_verified:{old_norm}", f"posts_verified:{new_norm}")
+    await _move_key(f"posts_rejected:{old_norm}", f"posts_rejected:{new_norm}")
+    await _move_key(f"tasks:{old_norm}", f"tasks:{new_norm}")
+    await _move_key(
+        f"{ACTIVITY_ZSET_PREFIX}{old_norm}",
+        f"{ACTIVITY_ZSET_PREFIX}{new_norm}",
+    )
+    await _move_key(f"transfers:{old_norm}", f"transfers:{new_norm}")
+    await _move_key(f"recovery:{old_norm}", f"recovery:{new_norm}")
+
+    pad_value = await redis_client.hget("score_pad", old_norm)
+    if pad_value is not None:
+        await redis_client.hset("score_pad", new_norm, pad_value)
+        await redis_client.hdel("score_pad", old_norm)
+
+    if await redis_client.sismember(GUARDIAN_SET_KEY, old_norm):
+        await redis_client.srem(GUARDIAN_SET_KEY, old_norm)
+        await redis_client.sadd(GUARDIAN_SET_KEY, new_norm)
+
+    REGISTERED_EMAILS.discard(old_norm)
+    REGISTERED_EMAILS.add(new_norm)
+
     return RedirectResponse("/admin", status_code=303)
 
 
