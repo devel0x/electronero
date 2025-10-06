@@ -333,13 +333,17 @@
             <button id="posts-select-all" type="button" class="btn btn-outline-light btn-sm">Select All</button>
             <button form="posts-bulk-form" class="btn btn-success btn-sm" name="verify_all" value="1" type="submit">Verify All</button>
             <button form="posts-bulk-form" class="btn btn-primary btn-sm" type="submit">Verify Selected</button>
+            <button form="posts-bulk-form" class="btn btn-danger btn-sm" type="submit" formaction="/admin/posts/reject-selected">Reject Selected</button>
         </div>
         {% for email, pdata in posts.items() %}
         <div class="card user-card mb-3 text-light">
             <div class="card-body">
                 <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-2">
                     <div>
-                        <h5 class="card-title mb-0">{{ email }}</h5>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <h5 class="card-title mb-0">{{ email }}</h5>
+                            <button type="button" class="btn btn-outline-light btn-sm posts-user-toggle">Select All</button>
+                        </div>
                         <p class="small mb-1 d-flex flex-wrap align-items-center gap-2 mt-1">
                             {% if pdata.telegram %}
                                 {% if pdata.tg_link %}
@@ -366,7 +370,7 @@
                             {% for p in pdata.urls %}
                             <tr class="post-row">
                                 <td class="d-flex align-items-center gap-2 text-break">
-                                    <input class="form-check-input" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
+                                    <input class="form-check-input posts-user-checkbox" type="checkbox" name="selected" value="{{ email }}||{{ p.url }}" form="posts-bulk-form">
                                     <a href="{{ p.url }}" target="_blank" class="link-light">{{ p.url }}</a>
                                 </td>
                                 <td class="text-end">
@@ -394,6 +398,20 @@
         {% if not posts %}
         <p class="text-muted">No posts</p>
         {% endif %}
+    </div>
+    <div id="verified-search" class="glass-card p-3 mt-4">
+        <h1 class="h5">Verified Link Lookup</h1>
+        <form id="verified-search-form" class="row g-2 align-items-end">
+            <div class="col-md-9 col-lg-10">
+                <label for="verified-search-query" class="form-label small text-uppercase">Paste part of a verified link</label>
+                <input type="search" id="verified-search-query" class="form-control" placeholder="https://x.com/...">
+            </div>
+            <div class="col-md-3 col-lg-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+        </form>
+        <p class="small text-muted mt-2" id="verified-search-hint">Returns up to {{ verified_search_limit }} matching verified submissions.</p>
+        <div id="verified-search-results" class="mt-3"></div>
     </div>
     <div id="proposals" class="glass-card p-3 mt-4">
         <h1 class="h5">Pending Proposals</h1>
@@ -649,10 +667,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const updateToggleLabel = (button) => {
+        const card = button.closest('.user-card');
+        if (!card) {
+            return;
+        }
+        const checkboxes = card.querySelectorAll('input.posts-user-checkbox');
+        if (!checkboxes.length) {
+            button.disabled = true;
+            button.textContent = 'Select All';
+            return;
+        }
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        button.textContent = allChecked ? 'Deselect All' : 'Select All';
+    };
+
+    document.querySelectorAll('.posts-user-toggle').forEach(button => {
+        button.addEventListener('click', () => {
+            const card = button.closest('.user-card');
+            if (!card) {
+                return;
+            }
+            const checkboxes = card.querySelectorAll('input.posts-user-checkbox');
+            if (!checkboxes.length) {
+                button.disabled = true;
+                return;
+            }
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            updateToggleLabel(button);
+        });
+
+        const card = button.closest('.user-card');
+        card?.querySelectorAll('input.posts-user-checkbox').forEach(cb => {
+            cb.addEventListener('change', () => updateToggleLabel(button));
+        });
+
+        updateToggleLabel(button);
+    });
+
     document.getElementById('posts-select-all')?.addEventListener('click', () => {
         document.querySelectorAll('input[form="posts-bulk-form"][type="checkbox"]').forEach(cb => {
             cb.checked = true;
         });
+        document.querySelectorAll('.posts-user-toggle').forEach(button => updateToggleLabel(button));
     });
 
     document.getElementById('tasks-select-all')?.addEventListener('click', () => {
@@ -660,6 +720,249 @@ document.addEventListener('DOMContentLoaded', () => {
             cb.checked = true;
         });
     });
+
+    const verifiedForm = document.getElementById('verified-search-form');
+    const verifiedQuery = document.getElementById('verified-search-query');
+    const verifiedResults = document.getElementById('verified-search-results');
+
+    const parseNumber = value => {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string' && value.trim() !== '') {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+    };
+
+    const formatNumber = (value, options = {}) => {
+        const number = parseNumber(value);
+        if (number === null) {
+            return '';
+        }
+        const opts = { maximumFractionDigits: 2, ...options };
+        if (opts.minimumFractionDigits && opts.minimumFractionDigits > opts.maximumFractionDigits) {
+            opts.maximumFractionDigits = opts.minimumFractionDigits;
+        }
+        return number.toLocaleString(undefined, opts);
+    };
+
+    const renderVerifiedMessage = (message, className = 'text-muted') => {
+        if (!verifiedResults) {
+            return;
+        }
+        verifiedResults.replaceChildren();
+        const p = document.createElement('p');
+        p.className = `mb-0 ${className}`;
+        p.textContent = message;
+        verifiedResults.appendChild(p);
+    };
+
+    const createBadge = (text, classes) => {
+        const badge = document.createElement('span');
+        badge.className = `badge ${classes}`;
+        badge.textContent = text;
+        return badge;
+    };
+
+    const renderVerifiedCard = entry => {
+        const info = entry?.card || {};
+        const hasCard = Boolean(entry?.card);
+
+        const card = document.createElement('div');
+        card.className = 'card user-card text-light mb-3';
+
+        const body = document.createElement('div');
+        body.className = 'card-body';
+
+        const header = document.createElement('div');
+        header.className = 'd-flex flex-column flex-lg-row justify-content-between align-items-start gap-2 mb-2';
+
+        const headerLeft = document.createElement('div');
+        const title = document.createElement('h5');
+        title.className = 'card-title mb-1';
+        title.textContent = entry?.email || 'Unknown email';
+        headerLeft.appendChild(title);
+
+        const badgeRow = document.createElement('div');
+        badgeRow.className = 'd-flex flex-wrap align-items-center gap-2';
+        if (hasCard) {
+            badgeRow.appendChild(createBadge(info.verified ? 'Verified' : 'Unverified', info.verified ? 'bg-success' : 'bg-warning text-dark'));
+            badgeRow.appendChild(createBadge(info.active ? 'Active' : 'Inactive', info.active ? 'bg-info text-dark' : 'bg-secondary'));
+            if (info.guardian) {
+                badgeRow.appendChild(createBadge('Guardian', 'bg-danger'));
+            }
+        } else {
+            badgeRow.appendChild(createBadge('Profile data unavailable', 'bg-secondary'));
+        }
+        headerLeft.appendChild(badgeRow);
+
+        header.appendChild(headerLeft);
+
+        if (hasCard) {
+            const headerRight = document.createElement('div');
+            headerRight.className = 'd-flex flex-wrap gap-2 ms-lg-auto';
+            const padNum = parseNumber(info.pad);
+            const padText = padNum !== null ? formatNumber(padNum, { maximumFractionDigits: 2 }) : (info.pad ?? '0');
+            headerRight.appendChild(createBadge(`Pad: ${padText}`, 'bg-secondary'));
+            header.appendChild(headerRight);
+        }
+
+        body.appendChild(header);
+
+        const appendDetail = (label, valueNodeFactory, className = 'mb-1') => {
+            const p = document.createElement('p');
+            p.className = className;
+            const strong = document.createElement('strong');
+            strong.textContent = `${label}:`;
+            p.appendChild(strong);
+            p.appendChild(document.createTextNode(' '));
+            const node = valueNodeFactory();
+            if (node) {
+                p.appendChild(node);
+            } else {
+                p.appendChild(document.createTextNode('—'));
+            }
+            body.appendChild(p);
+        };
+
+        appendDetail('Verified Link', () => {
+            if (!entry?.url) {
+                return null;
+            }
+            const link = document.createElement('a');
+            link.href = entry.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'link-light text-break';
+            link.textContent = entry.url;
+            return link;
+        });
+
+        appendDetail('Telegram', () => {
+            const telegramDisplay = (hasCard && info.telegram) ? info.telegram : (entry?.telegram || '');
+            if (!telegramDisplay) {
+                return null;
+            }
+            const telegramLink = (hasCard && info.tg_link) ? info.tg_link : (entry?.tg_link || '');
+            if (telegramLink) {
+                const anchor = document.createElement('a');
+                anchor.href = telegramLink;
+                anchor.target = '_blank';
+                anchor.rel = 'noopener noreferrer';
+                anchor.className = 'link-light';
+                anchor.textContent = telegramDisplay;
+                return anchor;
+            }
+            const span = document.createElement('span');
+            span.textContent = telegramDisplay;
+            return span;
+        });
+
+        appendDetail('Wallet', () => {
+            const walletValue = (hasCard && info.wallet) ? info.wallet : (entry?.wallet || '');
+            if (!walletValue) {
+                return null;
+            }
+            const span = document.createElement('span');
+            span.className = 'text-break';
+            span.textContent = walletValue;
+            return span;
+        });
+
+        appendDetail('Points', () => {
+            if (!hasCard) {
+                return null;
+            }
+            const pointsNum = parseNumber(info.points);
+            if (pointsNum === null) {
+                return null;
+            }
+            const span = document.createElement('span');
+            span.textContent = formatNumber(pointsNum, { maximumFractionDigits: 2 });
+            return span;
+        });
+
+        appendDetail('Pending Reward', () => {
+            if (!hasCard) {
+                return null;
+            }
+            if (typeof info.pending_reward === 'string' && info.pending_reward.trim() !== '') {
+                const span = document.createElement('span');
+                span.textContent = info.pending_reward;
+                return span;
+            }
+            const pendingNum = parseNumber(info.pending_reward);
+            if (pendingNum === null) {
+                return null;
+            }
+            const span = document.createElement('span');
+            span.textContent = formatNumber(pendingNum, { maximumFractionDigits: 8 });
+            return span;
+        }, 'mb-0');
+
+        card.appendChild(body);
+        return card;
+    };
+
+    if (verifiedResults) {
+        renderVerifiedMessage('Enter part of a verified URL to find the poster\'s details.');
+    }
+
+    if (verifiedForm && verifiedQuery && verifiedResults) {
+        verifiedForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            const query = verifiedQuery.value.trim();
+            if (!query) {
+                renderVerifiedMessage('Enter part of a verified URL to search verified submissions.');
+                return;
+            }
+
+            renderVerifiedMessage('Searching…');
+
+            try {
+                const resp = await fetch(`/api/admin/posts/search?q=${encodeURIComponent(query)}`);
+                if (resp.status === 401) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
+                const data = await resp.json();
+                if (!resp.ok || data.ok === false) {
+                    throw new Error(data.error || 'Search failed');
+                }
+
+                const results = Array.isArray(data.results) ? data.results : [];
+                const total = typeof data.count === 'number' ? data.count : results.length;
+                if (!results.length) {
+                    const noResultsMsg = total === 0
+                        ? 'No verified submissions matched that query.'
+                        : 'No verified submissions were returned for this query.';
+                    renderVerifiedMessage(noResultsMsg);
+                    return;
+                }
+
+                const fragment = document.createDocumentFragment();
+                const summary = document.createElement('p');
+                summary.className = 'small text-muted';
+                let summaryText = total === 1 ? 'Found 1 match.' : `Found ${total} matches.`;
+                if (results.length < total) {
+                    summaryText += ` Showing first ${results.length} results.`;
+                }
+                summary.textContent = summaryText;
+                fragment.appendChild(summary);
+
+                results.forEach(entry => {
+                    fragment.appendChild(renderVerifiedCard(entry));
+                });
+
+                verifiedResults.replaceChildren(fragment);
+            } catch (err) {
+                console.error(err);
+                renderVerifiedMessage('Search failed. Please try again.', 'text-danger');
+            }
+        });
+    }
 });
 </script>
 </body>
