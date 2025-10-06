@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from html import escape
 from typing import Dict, Optional, Set
 
 import httpx
@@ -501,18 +502,19 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("No leaderboard data yet.")
         return
 
-    lines = ["🏆 *Top Ambassadors*"]
+    # Build HTML output safely
+    lines = ["<b>🏆 Top Ambassadors</b>"]
     for row in rows:
-        name = _escape_md(row.get("name", "Unknown"))
-        pts = row.get("points", 0)
-        rank = _escape_md(str(row.get("rank", "")))
-        lines.append(f"{rank}. {name} — {pts} pts")
+        rank = escape(str(row.get("rank", "")))
+        name = escape(str(row.get("name", "Unknown")))
+        pts = escape(str(row.get("points", 0)))
+        lines.append(f"{rank}. <b>{name}</b> — {pts} pts")
 
-    text = "\n".join(lines)
+    text = "<br>".join(lines)
     await update.message.reply_text(
         text,
         disable_web_page_preview=True,
-        parse_mode="MarkdownV2"
+        parse_mode="HTML"
     )
 
 async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
