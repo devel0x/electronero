@@ -467,6 +467,16 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("⚠️ This link was already submitted.")
 
 
+import html
+
+def _escape_md(text: str) -> str:
+    """Escape Telegram MarkdownV2 special characters."""
+    if not text:
+        return ""
+    for ch in ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await ensure_login(update, context):
         return
@@ -476,7 +486,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"Failed to fetch leaderboard: {exc}")
         return
 
-    # --- Guardian filter (hide Jeff, Interchained, and others) ---
+    # Guardian filter
     guardians = {"jeff", "interchained", "guardian", "guardianbot"}
     rows = []
     for row in data.get("rows", []):
@@ -486,7 +496,6 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             continue
         rows.append(row)
     rows = rows[:5]
-    # -------------------------------------------------------------
 
     if not rows:
         await update.message.reply_text("No leaderboard data yet.")
@@ -494,14 +503,16 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     lines = ["🏆 *Top Ambassadors*"]
     for row in rows:
-        name = row.get("name", "Unknown")
+        name = _escape_md(row.get("name", "Unknown"))
         pts = row.get("points", 0)
-        lines.append(f"{row.get('rank')}. {name} — {pts} pts")
+        rank = _escape_md(str(row.get("rank", "")))
+        lines.append(f"{rank}. {name} — {pts} pts")
 
+    text = "\n".join(lines)
     await update.message.reply_text(
-        "\n".join(lines),
+        text,
         disable_web_page_preview=True,
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"
     )
 
 async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
