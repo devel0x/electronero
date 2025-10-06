@@ -510,7 +510,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         pts = escape(str(row.get("points", 0)))
         lines.append(f"{rank}. <b>{name}</b> — {pts} pts")
 
-    text = "<br>".join(lines)
+    text = "\n".join(lines)
     await update.message.reply_text(
         text,
         disable_web_page_preview=True,
