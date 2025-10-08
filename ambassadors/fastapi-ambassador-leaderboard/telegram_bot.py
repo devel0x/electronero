@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from html import escape
 from typing import Dict, Optional, Set
 
 import httpx
@@ -467,6 +468,16 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("⚠️ This link was already submitted.")
 
 
+import html
+
+def _escape_md(text: str) -> str:
+    """Escape Telegram MarkdownV2 special characters."""
+    if not text:
+        return ""
+    for ch in ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await ensure_login(update, context):
         return
@@ -476,16 +487,35 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"Failed to fetch leaderboard: {exc}")
         return
 
-    rows = data.get("rows", [])[:5]
+    # Guardian filter
+    guardians = {"jeff", "interchained", "guardian", "guardianbot"}
+    rows = []
+    for row in data.get("rows", []):
+        email = str(row.get("email", "")).strip().lower()
+        name = str(row.get("name", "")).strip().lower()
+        if any(g in email or g in name for g in guardians):
+            continue
+        rows.append(row)
+    rows = rows[:5]
+
     if not rows:
         await update.message.reply_text("No leaderboard data yet.")
         return
 
-    lines = ["Top leaderboard:"]
+    # Build HTML output safely
+    lines = ["<b>🏆 Top Ambassadors</b>"]
     for row in rows:
-        lines.append(f"{row.get('rank')}. {row.get('name')} - {row.get('points')} pts")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+        rank = escape(str(row.get("rank", "")))
+        name = escape(str(row.get("name", "Unknown")))
+        pts = escape(str(row.get("points", 0)))
+        lines.append(f"{rank}. <b>{name}</b> — {pts} pts")
 
+    text = "\n".join(lines)
+    await update.message.reply_text(
+        text,
+        disable_web_page_preview=True,
+        parse_mode="HTML"
+    )
 
 async def pump(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
