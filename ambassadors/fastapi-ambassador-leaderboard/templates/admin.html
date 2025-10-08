@@ -270,8 +270,14 @@
                 <div class="card h-100 user-card text-light">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <h5 class="card-title mb-1">{{ w.email }}</h5>
+                            <div class="flex-grow-1">
+                                <form method="post" action="/admin/email/update" class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <input type="hidden" name="current_email" value="{{ w.email }}">
+                                    <div class="flex-grow-1" style="min-width: 12rem;">
+                                        <input type="email" name="new_email" value="{{ w.email }}" class="form-control form-control-sm" placeholder="user@example.com" required>
+                                    </div>
+                                    <button class="btn btn-outline-light btn-sm">Update Email</button>
+                                </form>
                                 <div class="d-flex flex-wrap align-items-center gap-2">
                                     {% if w.verified %}
                                     <span class="badge bg-success">Verified</span>
