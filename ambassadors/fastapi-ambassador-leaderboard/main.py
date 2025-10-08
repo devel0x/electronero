@@ -2196,10 +2196,7 @@ async def admin_email_update(
     await _move_key(f"posts_verified:{old_norm}", f"posts_verified:{new_norm}")
     await _move_key(f"posts_rejected:{old_norm}", f"posts_rejected:{new_norm}")
     await _move_key(f"tasks:{old_norm}", f"tasks:{new_norm}")
-    await _move_key(
-        f"{ACTIVITY_ZSET_PREFIX}{old_norm}",
-        f"{ACTIVITY_ZSET_PREFIX}{new_norm}",
-    )
+    await _move_key(f"{ACTIVITY_ZSET_PREFIX}{old_norm}", f"{ACTIVITY_ZSET_PREFIX}{new_norm}")
     await _move_key(f"transfers:{old_norm}", f"transfers:{new_norm}")
     await _move_key(f"recovery:{old_norm}", f"recovery:{new_norm}")
 
@@ -2214,9 +2211,9 @@ async def admin_email_update(
 
     REGISTERED_EMAILS.discard(old_norm)
     REGISTERED_EMAILS.add(new_norm)
-
+    
     return RedirectResponse("/admin", status_code=303)
-
+    
 
 @app.post("/admin/scorepad")
 async def admin_scorepad(
