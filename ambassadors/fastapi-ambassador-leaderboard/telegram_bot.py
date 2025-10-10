@@ -5,7 +5,7 @@ from html import escape
 from typing import Dict, Optional, Set
 
 import httpx
-from telegram import Update, User
+from telegram import Update, User, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
     Application,
@@ -14,6 +14,7 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
+    CallbackQueryHandler,
 )
 
 from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegram, redis_client, _get_cached_data
@@ -416,6 +417,62 @@ async def wallet_received(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Main Ambassador Menu with simple inline buttons."""
+    if not context.user_data.get("authenticated"):
+        await update.message.reply_text("🔒 Please /checkin first to use the menu.")
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📋 View Tasks", callback_data="menu_tasks"),
+            InlineKeyboardButton("🧾 Verify Post", callback_data="menu_verify"),
+        ],
+        [
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="menu_leaderboard"),
+            InlineKeyboardButton("💼 Update Wallet", callback_data="menu_wallet"),
+        ],
+        [
+            InlineKeyboardButton("📊 Hashrate", callback_data="menu_hashrate"),
+            InlineKeyboardButton("🚪 Logout", callback_data="menu_logout"),
+        ],
+    ]
+
+    # Add admin-only button
+    if _is_admin_user(update.effective_user):
+        keyboard.append([InlineKeyboardButton("⚙️ Pump Points", callback_data="menu_pump")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "⚙️ Ambassador Dashboard\nChoose an action below:",
+        reply_markup=reply_markup
+    )
+
+async def on_menu_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route menu button clicks to existing commands."""
+    query = update.callback_query
+    await query.answer()
+    choice = query.data
+
+    # Map button presses to existing logic
+    if choice == "menu_tasks":
+        await tasks(query, context)
+    elif choice == "menu_verify":
+        await query.message.reply_text("Usage: /verify <url>")
+    elif choice == "menu_leaderboard":
+        await leaderboard(query, context)
+    elif choice == "menu_wallet":
+        await wallet_start(query, context)
+    elif choice == "menu_hashrate":
+        await hashrate(query, context)
+    elif choice == "menu_logout":
+        await logout(query, context)
+    elif choice == "menu_pump":
+        await query.message.reply_text("Usage: /pump @username amount")
+    else:
+        await query.message.reply_text("❓ Unknown selection.")
+
+
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await ensure_login(update, context):
         return
@@ -697,6 +754,8 @@ def main() -> None:
     application.add_handler(CommandHandler("pump", pump))
     application.add_handler(CommandHandler("hashrate", hashrate))
     application.add_handler(CommandHandler("logout", logout))
+    application.add_handler(CommandHandler("menu", menu))
+    application.add_handler(CallbackQueryHandler(on_menu_choice))
     application.add_error_handler(on_error)
 
     # PTB 20+/21 entrypoint
