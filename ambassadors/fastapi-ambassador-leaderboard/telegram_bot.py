@@ -460,7 +460,29 @@ async def on_menu_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if choice == "menu_tasks":
         await tasks(query, context)
     elif choice == "menu_verify":
-        await query.message.reply_text("Usage: /verify <url>")
+        # ✅ Call the verify command logic directly
+        fake_update = Update.de_json(
+            {
+                "update_id": update.update_id,
+                "message": {
+                    "message_id": query.message.message_id,
+                    "from": {
+                        "id": query.from_user.id,
+                        "is_bot": False,
+                        "first_name": query.from_user.first_name,
+                        "username": query.from_user.username,
+                    },
+                    "chat": {
+                        "id": query.message.chat_id,
+                        "type": query.message.chat.type,
+                    },
+                    "date": query.message.date.timestamp(),
+                    "text": "/verify",
+                },
+            },
+            context.application.bot
+        )
+        await verify(fake_update, context)
     elif choice == "menu_leaderboard":
         await leaderboard(query, context)
     elif choice == "menu_wallet":
