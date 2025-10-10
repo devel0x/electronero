@@ -419,6 +419,12 @@ async def wallet_received(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 
+async def catch_verify_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("verify_mode"):
+        context.user_data["verify_mode"] = False
+        return await _handle_verify_submission(update, context, update.message.text)
+
+
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Main Ambassador Menu with simple inline buttons."""
     if not context.user_data.get("authenticated"):
@@ -482,7 +488,9 @@ async def on_menu_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             },
             context.application.bot
         )
-        await verify(fake_update, context)
+        # await verify(fake_update, context)
+        await query.message.reply_text("🔗 Please send me the URL you want to verify:")
+        context.user_data["verify_mode"] = True
     elif choice == "menu_leaderboard":
         await leaderboard(query, context)
     elif choice == "menu_wallet":
@@ -818,8 +826,8 @@ def main() -> None:
     application.add_handler(CommandHandler("logout", logout))
     application.add_handler(CommandHandler("menu", menu))
     application.add_handler(CallbackQueryHandler(on_menu_choice))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, catch_verify_mode))
     application.add_error_handler(on_error)
-
     # PTB 20+/21 entrypoint
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
