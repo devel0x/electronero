@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import html
 from html import escape
 from typing import Dict, Optional, Set
 
@@ -30,6 +31,7 @@ WAITING_REG_PASSWORD = 2
 WAITING_REG_TELEGRAM = 3
 WAITING_REG_WALLET = 4
 WAITING_NEW_WALLET = 5
+WAITING_VERIFY_URL = 6
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -502,21 +504,21 @@ async def apply_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text("✅ Task applied.")
 
 
-async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await ensure_login(update, context):
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /verify <url>")
-        return
-    url = context.args[0].strip()
-    email = context.user_data.get("email")
+async def _handle_verify_submission(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str) -> int:
     if not url:
-        await update.message.reply_text("Provide a valid URL.")
-        return
+        await update.message.reply_text("⚠️ Please provide a valid URL.")
+        return ConversationHandler.END
+
+    email = context.user_data.get("email")
+    if not email:
+        await update.message.reply_text("⚠️ Session expired. Please /checkin again.")
+        return ConversationHandler.END
+
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
     pending_set = {str(p) for p in pending}
     verified_set = {str(v) for v in verified}
+
     if url not in pending_set and url not in verified_set:
         await redis_client.srem(f"posts_rejected:{email}", url)
         await redis_client.lpush(f"posts:{email}", url)
@@ -524,8 +526,27 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("⚠️ This link was already submitted.")
 
+    return ConversationHandler.END
 
-import html
+
+async def received_verify_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    url = (update.message.text or "").strip()
+    return await _handle_verify_submission(update, context, url)
+
+
+async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await ensure_login(update, context):
+        return ConversationHandler.END
+
+    # If a URL is provided inline: run original logic immediately
+    if context.args:
+        url = context.args[0].strip()
+        return await _handle_verify_submission(update, context, url)
+
+    # Otherwise, ask the user for the URL
+    await update.message.reply_text("🔗 Please send me the URL you want to verify:")
+    return WAITING_VERIFY_URL
+
 
 def _escape_md(text: str) -> str:
     """Escape Telegram MarkdownV2 special characters."""
@@ -749,7 +770,20 @@ def main() -> None:
     application.add_handler(wallet_conv)
     application.add_handler(CommandHandler("tasks", tasks))
     application.add_handler(CommandHandler("apply", apply_task))
-    application.add_handler(CommandHandler("verify", verify))
+    # application.add_handler(CommandHandler("verify", verify))
+    # Verify conversation
+    verify_conv = ConversationHandler(
+        entry_points=[CommandHandler("verify", verify)],
+        states={
+            WAITING_VERIFY_URL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, received_verify_url)
+            ],
+        },
+        fallbacks=[],
+        per_chat=False,
+    )
+    application.add_handler(verify_conv)
+
     application.add_handler(CommandHandler("leaderboard", leaderboard))
     application.add_handler(CommandHandler("pump", pump))
     application.add_handler(CommandHandler("hashrate", hashrate))
