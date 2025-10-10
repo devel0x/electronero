@@ -538,13 +538,20 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not await ensure_login(update, context):
         return ConversationHandler.END
 
-    # If a URL is provided inline: run original logic immediately
     if context.args:
         url = context.args[0].strip()
         return await _handle_verify_submission(update, context, url)
 
-    # Otherwise, ask the user for the URL
-    await update.message.reply_text("🔗 Please send me the URL you want to verify:")
+    # ✅ DM nudge if run in a group
+    if update.effective_chat.type != "private":
+        await update.message.reply_text("📩 Please reply to me in DM with your URL.")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="🔗 Please send me the URL you want to verify:"
+        )
+    else:
+        await update.message.reply_text("🔗 Please send me the URL you want to verify:")
+
     return WAITING_VERIFY_URL
 
 
@@ -770,13 +777,12 @@ def main() -> None:
     application.add_handler(wallet_conv)
     application.add_handler(CommandHandler("tasks", tasks))
     application.add_handler(CommandHandler("apply", apply_task))
-    # application.add_handler(CommandHandler("verify", verify))
     # Verify conversation
     verify_conv = ConversationHandler(
         entry_points=[CommandHandler("verify", verify)],
         states={
             WAITING_VERIFY_URL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, received_verify_url)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, received_verify_url)
             ],
         },
         fallbacks=[],
