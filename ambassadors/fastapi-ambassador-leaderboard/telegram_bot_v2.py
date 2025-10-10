@@ -100,6 +100,27 @@ async def checkin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     await update.message.reply_text("🔒 Please enter your *email*:", parse_mode="Markdown")
     return WAITING_EMAIL
+    
+async def received_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle password input and authenticate the user."""
+    password = (update.message.text or "").strip()
+    email = context.user_data.get("email", "")
+
+    # If email is missing, the session likely expired
+    if not email:
+        await update.message.reply_text("Session expired. Please /checkin again.")
+        return ConversationHandler.END
+
+    # Look up stored password hash
+    stored = await redis_client.hgetall(f"user:{email}")
+    if not stored or stored.get("password") != _hash_password(password):
+        await update.message.reply_text("❌ Invalid credentials. Try /checkin again.")
+        return ConversationHandler.END
+
+    # Mark the user as authenticated
+    context.user_data["authenticated"] = True
+    await update.message.reply_text("✅ Logged in successfully!")
+    return ConversationHandler.END
 
 async def received_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     email = (update.message.text or "").strip().lower()
