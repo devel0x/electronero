@@ -438,7 +438,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ],
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="menu_leaderboard"),
-            InlineKeyboardButton("💼 Update Wallet", callback_data="menu_wallet"),
+            # InlineKeyboardButton("💼 Update Wallet", callback_data="menu_wallet"),
         ],
         [
             InlineKeyboardButton("📊 Hashrate", callback_data="menu_hashrate"),
