@@ -447,8 +447,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ]
 
     # Add admin-only button
-    if _is_admin_user(update.effective_user):
-        keyboard.append([InlineKeyboardButton("⚙️ Pump Points", callback_data="menu_pump")])
+    # if _is_admin_user(update.effective_user):
+    #     keyboard.append([InlineKeyboardButton("⚙️ Pump Points", callback_data="menu_pump")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
