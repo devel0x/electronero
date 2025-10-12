@@ -1,11 +1,12 @@
 import logging
 import os
 import re
+import html
 from html import escape
 from typing import Dict, Optional, Set
 
 import httpx
-from telegram import Update, User
+from telegram import Update, User, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
     Application,
@@ -14,6 +15,7 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
+    CallbackQueryHandler,
 )
 
 from main import TASK_LIST, REGISTERED_EMAILS, _hash_password, _normalize_telegram, redis_client, _get_cached_data
@@ -29,6 +31,7 @@ WAITING_REG_PASSWORD = 2
 WAITING_REG_TELEGRAM = 3
 WAITING_REG_WALLET = 4
 WAITING_NEW_WALLET = 5
+WAITING_VERIFY_URL = 6
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -416,6 +419,92 @@ async def wallet_received(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 
+async def catch_verify_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("verify_mode"):
+        context.user_data["verify_mode"] = False
+        return await _handle_verify_submission(update, context, update.message.text)
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Main Ambassador Menu with simple inline buttons."""
+    if not context.user_data.get("authenticated"):
+        await update.message.reply_text("🔒 Please /checkin first to use the menu.")
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📋 View Tasks", callback_data="menu_tasks"),
+            InlineKeyboardButton("🧾 Verify Post", callback_data="menu_verify"),
+        ],
+        [
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="menu_leaderboard"),
+            # InlineKeyboardButton("💼 Update Wallet", callback_data="menu_wallet"),
+        ],
+        [
+            InlineKeyboardButton("📊 Hashrate", callback_data="menu_hashrate"),
+            InlineKeyboardButton("🚪 Logout", callback_data="menu_logout"),
+        ],
+    ]
+
+    # Add admin-only button
+    # if _is_admin_user(update.effective_user):
+    #     keyboard.append([InlineKeyboardButton("⚙️ Pump Points", callback_data="menu_pump")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "⚙️ Ambassador Dashboard\nChoose an action below:",
+        reply_markup=reply_markup
+    )
+
+async def on_menu_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route menu button clicks to existing commands."""
+    query = update.callback_query
+    await query.answer()
+    choice = query.data
+
+    # Map button presses to existing logic
+    if choice == "menu_tasks":
+        await tasks(query, context)
+    elif choice == "menu_verify":
+        # ✅ Call the verify command logic directly
+        fake_update = Update.de_json(
+            {
+                "update_id": update.update_id,
+                "message": {
+                    "message_id": query.message.message_id,
+                    "from": {
+                        "id": query.from_user.id,
+                        "is_bot": False,
+                        "first_name": query.from_user.first_name,
+                        "username": query.from_user.username,
+                    },
+                    "chat": {
+                        "id": query.message.chat_id,
+                        "type": query.message.chat.type,
+                    },
+                    "date": query.message.date.timestamp(),
+                    "text": "/verify",
+                },
+            },
+            context.application.bot
+        )
+        # await verify(fake_update, context)
+        await query.message.reply_text("🔗 Please send me the URL you want to verify:")
+        context.user_data["verify_mode"] = True
+    elif choice == "menu_leaderboard":
+        await leaderboard(query, context)
+    elif choice == "menu_wallet":
+        await wallet_start(query, context)
+    elif choice == "menu_hashrate":
+        await hashrate(query, context)
+    elif choice == "menu_logout":
+        await logout(query, context)
+    elif choice == "menu_pump":
+        await query.message.reply_text("Usage: /pump @username amount")
+    else:
+        await query.message.reply_text("❓ Unknown selection.")
+
+
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await ensure_login(update, context):
         return
@@ -445,21 +534,21 @@ async def apply_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text("✅ Task applied.")
 
 
-async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await ensure_login(update, context):
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /verify <url>")
-        return
-    url = context.args[0].strip()
-    email = context.user_data.get("email")
+async def _handle_verify_submission(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str) -> int:
     if not url:
-        await update.message.reply_text("Provide a valid URL.")
-        return
+        await update.message.reply_text("⚠️ Please provide a valid URL.")
+        return ConversationHandler.END
+
+    email = context.user_data.get("email")
+    if not email:
+        await update.message.reply_text("⚠️ Session expired. Please /checkin again.")
+        return ConversationHandler.END
+
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
     pending_set = {str(p) for p in pending}
     verified_set = {str(v) for v in verified}
+
     if url not in pending_set and url not in verified_set:
         await redis_client.srem(f"posts_rejected:{email}", url)
         await redis_client.lpush(f"posts:{email}", url)
@@ -467,8 +556,34 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("⚠️ This link was already submitted.")
 
+    return ConversationHandler.END
 
-import html
+
+async def received_verify_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    url = (update.message.text or "").strip()
+    return await _handle_verify_submission(update, context, url)
+
+
+async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await ensure_login(update, context):
+        return ConversationHandler.END
+
+    if context.args:
+        url = context.args[0].strip()
+        return await _handle_verify_submission(update, context, url)
+
+    # ✅ DM nudge if run in a group
+    if update.effective_chat.type != "private":
+        await update.message.reply_text("📩 Please reply to me in DM with your URL.")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="🔗 Please send me the URL you want to verify:"
+        )
+    else:
+        await update.message.reply_text("🔗 Please send me the URL you want to verify:")
+
+    return WAITING_VERIFY_URL
+
 
 def _escape_md(text: str) -> str:
     """Escape Telegram MarkdownV2 special characters."""
@@ -692,13 +807,27 @@ def main() -> None:
     application.add_handler(wallet_conv)
     application.add_handler(CommandHandler("tasks", tasks))
     application.add_handler(CommandHandler("apply", apply_task))
-    application.add_handler(CommandHandler("verify", verify))
+    # Verify conversation
+    verify_conv = ConversationHandler(
+        entry_points=[CommandHandler("verify", verify)],
+        states={
+            WAITING_VERIFY_URL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, received_verify_url)
+            ],
+        },
+        fallbacks=[],
+        per_chat=False,
+    )
+    application.add_handler(verify_conv)
+
     application.add_handler(CommandHandler("leaderboard", leaderboard))
     application.add_handler(CommandHandler("pump", pump))
     application.add_handler(CommandHandler("hashrate", hashrate))
     application.add_handler(CommandHandler("logout", logout))
+    application.add_handler(CommandHandler("menu", menu))
+    application.add_handler(CallbackQueryHandler(on_menu_choice))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, catch_verify_mode))
     application.add_error_handler(on_error)
-
     # PTB 20+/21 entrypoint
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
