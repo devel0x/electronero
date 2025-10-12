@@ -130,6 +130,8 @@ TRANSFER_HISTORY_LIMIT = int(os.getenv("TRANSFER_HISTORY_LIMIT", "100"))
 GLOBAL_TRANSFER_HISTORY_LIMIT = int(os.getenv("GLOBAL_TRANSFER_HISTORY_LIMIT", "500"))
 VERIFIED_SEARCH_LIMIT = int(os.getenv("VERIFIED_SEARCH_LIMIT", "50"))
 TRANSFER_GLOBAL_LOG_KEY = "transfers:global"
+TRANSFER_TOTALS_PREFIX = "transfers:totals:"
+TRANSFER_TOTALS_VERSION = "2"
 GUARDIAN_SET_KEY = "guardians:emails"
 GUARDIAN_USER_FIELD = "guardian"
 
@@ -540,8 +542,8 @@ async def _record_transfer(
     receiver_total_before: float,
 ) -> None:
     timestamp = datetime.utcnow().isoformat()
-    sender_email = source.get("email", "")
-    dest_email = destination.get("email", "")
+    sender_email = str(source.get("email", "") or "").strip().lower()
+    dest_email = str(destination.get("email", "") or "").strip().lower()
     sender_after = max(sender_total_before - amount, 0.0)
     receiver_after = receiver_total_before + amount
 
@@ -578,9 +580,11 @@ async def _record_transfer(
     if sender_email:
         pipe.lpush(f"transfers:{sender_email}", json.dumps(sent_entry))
         pipe.ltrim(f"transfers:{sender_email}", 0, TRANSFER_HISTORY_LIMIT - 1)
+        pipe.hincrbyfloat(f"{TRANSFER_TOTALS_PREFIX}{sender_email}", "sent", amount)
     if dest_email:
         pipe.lpush(f"transfers:{dest_email}", json.dumps(received_entry))
         pipe.ltrim(f"transfers:{dest_email}", 0, TRANSFER_HISTORY_LIMIT - 1)
+        pipe.hincrbyfloat(f"{TRANSFER_TOTALS_PREFIX}{dest_email}", "received", amount)
     pipe.lpush(TRANSFER_GLOBAL_LOG_KEY, json.dumps(global_entry))
     pipe.ltrim(TRANSFER_GLOBAL_LOG_KEY, 0, GLOBAL_TRANSFER_HISTORY_LIMIT - 1)
     if pipe.command_stack:
@@ -1358,12 +1362,96 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
     return RedirectResponse("/", status_code=303)
 
 
-def _transfer_totals(history: list[dict[str, Any]]) -> dict[str, float]:
-    sent = sum(float(entry.get("amount", 0) or 0) for entry in history if entry.get("direction") == "sent")
-    received = sum(
-        float(entry.get("amount", 0) or 0) for entry in history if entry.get("direction") == "received"
+async def _aggregate_transfers_from_global(
+    email_norm: str, missing: set[str]
+) -> dict[str, float]:
+    """Backfill transfer totals for *email_norm* by scanning the global log.
+
+    Prior to persisting running totals we only kept a rolling per-user history.
+    That meant ambassadors with more than ``TRANSFER_HISTORY_LIMIT`` transfers
+    would see truncated totals the first time we attempted to hydrate the new
+    counters.  To preserve those historic transfers we sweep the (larger)
+    global log once when a total is missing and cache the reconstructed values
+    under the dedicated ``transfers:totals`` hash.
+    """
+
+    if not email_norm or not missing:
+        return {}
+
+    entries = await redis_client.lrange(
+        TRANSFER_GLOBAL_LOG_KEY, 0, GLOBAL_TRANSFER_HISTORY_LIMIT - 1
     )
-    return {"sent": sent, "received": received}
+    aggregate = {"sent": 0.0, "received": 0.0}
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        try:
+            amount = float(entry.get("amount", 0) or 0)
+        except Exception:
+            amount = 0.0
+        if "sent" in missing and entry.get("source") == email_norm:
+            aggregate["sent"] += amount
+        if "received" in missing and entry.get("destination") == email_norm:
+            aggregate["received"] += amount
+
+    return {key: aggregate[key] for key in missing if key in aggregate}
+
+
+async def _transfer_totals(email: str, history: list[dict[str, Any]]) -> dict[str, float]:
+    email_norm = str(email or "").strip().lower()
+    totals = {"sent": 0.0, "received": 0.0}
+    stored: dict[str, Any] = {}
+    stored_version_ok = False
+
+    if email_norm:
+        stored = await redis_client.hgetall(f"{TRANSFER_TOTALS_PREFIX}{email_norm}")
+        stored_version_ok = stored.get("__v") == TRANSFER_TOTALS_VERSION
+
+    missing: set[str] = set()
+    if stored and stored_version_ok:
+        for key in ("sent", "received"):
+            if key in stored:
+                try:
+                    totals[key] = float(stored.get(key, 0) or 0)
+                except Exception:
+                    totals[key] = 0.0
+            else:
+                missing.add(key)
+    else:
+        missing = {"sent", "received"}
+
+    if missing:
+        backfilled = await _aggregate_transfers_from_global(email_norm, missing)
+        sent = backfilled.get("sent") if "sent" in missing else None
+        received = backfilled.get("received") if "received" in missing else None
+
+        if sent is None and "sent" in missing:
+            sent = sum(
+                float(entry.get("amount", 0) or 0)
+                for entry in history
+                if entry.get("direction") == "sent"
+            )
+        if received is None and "received" in missing:
+            received = sum(
+                float(entry.get("amount", 0) or 0)
+                for entry in history
+                if entry.get("direction") == "received"
+            )
+        mapping: dict[str, Any] = {}
+        if "sent" in missing and sent is not None:
+            totals["sent"] = sent
+            mapping["sent"] = sent
+        if "received" in missing and received is not None:
+            totals["received"] = received
+            mapping["received"] = received
+        if mapping:
+            mapping["__v"] = TRANSFER_TOTALS_VERSION
+        if email_norm and mapping:
+            await redis_client.hset(f"{TRANSFER_TOTALS_PREFIX}{email_norm}", mapping=mapping)
+
+    return totals
 
 
 @app.get("/transfers")
@@ -1389,7 +1477,7 @@ async def transfers_page(request: Request, success: str | None = None, error: st
         )
 
     history = await _transfer_history(email)
-    totals = _transfer_totals(history)
+    totals = await _transfer_totals(email, history)
     pad_balance = await _scorepad_balance(email)
     available_points = float(profile.get("points", 0.0))
     if profile.get("guardian"):
@@ -2198,6 +2286,9 @@ async def admin_email_update(
     await _move_key(f"tasks:{old_norm}", f"tasks:{new_norm}")
     await _move_key(f"{ACTIVITY_ZSET_PREFIX}{old_norm}", f"{ACTIVITY_ZSET_PREFIX}{new_norm}")
     await _move_key(f"transfers:{old_norm}", f"transfers:{new_norm}")
+    await _move_key(
+        f"{TRANSFER_TOTALS_PREFIX}{old_norm}", f"{TRANSFER_TOTALS_PREFIX}{new_norm}"
+    )
     await _move_key(f"recovery:{old_norm}", f"recovery:{new_norm}")
 
     pad_value = await redis_client.hget("score_pad", old_norm)
