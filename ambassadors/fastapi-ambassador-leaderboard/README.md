@@ -32,6 +32,20 @@ Administrators also gain new controls and insights:
 
 The app also provides a tasks panel where ambassadors can apply to various community roles. Applications are stored in Redis and surface in the admin panel for verification or removal.
 
+### Transfer accounting and running totals
+
+Transfers are persisted in three complementary structures so balances and lifetime totals cannot drift:
+
+1. **Score pad hash** – the authoritative live balance for each ambassador. Every transfer decrements the sender's entry in `score_pad`
+   and increments the recipient's entry atomically.
+2. **Per-user history lists** – mirrored `sent` and `received` rows stored under `transfers:<email>` provide the timeline shown on the
+   dashboard. Each list is trimmed to the most recent `TRANSFER_HISTORY_LIMIT` events to keep rendering fast.
+3. **Global log and running totals** – the app also pushes every event into `transfers:global` and increments cumulative counters inside
+   `transfers:totals:<email>`. When we introduced the running totals, existing ambassadors could have had more than `TRANSFER_HISTORY_LIMIT`
+   entries, which meant the history-based bootstrap alone would undercount them. To avoid that, the application now rebuilds any missing
+   `sent` or `received` values by scanning the wider global log exactly once before persisting them. Future transfers simply increment the
+   stored counters, so lifetime totals stay accurate even as older history entries fall off the per-user lists.
+
 Ambassadors may submit governance proposals and vote yes or no on active items. Newly submitted proposals remain pending until an administrator approves them in the admin panel, where a funding wallet address can optionally be added. Verified proposals list the original submitter’s wallet as the founder.
 
 ## Requirements
