@@ -587,6 +587,44 @@ async def _record_transfer(
         await pipe.execute()
 
 
+async def _zero_transfer_history() -> None:
+    """Preserve transfer entries but zero any recorded amounts/balances.
+
+    The real source of truth for points remains the ``score_pad`` hash, so
+    zeroing the ledger does *not* undo past transfers or restore balances.
+    Admins sometimes want to clear sensitive totals without erasing who
+    interacted with whom, so this helper rewrites each transfer list while
+    keeping metadata intact and setting the displayed amounts to ``0``.
+    """
+    async for key in redis_client.scan_iter("transfers:*"):
+        entries = await redis_client.lrange(key, 0, -1)
+        if not entries:
+            continue
+        updated: list[str] = []
+        for raw in entries:
+            try:
+                entry = json.loads(raw)
+            except Exception:
+                updated.append(raw)
+                continue
+            entry["amount"] = 0.0
+            if key != TRANSFER_GLOBAL_LOG_KEY and "balance_after" in entry:
+                entry["balance_after"] = 0.0
+            updated.append(json.dumps(entry))
+        pipe = redis_client.pipeline()
+        pipe.delete(key)
+        if updated:
+            pipe.rpush(key, *updated)
+        await pipe.execute()
+
+
+async def _delete_transfer_history() -> None:
+    """Remove all transfer history keys and their stored entries entirely."""
+    keys = [key async for key in redis_client.scan_iter("transfers:*")]
+    if keys:
+        await redis_client.delete(*keys)
+
+
 async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
     raw = await redis_client.get(CACHE_KEY)
     if force_refresh or raw is None:
@@ -1855,6 +1893,32 @@ async def admin_activity_reset(request: Request, ghost: str = Form("")) -> Redir
     if pipe.command_stack:
         await pipe.execute()
 
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/transfers/reset")
+async def admin_transfers_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    await _zero_transfer_history()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/transfers/delete")
+async def admin_transfers_delete(request: Request, ghost: str = Form("")) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin", status_code=303)
+
+    await _delete_transfer_history()
     return RedirectResponse("/admin", status_code=303)
 
 
