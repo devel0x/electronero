@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from typing import Dict, Optional, Set
+from urllib.parse import urlparse
 
 import httpx
 from telegram import Update, User
@@ -139,6 +140,48 @@ async def received_reg_password(
     context.user_data["reg_password"] = password
     await update.message.reply_text("Please enter your wallet address:")
     return WAITING_REG_WALLET
+
+
+async def _validate_submission_url(url: str) -> tuple[bool, str]:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False, "Please provide a valid http(s) link."
+
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            try:
+                head_resp = await client.head(url)
+                # Some servers reject HEAD while GET works; try GET in that case.
+                if head_resp.status_code == 405:
+                    raise httpx.HTTPStatusError(
+                        "Method Not Allowed",
+                        request=head_resp.request,
+                        response=head_resp,
+                    )
+                head_resp.raise_for_status()
+                return True, ""
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 405:
+                    try:
+                        get_resp = await client.get(url)
+                        get_resp.raise_for_status()
+                        return True, ""
+                    except httpx.HTTPStatusError as get_exc:
+                        return (
+                            False,
+                            f"Server returned status {get_exc.response.status_code} for that link.",
+                        )
+                    except httpx.RequestError:
+                        return False, "I couldn't reach that link. Please double-check the URL."
+                return (
+                    False,
+                    f"Server returned status {exc.response.status_code} for that link.",
+                )
+    except httpx.RequestError:
+        return False, "I couldn't reach that link. Please double-check the URL."
+
+    return True, ""
 
 def _normalize_telegram(username: str) -> str:
     username = (username or "").strip()
@@ -454,6 +497,10 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     email = context.user_data.get("email")
     if not url:
         await update.message.reply_text("Provide a valid URL.")
+        return
+    ok, error_message = await _validate_submission_url(url)
+    if not ok:
+        await update.message.reply_text(f"❌ {error_message}")
         return
     pending = await redis_client.lrange(f"posts:{email}", 0, -1)
     verified = await redis_client.smembers(f"posts_verified:{email}")
