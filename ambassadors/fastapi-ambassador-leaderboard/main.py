@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import quote_plus
+import requests
+
 
 import pandas as pd
 import httpx
@@ -33,6 +35,7 @@ SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
+EXPLORER_URL = "https://explorer.interchained.org/api"
 
 # Task definitions for the checklist panel
 TASK_LIST = [
@@ -545,45 +548,71 @@ def _daemon_ready() -> bool:
         print(f"[daemon_ready] {e}")
         return False
 
+# def _get_pool_balance() -> float:
+#     addr = AMBASSADOR_POOL_ADDRESS
+#     if not addr:
+#         return 250.0
+#     if not _daemon_ready():
+#         return 250.0
+#     try:
+#         cp = _run_cli("scantxoutset", "start", f'["addr({addr})"]')
+#         data = json.loads(cp.stdout)
+#         if data.get("success"):
+#             base_amount = float(data.get("total_amount", 0.0))
+#             ops_amount = base_amount * 3000 / 10000
+#             operations_reserve = 300
+#             true_amount = base_amount - ops_amount - operations_reserve
+#             return true_amount
+#     except subprocess.CalledProcessError as e:
+#         print(f"[pool_balance] scantxoutset failed: {e.stderr.strip()}")
+#     except Exception as e:
+#         print(f"[pool_balance] scantxoutset error: {e}")
+#     if RPC_WALLET:
+#         try:
+#             cp = _run_cli(f"-rpcwallet={RPC_WALLET}", "getbalance")
+#             base_amount = float(cp.stdout.strip())
+#             ops_amount = base_amount * 3000 / 10000
+#             operations_reserve = 300
+#             true_amount = base_amount - ops_amount - operations_reserve
+#             return true_amount
+#         except Exception as e:
+#             print(f"[pool_balance] getbalance (wallet) error: {e}")
+#     try:
+#         cp = _run_cli("getreceivedbyaddress", addr, "0")
+#         base_amount = float(cp.stdout.strip())
+#         ops_amount = base_amount * 3000 / 10000
+#         operations_reserve = 300
+#         true_amount = base_amount - ops_amount - operations_reserve
+#         return true_amount
+#     except Exception as e:
+#         print(f"[pool_balance] getreceivedbyaddress error: {e}")
+#     return 250.0
+
 def _get_pool_balance() -> float:
     addr = AMBASSADOR_POOL_ADDRESS
     if not addr:
         return 250.0
-    if not _daemon_ready():
-        return 250.0
+
     try:
-        cp = _run_cli("scantxoutset", "start", f'["addr({addr})"]')
-        data = json.loads(cp.stdout)
-        if data.get("success"):
-            base_amount = float(data.get("total_amount", 0.0))
-            ops_amount = base_amount * 3000 / 10000
-            operations_reserve = 300
-            true_amount = base_amount - ops_amount - operations_reserve
-            return true_amount
-    except subprocess.CalledProcessError as e:
-        print(f"[pool_balance] scantxoutset failed: {e.stderr.strip()}")
-    except Exception as e:
-        print(f"[pool_balance] scantxoutset error: {e}")
-    if RPC_WALLET:
-        try:
-            cp = _run_cli(f"-rpcwallet={RPC_WALLET}", "getbalance")
-            base_amount = float(cp.stdout.strip())
-            ops_amount = base_amount * 3000 / 10000
-            operations_reserve = 300
-            true_amount = base_amount - ops_amount - operations_reserve
-            return true_amount
-        except Exception as e:
-            print(f"[pool_balance] getbalance (wallet) error: {e}")
-    try:
-        cp = _run_cli("getreceivedbyaddress", addr, "0")
-        base_amount = float(cp.stdout.strip())
-        ops_amount = base_amount * 3000 / 10000
-        operations_reserve = 300
+        # ✅ Pull live chain data from explorer
+        r = requests.get(f"{EXPLORER_URL}/address/{addr}")
+        r.raise_for_status()
+        data = r.json()
+
+        funded = float(data.get("chain_stats", {}).get("funded_txo_sum", 0)) / 1e8
+        spent = float(data.get("chain_stats", {}).get("spent_txo_sum", 0)) / 1e8
+        base_amount = funded - spent
+
+        # ✅ Apply your governance math (same logic as before)
+        ops_amount = base_amount * 9000 / 10000
+        operations_reserve = 6030
         true_amount = base_amount - ops_amount - operations_reserve
-        return true_amount
+
+        return max(true_amount / 2, 0.0)
     except Exception as e:
-        print(f"[pool_balance] getreceivedbyaddress error: {e}")
-    return 250.0
+        print(f"[pool_balance] explorer API error: {e}")
+        return 250.0
+
 
 async def _load_csv() -> Dict[str, Any]:
     path = SHEET_CSV_URL or CSV_PATH
