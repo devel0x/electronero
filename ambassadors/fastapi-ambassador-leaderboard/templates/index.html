@@ -67,6 +67,39 @@
           -webkit-backdrop-filter: blur(8px);
           box-shadow: 0 20px 50px rgba(0,0,0,.35);
         }
+        .hero-card{
+          position:relative;
+          overflow:hidden;
+          border-radius:1.25rem;
+          background:linear-gradient(135deg, rgba(74,163,255,.25), rgba(255,59,78,.25));
+          border:1px solid rgba(255,255,255,0.12);
+          box-shadow:0 25px 60px rgba(0,0,0,.45);
+        }
+        .hero-card::before{
+          content:"";
+          position:absolute;
+          inset:0;
+          background:linear-gradient(120deg, rgba(255,209,102,.35), transparent 55%);
+          opacity:.85;
+          pointer-events:none;
+        }
+        .hero-content{
+          position:relative;
+          z-index:1;
+        }
+        .hero-title{
+          font-size:clamp(1.75rem, 2.5vw, 2.5rem);
+          font-weight:700;
+        }
+        .hero-metric{
+          font-size:clamp(1.2rem, 2vw, 1.6rem);
+          font-weight:600;
+          color:#fffbe6;
+        }
+        .hero-meta{
+          font-size:0.95rem;
+          opacity:0.9;
+        }
         .navbar{
           backdrop-filter: blur(6px);
           -webkit-backdrop-filter: blur(6px);
@@ -130,6 +163,21 @@
 </nav>
 
 <div class="container py-4">
+  <section class="hero-card mb-4">
+    <div class="hero-content p-4">
+      <div class="d-flex flex-column flex-lg-row align-items-lg-end align-items-start gap-3">
+        <div>
+          <div class="text-uppercase small text-muted fw-semibold">Ambassador Exchange Rate</div>
+          <div class="hero-title">1 IGP &asymp; <span id="igp-to-itc">{{ '%.8f'|format(igp_to_itc) }}</span> ITC</div>
+          <div class="hero-metric">1 ITC &asymp; <span id="itc-to-igp">{{ '%.8f'|format(itc_to_igp) }}</span> IGP</div>
+        </div>
+        <div class="hero-meta">
+          <div>Total Ambassador Points: <span id="total-points">{{ '{:,.2f}'.format(total_points) }}</span> IGP</div>
+          <div>Reward Pool Balance: <span id="hero-pool-balance">{{ '%.8f'|format(pool_balance) }}</span> ITC</div>
+        </div>
+      </div>
+    </div>
+  </section>
   <div class="glass-card p-3">
     <h1 class="h3 mb-3">{{ project_name }}</h1>
     <div class="d-flex flex-wrap gap-2 mb-3">
@@ -206,6 +254,18 @@ let autoRefresh = Math.max(ttl, 8) * 1000;
 const columns = {{ columns|tojson }};
 
 // --- helpers ---
+function formatNumber(value, decimals = 2, useGrouping = true) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) {
+    return (0).toFixed(decimals);
+  }
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping,
+  });
+}
+
 function cleanHandle(v) {
   return (v ?? '').toString().trim().replace(/^@/, '');
 }
@@ -239,6 +299,25 @@ function tierBadgeEl(t) {
   else if (l === 'bronze') { span.className = 'badge bg-bronze'; span.textContent = 'Bronze'; }
   else { span.className = 'badge bg-light text-dark'; span.textContent = v; }
   return span;
+}
+
+function updateHero(data) {
+  const igpToItcEl = document.getElementById('igp-to-itc');
+  if (igpToItcEl) {
+    igpToItcEl.textContent = formatNumber(data.igp_to_itc ?? 0, 8, false);
+  }
+  const itcToIgpEl = document.getElementById('itc-to-igp');
+  if (itcToIgpEl) {
+    itcToIgpEl.textContent = formatNumber(data.itc_to_igp ?? 0, 8, false);
+  }
+  const totalPointsEl = document.getElementById('total-points');
+  if (totalPointsEl) {
+    totalPointsEl.textContent = formatNumber(data.total_points ?? 0, 2, true);
+  }
+  const heroPoolEl = document.getElementById('hero-pool-balance');
+  if (heroPoolEl) {
+    heroPoolEl.textContent = formatNumber(data.pool_balance ?? 0, 8, false);
+  }
 }
 
 // --- render ---
@@ -317,8 +396,14 @@ async function refreshData(force=false){
   const data = await resp.json();
   if(data.ok){
     renderRows(data.rows);
-    document.getElementById('last-updated').innerText = new Date(data.cached_at).toISOString();
-    document.getElementById('pool-balance').innerText = Number(data.pool_balance).toFixed(8);
+    if (data.cached_at) {
+      document.getElementById('last-updated').innerText = new Date(data.cached_at).toISOString();
+    }
+    const poolEl = document.getElementById('pool-balance');
+    if (poolEl) {
+      poolEl.innerText = formatNumber(data.pool_balance ?? 0, 8, false);
+    }
+    updateHero(data);
   }
 }
 document.getElementById('refresh-btn').addEventListener('click', () => refreshData(true));
