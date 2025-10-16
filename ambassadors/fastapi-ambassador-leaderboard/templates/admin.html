@@ -198,98 +198,83 @@
             </div>
         </div>
     </div>
+    {% set pending_list = pending_referrals | selectattr("status", "equalto", "pending") | list %}
+    {% set rejected_list = pending_referrals | selectattr("status", "equalto", "rejected") | list %}
     <div id="referrals" class="glass-card p-3 mb-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
             <div>
                 <h1 class="h5 text-uppercase mb-1">Referral Approvals</h1>
                 <p class="mb-0 text-light small">
                     Review ambassadors who joined with a referral code. Approvals grant dashboard access and add
-                    them to the leaderboard. Rejections remove the application entirely.
+                    them to the leaderboard. Rejections mark them as rejected but preserve their record for auditing.
                 </p>
             </div>
-            <span class="badge {% if pending_referrals %}bg-info text-dark{% else %}bg-secondary{% endif %}">
-                {{ pending_referrals|length }} pending
-            </span>
+            <div>
+                <span class="badge bg-info text-dark">{{ pending_list|length }} pending</span>
+                <span class="badge bg-danger">{{ rejected_list|length }} rejected</span>
+            </div>
         </div>
+    
         {% if pending_referrals %}
-        <form id="referral-bulk-form" method="post"></form>
-        <div class="table-responsive">
-            <table class="table table-dark table-striped align-middle mb-0">
-                <thead class="table-light text-dark">
-                    <tr>
-                        <th scope="col" style="width:2.5rem;">
-                            <input class="form-check-input" type="checkbox" id="referral-select-all">
-                        </th>
-                        <th scope="col">Email &amp; Wallet</th>
-                        <th scope="col">Contact</th>
-                        <th scope="col">Referrer</th>
-                        <th scope="col">Joined</th>
-                        <th scope="col">Status</th>
-                        <th scope="col" class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in pending_referrals %}
-                    <tr>
-                        <td>
-                            <input class="form-check-input referral-select" type="checkbox" name="emails" value="{{ item.email }}" form="referral-bulk-form">
-                        </td>
-                        <td>
-                            <div class="fw-semibold">{{ item.email }}</div>
-                            <div class="small text-muted">{{ item.wallet or 'No wallet submitted' }}</div>
-                        </td>
-                        <td>
-                            {% if item.telegram %}
-                                {% set handle = item.telegram.lstrip('@') %}
-                                <div><a href="https://t.me/{{ handle }}" target="_blank">{{ item.telegram }}</a></div>
-                            {% else %}
-                                <div class="text-muted">Telegram: —</div>
-                            {% endif %}
-                            {% if item.twitter %}
-                                <div class="small text-muted">X: {{ item.twitter }}</div>
-                            {% endif %}
-                            {% if item.discord %}
-                                <div class="small text-muted">Discord: {{ item.discord }}</div>
-                            {% endif %}
-                            <div class="small {{ 'text-success' if item.email_opt_in else 'text-muted' }}">
-                                {% if item.email_opt_in %}Email opt-in{% else %}No email opt-in{% endif %}
-                            </div>
-                        </td>
-                        <td>
-                            {% if item.referred_by_label %}
-                                {{ item.referred_by_label }}
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ item.joined_at_display or '—' }}</td>
-                        <td>
-                            {% if item.status == 'approved' %}
-                                <span class="badge bg-success">Approved</span>
-                            {% elif item.status == 'rejected' %}
-                                <span class="badge bg-danger">Rejected</span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark">Pending</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">
-                            <form method="post" action="/admin/referrals/approve" class="d-inline">
-                                <input type="hidden" name="email" value="{{ item.email }}">
-                                <button type="submit" class="btn btn-sm btn-success">Approve</button>
-                            </form>
-                            <form method="post" action="/admin/referrals/reject" class="d-inline ms-2">
-                                <input type="hidden" name="email" value="{{ item.email }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div class="d-flex flex-wrap gap-2 justify-content-end mt-3">
-            <button type="submit" class="btn btn-success btn-sm referral-bulk-action" form="referral-bulk-form" formaction="/admin/referrals/approve" disabled>Approve Selected</button>
-            <button type="submit" class="btn btn-outline-danger btn-sm referral-bulk-action" form="referral-bulk-form" formaction="/admin/referrals/reject" disabled>Reject Selected</button>
+        <ul class="nav nav-tabs mb-3" id="referralTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button" role="tab">
+                    Pending ({{ pending_list|length }})
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="rejected-tab" data-bs-toggle="tab" data-bs-target="#rejected" type="button" role="tab">
+                    Rejected ({{ rejected_list|length }})
+                </button>
+            </li>
+        </ul>
+    
+        <div class="tab-content">
+            <!-- ✅ Pending Table -->
+            <div class="tab-pane fade show active" id="pending" role="tabpanel">
+                {% include "partials/referral_table.html" with context %}
+            </div>
+    
+            <!-- ✅ Rejected Table -->
+            <div class="tab-pane fade" id="rejected" role="tabpanel">
+                {% if rejected_list %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped align-middle mb-0">
+                        <thead class="table-light text-dark">
+                            <tr>
+                                <th>Email & Wallet</th>
+                                <th>Contact</th>
+                                <th>Referrer</th>
+                                <th>Joined</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in rejected_list %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ item.email }}</div>
+                                    <div class="small text-muted">{{ item.wallet or 'No wallet submitted' }}</div>
+                                </td>
+                                <td>
+                                    {% if item.telegram %}
+                                        <a href="https://t.me/{{ item.telegram.lstrip('@') }}" target="_blank">{{ item.telegram }}</a>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.referred_by_label or '—' }}</td>
+                                <td>{{ item.joined_at_display or '—' }}</td>
+                                <td><span class="badge bg-danger">Rejected</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No rejected referrals.</p>
+                {% endif %}
+            </div>
         </div>
         {% else %}
         <p class="mb-0 text-muted">No referrals are awaiting review. New submissions will appear here automatically.</p>
