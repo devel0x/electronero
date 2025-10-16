@@ -370,9 +370,13 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
     now = datetime.utcnow()
     week_start = _monday_start(now)
     week_end = week_start + timedelta(days=7)
-    payout_week_start = week_end
-    payout_week_end = payout_week_start + timedelta(days=7)
+    
+    # ✅ Unstake eligibility is 7 days after staking
     ends_at = now + timedelta(days=STAKE_DURATION_DAYS)
+    
+    # ✅ Find the next Monday AFTER ends_at for payout start
+    payout_week_start = _monday_start(ends_at + timedelta(days=1))
+    payout_week_end = payout_week_start + timedelta(days=7)
     mapping: dict[str, Any] = {
         "email": email_norm,
         "amount": f"{amount:.8f}",
