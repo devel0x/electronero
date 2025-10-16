@@ -318,17 +318,13 @@ def _stake_view(stake: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         view["amount_display"] = f"{stake.get('amount', 0.0)}"
     if view["payout_start_display"] and view["payout_end_display"]:
-        view["payout_window_display"] = (
-            f"{view['payout_start_display']} – {view['payout_end_display']}"
-        )
+        view["payout_window_display"] = f"{view['payout_start_display']} – {view['payout_end_display']}"
     else:
         view["payout_window_display"] = view.get("payout_start_display", "")
     return view
 
 
-async def _stake_balances(
-    email: str, profile: dict[str, Any] | None = None
-) -> dict[str, float]:
+async def _stake_balances(email: str, profile: dict[str, Any] | None = None) -> dict[str, float]:
     email_norm = _normalize_email(email)
     if not email_norm:
         return {"total": 0.0, "available": 0.0, "staked": 0.0, "scorepad": 0.0}
@@ -356,9 +352,7 @@ async def _stake_balances(
     }
 
 
-async def _create_stake(
-    email: str, amount: float, created_by: str = "user"
-) -> tuple[bool, str | None]:
+async def _create_stake(email: str, amount: float, created_by: str = "user") -> tuple[bool, str | None]:
     email_norm = _normalize_email(email)
     if not email_norm:
         return False, "Invalid email provided."
@@ -399,16 +393,9 @@ async def _create_stake(
     pipe.hset(_stake_key(email_norm), mapping=mapping)
     pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
     if amount:
-    # Deduct from leaderboard score pad (current branch logic)
-    pipe.hincrbyfloat("score_pad", email_norm, -amount)
-    
-    # Update reserved stake (incoming #548 logic)
-    pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
-    
-    # Execute all Redis operations in a single pipeline
-    await pipe.execute()
-    
-    # Refresh CSV cache / leaderboard (current branch)
+        pipe.hincrbyfloat("score_pad", email_norm, -amount)
+        pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
+        await pipe.execute()
     try:
         await _load_csv()
     except Exception as exc:
@@ -493,6 +480,7 @@ async def _activity_window_bounds(now: datetime | None = None) -> tuple[float, f
         except ValueError:
             pass
     return week_start.timestamp(), week_end.timestamp()
+
 
 async def _maintenance_guard(request: Request):
     if await _maintenance_enabled():
