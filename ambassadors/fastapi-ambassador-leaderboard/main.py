@@ -367,6 +367,10 @@ async def _create_stake(
     existing = await _get_stake(email_norm)
     if existing:
         return False, "An active stake already exists."
+    balances = await _stake_balances(email_norm)
+    available = balances.get("available", 0.0)
+    if amount > available + 1e-9:
+        return False, "Insufficient points available to stake that amount."
     now = datetime.utcnow()
     week_start = _monday_start(now)
     week_end = week_start + timedelta(days=7)
@@ -394,8 +398,21 @@ async def _create_stake(
     pipe = redis_client.pipeline()
     pipe.hset(_stake_key(email_norm), mapping=mapping)
     pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
+    if amount:
+    # Deduct from leaderboard score pad (current branch logic)
+    pipe.hincrbyfloat("score_pad", email_norm, -amount)
+    
+    # Update reserved stake (incoming #548 logic)
     pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
+    
+    # Execute all Redis operations in a single pipeline
     await pipe.execute()
+    
+    # Refresh CSV cache / leaderboard (current branch)
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[staking] failed to refresh leaderboard cache after stake: {exc}")
     return True, None
 
 
@@ -408,12 +425,18 @@ async def _release_stake(email: str) -> tuple[bool, str | None]:
         return False, "No active stake found."
     amount = float(stake.get("amount", 0.0) or 0.0)
     pipe = redis_client.pipeline()
+    if amount:
+        pipe.hincrbyfloat("score_pad", email_norm, amount)
     pipe.delete(_stake_key(email_norm))
     pipe.srem(STAKE_ACTIVE_SET_KEY, email_norm)
     if amount:
         pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, -amount)
     await pipe.execute()
     await _cleanup_stake_reserve(email_norm)
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[staking] failed to refresh leaderboard cache after release: {exc}")
     return True, None
 
 
