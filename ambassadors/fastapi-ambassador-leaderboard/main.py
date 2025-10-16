@@ -1630,19 +1630,27 @@ async def _ensure_existing_ambassadors_pending() -> None:
         
 
 async def _pending_referrals() -> list[dict[str, Any]]:
+    """Return all pending and rejected referrals (exclude only approved)."""
     pending: list[dict[str, Any]] = []
+
     async for key in redis_client.scan_iter("user:*"):
         email = key.split(":", 1)[1].strip().lower()
         data = await redis_client.hgetall(key)
         if not data:
             continue
+
+        # ✅ Skip approved users
         if str(data.get("verified", "0")) == "1":
             continue
+
+        # 👇 Determine status from user hash or referral payload
+        status = "pending"
+        if str(data.get("rejected", "0")) == "1":
+            status = "rejected"
 
         referred_by = str(data.get("referred_by", "")).strip().lower()
         created_at = str(data.get("created_at", ""))
         joined_at = str(data.get("referred_at", "")) or created_at
-        status = "pending"
         referral_payload: dict[str, Any] | None = None
 
         if referred_by:
@@ -1675,7 +1683,7 @@ async def _pending_referrals() -> list[dict[str, Any]]:
                 "discord": str(data.get("discord", "")),
                 "referred_by": referred_by,
                 "referred_by_label": ref_label,
-                "status": status or "pending",
+                "status": status,  # ✅ Now includes "pending" or "rejected"
                 "created_at": created_at,
                 "joined_at": joined_at,
                 "joined_at_display": _format_timestamp(joined_at),
@@ -1683,7 +1691,11 @@ async def _pending_referrals() -> list[dict[str, Any]]:
             }
         )
 
-    pending.sort(key=lambda item: item.get("joined_at", ""), reverse=True)
+    # ✅ Sort with rejected at the bottom
+    pending.sort(
+        key=lambda item: (item.get("status") == "rejected", item.get("joined_at", "")),
+        reverse=True,
+    )
     return pending
 
 
