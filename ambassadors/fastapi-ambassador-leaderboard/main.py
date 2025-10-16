@@ -61,7 +61,7 @@ REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv")
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
-
+MAX_STAKE = 10000.0
 
 EXPECTED_COLUMNS = [
     "name",
@@ -363,6 +363,8 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
         return False, "An active stake already exists."
     balances = await _stake_balances(email_norm)
     available = balances.get("available", 0.0)
+    if amount > MAX_STAKE:
+        return False, f"Stake amount exceeds the maximum allowed of {MAX_STAKE} IGP."
     if amount > available + 1e-9:
         return False, "Insufficient points available to stake that amount."
     now = datetime.utcnow()
