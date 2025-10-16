@@ -16,6 +16,14 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 0.75rem;
         }
+        .gamefi-wheel-preview {
+            width: min(220px, 75%);
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            border: 6px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+            background: radial-gradient(circle at center, rgba(255,255,255,0.15), rgba(0,0,0,0.8));
+        }
     </style>
 </head>
 <body>
@@ -35,6 +43,7 @@
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
                 <li class="nav-item"><a class="nav-link" href="#stakes">Stakes</a></li>
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
+                <li class="nav-item"><a class="nav-link" href="#gamefi">GameFi</a></li>
                 <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
@@ -679,6 +688,186 @@
         {% if not proposals %}
         <p class="text-muted">No proposals</p>
         {% endif %}
+    </div>
+    <div id="gamefi" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">GameFi – Wheel of Fortune</h1>
+                <p class="mb-0 text-light small">Configure the Wheel of Fortune entry fee, manage reward odds, and monitor recent spins.</p>
+            </div>
+            <div class="text-end small text-light">
+                <div>Entry Fee: <span class="fw-semibold">{{ '%.2f'|format(gamefi_config.entry_fee or 0) }}</span> IGP</div>
+                <div>Reward Pool: <span class="fw-semibold">{{ '%.2f'|format(gamefi_config.pool_balance or 0) }}</span> IGP</div>
+                <div>Active Segments: <span class="fw-semibold">{{ gamefi_config.active_segments|length }}</span></div>
+            </div>
+        </div>
+        {% if gamefi_error %}
+        <div class="alert alert-danger" role="alert">{{ gamefi_error }}</div>
+        {% endif %}
+        {% if gamefi_message %}
+        <div class="alert alert-success" role="alert">{{ gamefi_message }}</div>
+        {% endif %}
+        <div class="row g-4 mt-1">
+            <div class="col-xl-4">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100 d-flex flex-column gap-3">
+                    <div>
+                        <h2 class="h6 text-uppercase mb-2">Entry Fee & Pool</h2>
+                        <form method="post" action="/admin/gamefi/config" class="vstack gap-3">
+                            <div>
+                                <label class="form-label small text-uppercase">Entry Fee (IGP)</label>
+                                <input type="number" step="0.01" min="0" name="entry_fee" class="form-control form-control-sm" value="{{ '%.2f'|format(gamefi_config.entry_fee or 0) }}">
+                            </div>
+                            <div>
+                                <label class="form-label small text-uppercase">Set Pool Balance</label>
+                                <input type="number" step="0.01" min="0" name="pool_balance" class="form-control form-control-sm" placeholder="Leave blank to keep current">
+                            </div>
+                            <div>
+                                <label class="form-label small text-uppercase">Top Up Pool (+)</label>
+                                <input type="number" step="0.01" min="0" name="pool_top_up" class="form-control form-control-sm" placeholder="Add IGP to pool">
+                            </div>
+                            <button class="btn btn-primary btn-sm" type="submit">Save Settings</button>
+                            <p class="small text-muted mb-0">Entry fees are deducted from the ambassador scorepad and added to the reward pool. Positive top-ups increase the pool without charging players.</p>
+                        </form>
+                    </div>
+                    <div class="text-center mt-auto">
+                        <div class="gamefi-wheel-preview mx-auto" style="background: {{ gamefi_gradient }};"></div>
+                        <p class="small text-muted mt-2 mb-0">Preview uses active segments to render the wheel gradient.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-8">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h6 text-uppercase mb-0">Wheel Segments</h2>
+                        <span class="badge bg-light text-dark">{{ gamefi_segments|length }} total</span>
+                    </div>
+                    {% for segment in gamefi_segments %}
+                    <form method="post" action="/admin/gamefi/segment" class="p-3 mb-3 rounded border {{ 'border-success' if segment.active else 'border-secondary' }} bg-black bg-opacity-50">
+                        <input type="hidden" name="segment_id" value="{{ segment.id }}">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small text-uppercase">Label</label>
+                                <input type="text" name="label" class="form-control form-control-sm" value="{{ segment.label }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Type</label>
+                                <select name="segment_type" class="form-select form-select-sm">
+                                    {% for key, label in gamefi_types.items() %}
+                                    <option value="{{ key }}" {% if key == segment.type %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Value</label>
+                                <input type="number" step="0.01" name="value" class="form-control form-control-sm" value="{{ '%.2f'|format(segment.value or 0) }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Weight</label>
+                                <input type="number" min="0" name="weight" class="form-control form-control-sm" value="{{ segment.weight }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase d-block">Color</label>
+                                <input type="color" name="color" class="form-control form-control-color form-control-sm" value="{{ segment.color }}">
+                            </div>
+                            <div class="col-md-1">
+                                <label class="form-label small text-uppercase d-block">Active</label>
+                                <input type="hidden" name="active" value="0">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="active" value="1" id="segment-active-{{ segment.id }}" {% if segment.active %}checked{% endif %}>
+                                    <label class="form-check-label small" for="segment-active-{{ segment.id }}">On</label>
+                                </div>
+                            </div>
+                            <div class="col-12 d-flex flex-wrap align-items-center gap-2 mt-2">
+                                <span class="badge rounded-pill border border-light" style="background: {{ segment.color }};">&nbsp;&nbsp;&nbsp;</span>
+                                <span class="small text-light">{{ segment.display_value }} • {{ segment.probability_label }}</span>
+                                <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                                <button class="btn btn-sm btn-outline-danger" type="submit" formaction="/admin/gamefi/segment/delete" formmethod="post" formnovalidate onclick="return confirm('Remove this segment?');">Delete</button>
+                            </div>
+                        </div>
+                    </form>
+                    {% endfor %}
+                    <div class="border-top border-secondary pt-3 mt-4">
+                        <h3 class="h6 text-uppercase">Add Segment</h3>
+                        <form method="post" action="/admin/gamefi/segment" class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small text-uppercase">Label</label>
+                                <input type="text" name="label" class="form-control form-control-sm" placeholder="Lucky Bonus" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Type</label>
+                                <select name="segment_type" class="form-select form-select-sm">
+                                    {% for key, label in gamefi_types.items() %}
+                                    <option value="{{ key }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Value</label>
+                                <input type="number" step="0.01" name="value" class="form-control form-control-sm" placeholder="500" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Weight</label>
+                                <input type="number" min="0" name="weight" class="form-control form-control-sm" placeholder="2" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase d-block">Color</label>
+                                <input type="color" name="color" class="form-control form-control-color form-control-sm" value="#4aa3ff">
+                            </div>
+                            <div class="col-md-1">
+                                <label class="form-label small text-uppercase d-block">Active</label>
+                                <input type="hidden" name="active" value="0">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="active" value="1" id="segment-active-new" checked>
+                                    <label class="form-check-label small" for="segment-active-new">On</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-success" type="submit">Add Segment</button>
+                                <p class="small text-muted mb-0 mt-2">Flat segments add a fixed amount, multipliers award entry fee × value, <em>Try Again</em> refunds the entry, and <em>No Win</em> keeps the fee in the pool.</p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bg-dark bg-opacity-50 border border-light rounded p-3 mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h6 text-uppercase mb-0">Recent Spins</h2>
+                <span class="badge bg-secondary">{{ gamefi_history|length }} logged</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-sm align-middle mb-0">
+                    <thead class="table-light text-dark">
+                        <tr>
+                            <th scope="col">Time</th>
+                            <th scope="col">Player</th>
+                            <th scope="col">Segment</th>
+                            <th scope="col" class="text-end">Entry</th>
+                            <th scope="col" class="text-end">Payout</th>
+                            <th scope="col" class="text-end">Pool After</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in gamefi_history %}
+                        <tr>
+                            <td class="small">{{ entry.timestamp_display or entry.timestamp }}</td>
+                            <td class="small">{{ entry.email or '—' }}</td>
+                            <td class="small">
+                                <span class="fw-semibold">{{ entry.segment_label or '—' }}</span>
+                                <span class="badge bg-secondary ms-1">{{ gamefi_types.get(entry.segment_type, entry.segment_type or '—') }}</span>
+                            </td>
+                            <td class="text-end small">{{ '%.2f'|format(entry.entry_fee or 0) }}</td>
+                            <td class="text-end small">{{ '%.2f'|format(entry.payout or 0) }}</td>
+                            <td class="text-end small">{{ '%.2f'|format(entry.pool_after or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if not gamefi_history %}
+            <p class="small text-muted mb-0 mt-2">No spins recorded yet.</p>
+            {% endif %}
+        </div>
     </div>
     <div id="p2p" class="glass-card p-3 mt-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
