@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wheel of Fortune</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+  <style>
+    :root { --bg1:#1e1e2f; --bg2:#141414; }
+    body {
+      min-height:100vh;
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));
+      color:#f5f5f5;
+      overflow-x:hidden;
+    }
+    .fx-wrap{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+    .fx-stars{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+        radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+      mix-blend-mode:screen; opacity:.35; filter: blur(.2px);
+    }
+    .fx-grid{
+      position:absolute; inset:-20% -20% -20% -20%;
+      background:
+        repeating-linear-gradient(to right, rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+      transform:rotate(1deg); opacity:.3; filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+    }
+    .fx-bloom{ position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter: blur(60px); opacity:.28; mix-blend-mode:screen; transform: translate(-50%,-50%); }
+    .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:20%; top:25%; }
+    .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:80%; top:35%; }
+    .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:55%; top:80%; }
+    .glass-card{
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:1rem;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .navbar{ backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); }
+    .gamefi-wheel-wrapper{ position:relative; display:flex; justify-content:center; align-items:center; }
+    .gamefi-wheel{
+      width:min(320px, 70vw);
+      aspect-ratio:1 / 1;
+      border-radius:50%;
+      border:8px solid rgba(255,255,255,0.12);
+      box-shadow:0 30px 60px rgba(0,0,0,0.55);
+      transition: transform 4s cubic-bezier(0.22, 1, 0.36, 1);
+      background: radial-gradient(circle at center, rgba(255,255,255,0.15), rgba(0,0,0,0.85));
+    }
+    .gamefi-pointer{
+      position:absolute;
+      top:-18px;
+      width:0; height:0;
+      border-left:16px solid transparent;
+      border-right:16px solid transparent;
+      border-bottom:26px solid #ffd166;
+      filter: drop-shadow(0 0 6px rgba(0,0,0,0.45));
+      z-index:5;
+    }
+    .gamefi-segments .list-group-item{
+      background:rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:0.75rem;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .gamefi-segments .list-group-item.active{
+      border-color:rgba(255,209,102,0.85);
+      box-shadow:0 12px 28px rgba(255,209,102,0.25);
+      background:rgba(255,209,102,0.08);
+    }
+    .stat-card{
+      background:rgba(0,0,0,0.45);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:0.75rem;
+      padding:1.1rem;
+      text-align:center;
+    }
+    .stat-card h2{ font-size:0.85rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,.75); }
+    .stat-card .value{ font-size:1.6rem; font-weight:700; }
+    @media (prefers-reduced-motion: reduce){
+      .fx-grid,.fx-bloom,.gamefi-wheel{ animation:none !important; transition:none !important; }
+    }
+    @media (max-width: 575.98px){
+      .navbar .btn,
+      .navbar .btn-sm{ font-size:0.75rem; padding:0.25rem 0.5rem; }
+      .gamefi-wheel{ width:min(260px, 85vw); }
+    }
+  </style>
+</head>
+<body>
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/staking" class="btn btn-sm btn-outline-light">Staking</a>
+      <a href="/transfers" class="btn btn-sm btn-outline-light">Transfers</a>
+      <a href="/gamefi" class="btn btn-sm btn-light text-dark">GameFi</a>
+      <a href="/p2p" class="btn btn-sm btn-outline-light">P2P Shop</a>
+      <a href="/referrals" class="btn btn-sm btn-outline-light">Referrals</a>
+      <a href="/wallet" class="btn btn-sm btn-outline-light">Wallet</a>
+      <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+      <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+      <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+      <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+<div class="container py-4">
+  <div class="glass-card p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+      <div>
+        <h1 class="h4 mb-1">Wheel of Fortune</h1>
+        <p class="mb-0 text-light small">Spend a little IGP, spin the wheel, and aim for the biggest rewards. Every entry feeds the prize pool.</p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <span class="badge text-bg-primary">Entry Fee <span id="entry-fee">{{ '%.2f'|format(entry_fee or 0) }}</span> IGP</span>
+        <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.2f'|format(pool_balance or 0) }}</span> IGP</span>
+        <span class="badge text-bg-secondary">Segments {{ segments|length }}</span>
+      </div>
+    </div>
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success" role="alert">{{ success }}</div>
+    {% endif %}
+    <div class="row g-4 align-items-start">
+      <div class="col-lg-5">
+        <div class="gamefi-wheel-wrapper">
+          <div class="gamefi-pointer"></div>
+          <div id="gamefiWheel" class="gamefi-wheel" style="background: {{ wheel_gradient|safe }};"></div>
+        </div>
+        <button id="spinButton" class="btn btn-primary btn-lg w-100 mt-4" {% if not segments %}disabled{% endif %}>
+          {% if (entry_fee or 0) <= 0 %}Spin for Free{% else %}Spin for {{ '%.2f'|format(entry_fee or 0) }} IGP{% endif %}
+        </button>
+        <div id="spinAlert" class="alert d-none mt-3" role="alert"></div>
+        <p class="small text-muted mt-3 mb-0">Each spin deducts the entry fee from your scorepad. Rewards credit instantly when the pool permits. Odds are weighted by the segment weights defined by admins.</p>
+      </div>
+      <div class="col-lg-7">
+        <div class="row g-3 mb-4">
+          <div class="col-sm-4">
+            <div class="stat-card">
+              <h2>Scorepad</h2>
+              <div id="scorepad-balance" class="value">{{ '%.2f'|format(scorepad_balance or 0) }}</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="stat-card">
+              <h2>Staked</h2>
+              <div class="value text-info">{{ '%.2f'|format(staked_amount or 0) }}</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="stat-card">
+              <h2>Total Points</h2>
+              <div class="value text-warning">{{ '%.2f'|format(total_points or 0) }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="gamefi-segments list-group list-group-flush">
+          {% for segment in segments %}
+          <div class="list-group-item d-flex justify-content-between align-items-center" data-segment-id="{{ segment.id }}" data-index="{{ loop.index0 }}">
+            <div class="d-flex align-items-center gap-3">
+              <span class="badge rounded-pill" style="background: {{ segment.color }}; width:18px; height:18px;">&nbsp;</span>
+              <div>
+                <div class="fw-semibold">{{ segment.label }}</div>
+                <div class="small text-muted">{{ segment.display_value }}</div>
+              </div>
+            </div>
+            <div class="text-end small">
+              <div class="fw-semibold">{{ segment.probability_label }}</div>
+              <div class="text-muted">{{ segment.type_label }}</div>
+            </div>
+          </div>
+          {% endfor %}
+          {% if not segments %}
+          <div class="list-group-item text-muted">Wheel is temporarily disabled. Check back soon.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const wheel = document.getElementById('gamefiWheel');
+  const spinButton = document.getElementById('spinButton');
+  const spinAlert = document.getElementById('spinAlert');
+  const scorepadLabel = document.getElementById('scorepad-balance');
+  const poolLabel = document.getElementById('pool-balance');
+  const entryFeeLabel = document.getElementById('entry-fee');
+  const segmentItems = document.querySelectorAll('.gamefi-segments [data-segment-id]');
+  const segments = {{ segments|tojson }};
+  let spinning = false;
+  let currentRotation = 0;
+
+  function setAlert(message, type) {
+    if (!spinAlert) return;
+    spinAlert.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning', 'alert-info');
+    spinAlert.classList.add('alert', `alert-${type}`);
+    spinAlert.textContent = message;
+  }
+
+  function clearActiveSegments() {
+    segmentItems.forEach(item => item.classList.remove('active'));
+  }
+
+  function highlightSegment(segmentId) {
+    clearActiveSegments();
+    const el = document.querySelector(`[data-segment-id="${segmentId}"]`);
+    if (el) {
+      el.classList.add('active');
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  function animateWheel(index) {
+    if (!wheel || segments.length === 0) return;
+    const segmentAngle = 360 / segments.length;
+    const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.6);
+    const spins = 5 + Math.floor(Math.random() * 3);
+    const targetRotation = spins * 360 - (index * segmentAngle + segmentAngle / 2) + randomOffset;
+    wheel.style.transition = 'none';
+    wheel.offsetWidth; // reflow
+    wheel.style.transition = 'transform 4s cubic-bezier(0.22, 1, 0.36, 1)';
+    wheel.style.transform = `rotate(${targetRotation}deg)`;
+    currentRotation = targetRotation % 360;
+  }
+
+  async function handleSpin() {
+    if (spinning || !spinButton) return;
+    spinning = true;
+    spinButton.disabled = true;
+    setAlert('Spinning the wheel...', 'info');
+    try {
+      const response = await fetch('/api/gamefi/spin', { method: 'POST' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message = payload.error === 'insufficient_balance'
+          ? 'You do not have enough IGP on your scorepad for this spin.'
+          : (payload.error === 'game_unavailable' ? 'The wheel is not available right now.' : 'Unable to process your spin.');
+        setAlert(message, 'danger');
+        return;
+      }
+      const payload = await response.json();
+      const segment = payload.segment || {};
+      if (typeof segment.index === 'number') {
+        animateWheel(segment.index);
+      }
+      if (segment.id) {
+        highlightSegment(segment.id);
+      }
+      if (typeof payload.balance === 'number' && scorepadLabel) {
+        scorepadLabel.textContent = payload.balance.toFixed(2);
+      }
+      if (typeof payload.pool_balance === 'number' && poolLabel) {
+        poolLabel.textContent = payload.pool_balance.toFixed(2);
+      }
+      if (typeof payload.entry_fee === 'number' && entryFeeLabel && spinButton) {
+        entryFeeLabel.textContent = payload.entry_fee.toFixed(2);
+        spinButton.textContent = payload.entry_fee <= 0 ? 'Spin for Free' : `Spin for ${payload.entry_fee.toFixed(2)} IGP`;
+      }
+      const message = payload.message || 'Spin complete.';
+      const alertType = payload.payout > 0 ? 'success' : (payload.segment && payload.segment.type === 'retry' ? 'info' : 'warning');
+      setAlert(message, alertType);
+    } catch (error) {
+      console.error('[gamefi] spin failed', error);
+      setAlert('Network issue prevented the spin. Please try again.', 'danger');
+    } finally {
+      spinning = false;
+      if (spinButton) {
+        spinButton.disabled = !segments.length;
+      }
+    }
+  }
+
+  if (spinButton) {
+    spinButton.addEventListener('click', handleSpin);
+  }
+</script>
+</body>
+</html>

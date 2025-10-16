@@ -370,6 +370,29 @@ P2P_HISTORY_LIMIT = int(os.getenv("P2P_HISTORY_LIMIT", "300"))
 P2P_USER_HISTORY_PREFIX = "p2p:history:user:"
 P2P_USER_HISTORY_LIMIT = int(os.getenv("P2P_USER_HISTORY_LIMIT", "100"))
 
+GAMEFI_CONFIG_HASH = "gamefi:config"
+GAMEFI_SEGMENTS_KEY = "gamefi:segments"
+GAMEFI_HISTORY_KEY = "gamefi:history"
+GAMEFI_HISTORY_LIMIT = int(os.getenv("GAMEFI_HISTORY_LIMIT", "200"))
+GAMEFI_DEFAULT_ENTRY_FEE = float(os.getenv("GAMEFI_ENTRY_FEE_DEFAULT", "100"))
+GAMEFI_DEFAULT_POOL = float(os.getenv("GAMEFI_POOL_DEFAULT", "10000"))
+GAMEFI_SEGMENT_TYPE_LABELS = {
+    "flat": "Flat Bonus",
+    "multiplier": "Multiplier",
+    "retry": "Try Again",
+    "lose": "No Win",
+}
+GAMEFI_DEFAULT_COLORS = [
+    "#ff3b4e",
+    "#ffd166",
+    "#4aa3ff",
+    "#9c27b0",
+    "#1f2937",
+    "#22c55e",
+    "#f97316",
+    "#6366f1",
+]
+
 
 def _monday_start(dt: datetime | None = None) -> datetime:
     dt = dt or datetime.utcnow()
@@ -1296,6 +1319,326 @@ async def _p2p_delete_prize(prize_id: str) -> None:
     pipe.delete(_p2p_prize_key(pid))
     pipe.zrem(P2P_PRIZE_INDEX_KEY, pid)
     await pipe.execute()
+
+
+def _gamefi_default_segments() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "double_up",
+            "label": "Double Up",
+            "type": "multiplier",
+            "value": 2.0,
+            "weight": 1,
+            "color": GAMEFI_DEFAULT_COLORS[0],
+            "active": True,
+        },
+        {
+            "id": "plus_500",
+            "label": "+500 IGP",
+            "type": "flat",
+            "value": 500.0,
+            "weight": 2,
+            "color": GAMEFI_DEFAULT_COLORS[1],
+            "active": True,
+        },
+        {
+            "id": "plus_250",
+            "label": "+250 IGP",
+            "type": "flat",
+            "value": 250.0,
+            "weight": 3,
+            "color": GAMEFI_DEFAULT_COLORS[2],
+            "active": True,
+        },
+        {
+            "id": "try_again",
+            "label": "Try Again",
+            "type": "retry",
+            "value": 0.0,
+            "weight": 2,
+            "color": GAMEFI_DEFAULT_COLORS[3],
+            "active": True,
+        },
+        {
+            "id": "no_win",
+            "label": "No Win",
+            "type": "lose",
+            "value": 0.0,
+            "weight": 3,
+            "color": GAMEFI_DEFAULT_COLORS[4],
+            "active": True,
+        },
+    ]
+
+
+def _gamefi_default_config() -> dict[str, Any]:
+    now_iso = datetime.utcnow().isoformat()
+    return {
+        "entry_fee": GAMEFI_DEFAULT_ENTRY_FEE,
+        "pool_balance": GAMEFI_DEFAULT_POOL,
+        "updated_at": now_iso,
+        "updated_by": "system",
+        "segments": _gamefi_default_segments(),
+    }
+
+
+def _gamefi_normalize_segment(segment: dict[str, Any], *, index: int = 0) -> dict[str, Any]:
+    seg_id = str(segment.get("id") or secrets.token_hex(6))
+    label = _safe_text(segment.get("label", "")) or f"Segment {index + 1}"
+    seg_type = str(segment.get("type") or "lose").strip().lower()
+    if seg_type not in GAMEFI_SEGMENT_TYPE_LABELS:
+        seg_type = "lose"
+    try:
+        value = float(segment.get("value", 0.0) or 0.0)
+    except Exception:
+        value = 0.0
+    try:
+        weight_raw = int(segment.get("weight", 0) or 0)
+    except Exception:
+        weight_raw = 0
+    weight = max(weight_raw, 0)
+    color_raw = str(segment.get("color") or "").strip()
+    color = color_raw or GAMEFI_DEFAULT_COLORS[index % len(GAMEFI_DEFAULT_COLORS)]
+    active_raw = segment.get("active", True)
+    if isinstance(active_raw, str):
+        active_flag = active_raw.strip().lower() not in {"0", "false", "no", "off"}
+    else:
+        active_flag = bool(active_raw)
+    return {
+        "id": seg_id,
+        "label": label,
+        "type": seg_type,
+        "value": value,
+        "weight": weight,
+        "color": color,
+        "active": active_flag,
+    }
+
+
+async def _gamefi_touch(updated_by: str) -> None:
+    await redis_client.hset(
+        GAMEFI_CONFIG_HASH,
+        mapping={
+            "updated_at": datetime.utcnow().isoformat(),
+            "updated_by": updated_by,
+        },
+    )
+
+
+async def _gamefi_update_config(
+    *, entry_fee: float | None = None, pool_balance: float | None = None, updated_by: str | None = None
+) -> None:
+    mapping: dict[str, Any] = {}
+    if entry_fee is not None:
+        mapping["entry_fee"] = f"{max(entry_fee, 0.0):.8f}"
+    if pool_balance is not None:
+        mapping["pool_balance"] = f"{max(pool_balance, 0.0):.8f}"
+    if mapping:
+        await redis_client.hset(GAMEFI_CONFIG_HASH, mapping=mapping)
+    if updated_by:
+        await _gamefi_touch(updated_by)
+
+
+async def _gamefi_save_segments(
+    segments: list[dict[str, Any]], *, updated_by: str | None = None
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for idx, segment in enumerate(segments):
+        normalized.append(_gamefi_normalize_segment(segment, index=idx))
+    await redis_client.set(GAMEFI_SEGMENTS_KEY, json.dumps(normalized))
+    if updated_by:
+        await _gamefi_touch(updated_by)
+    return normalized
+
+
+async def _gamefi_config(include_inactive: bool = True) -> dict[str, Any]:
+    raw_config = await redis_client.hgetall(GAMEFI_CONFIG_HASH)
+    segments_raw = await redis_client.get(GAMEFI_SEGMENTS_KEY)
+    if not raw_config or segments_raw is None:
+        defaults = _gamefi_default_config()
+        await redis_client.hset(
+            GAMEFI_CONFIG_HASH,
+            mapping={
+                "entry_fee": f"{defaults['entry_fee']:.8f}",
+                "pool_balance": f"{defaults['pool_balance']:.8f}",
+                "updated_at": defaults["updated_at"],
+                "updated_by": defaults["updated_by"],
+            },
+        )
+        await redis_client.set(GAMEFI_SEGMENTS_KEY, json.dumps(defaults["segments"]))
+        raw_config = {
+            "entry_fee": f"{defaults['entry_fee']:.8f}",
+            "pool_balance": f"{defaults['pool_balance']:.8f}",
+            "updated_at": defaults["updated_at"],
+            "updated_by": defaults["updated_by"],
+        }
+        segments_data = defaults["segments"]
+    else:
+        try:
+            segments_data = json.loads(segments_raw or "[]")
+        except Exception:
+            segments_data = _gamefi_default_segments()
+
+    segments: list[dict[str, Any]] = []
+    for idx, seg in enumerate(segments_data or []):
+        segments.append(_gamefi_normalize_segment(seg, index=idx))
+    if not segments:
+        segments = [_gamefi_normalize_segment(seg, index=i) for i, seg in enumerate(_gamefi_default_segments())]
+
+    try:
+        entry_fee = float(raw_config.get("entry_fee", 0.0) or 0.0)
+    except Exception:
+        entry_fee = 0.0
+    try:
+        pool_balance = float(raw_config.get("pool_balance", 0.0) or 0.0)
+    except Exception:
+        pool_balance = 0.0
+
+    entry_fee = max(entry_fee, 0.0)
+    pool_balance = max(pool_balance, 0.0)
+
+    active_segments = [seg for seg in segments if seg.get("active")]
+    if not active_segments:
+        active_segments = list(segments)
+
+    config = {
+        "entry_fee": entry_fee,
+        "pool_balance": pool_balance,
+        "updated_at": raw_config.get("updated_at", ""),
+        "updated_by": raw_config.get("updated_by", ""),
+        "segments": segments if include_inactive else active_segments,
+        "active_segments": active_segments,
+    }
+    return config
+
+
+def _gamefi_segment_display_value(segment: dict[str, Any]) -> str:
+    seg_type = segment.get("type")
+    value = segment.get("value", 0.0)
+    if seg_type == "flat":
+        amount = max(float(value or 0.0), 0.0)
+        prefix = "+" if amount >= 0 else ""
+        return f"{prefix}{amount:.0f} IGP"
+    if seg_type == "multiplier":
+        factor = max(float(value or 0.0), 0.0)
+        return f"x{factor:.2f} Entry"
+    if seg_type == "retry":
+        return "Try Again"
+    return "No Win"
+
+
+def _gamefi_segment_view(
+    segment: dict[str, Any], *, total_weight: float | None = None
+) -> dict[str, Any]:
+    view = dict(segment)
+    view["display_value"] = _gamefi_segment_display_value(segment)
+    weight = max(int(segment.get("weight", 0) or 0), 0)
+    if total_weight and total_weight > 0:
+        view["probability"] = (weight / total_weight) * 100.0
+    else:
+        view["probability"] = 0.0
+    view["type_label"] = GAMEFI_SEGMENT_TYPE_LABELS.get(view.get("type"), view.get("type", "").title())
+    view["probability_label"] = f"{view['probability']:.1f}%" if view["probability"] > 0 else "—"
+    return view
+
+
+def _gamefi_gradient(segments: list[dict[str, Any]]) -> str:
+    if not segments:
+        return "radial-gradient(circle at center, rgba(255,255,255,0.15), rgba(0,0,0,0.8))"
+    step = 360.0 / max(len(segments), 1)
+    stops: list[str] = []
+    for idx, seg in enumerate(segments):
+        color = str(seg.get("color") or GAMEFI_DEFAULT_COLORS[idx % len(GAMEFI_DEFAULT_COLORS)]).strip()
+        if not color:
+            color = GAMEFI_DEFAULT_COLORS[idx % len(GAMEFI_DEFAULT_COLORS)]
+        start = idx * step
+        end = start + step
+        stops.append(f"{color} {start:.3f}deg {end:.3f}deg")
+    return "conic-gradient(from -90deg, " + ", ".join(stops) + ")"
+
+
+async def _gamefi_recent_spins(limit: int = 25) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    entries = await redis_client.lrange(GAMEFI_HISTORY_KEY, 0, limit - 1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            record = json.loads(raw)
+        except Exception:
+            continue
+        history.append(record)
+    return history
+
+
+async def _gamefi_record_spin(
+    email: str,
+    segment: dict[str, Any],
+    *,
+    entry_fee: float,
+    payout: float,
+    pool_after: float,
+    balance_after: float,
+) -> None:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return
+    record = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "email": email_norm,
+        "segment_id": segment.get("id"),
+        "segment_label": segment.get("label"),
+        "segment_type": segment.get("type"),
+        "entry_fee": entry_fee,
+        "payout": payout,
+        "pool_after": pool_after,
+        "balance_after": balance_after,
+    }
+    pipe = redis_client.pipeline()
+    pipe.lpush(GAMEFI_HISTORY_KEY, json.dumps(record))
+    pipe.ltrim(GAMEFI_HISTORY_KEY, 0, GAMEFI_HISTORY_LIMIT - 1)
+    await pipe.execute()
+
+
+def _gamefi_pick_segment(segments: list[dict[str, Any]]) -> tuple[dict[str, Any], int]:
+    if not segments:
+        raise ValueError("No segments available for selection")
+    weights: list[int] = []
+    for seg in segments:
+        try:
+            weight_val = int(seg.get("weight", 0) or 0)
+        except Exception:
+            weight_val = 0
+        weights.append(max(weight_val, 0))
+    total = sum(weights)
+    if total <= 0:
+        weights = [1 for _ in segments]
+        total = len(segments)
+    choice = secrets.randbelow(total)
+    cumulative = 0
+    for idx, weight in enumerate(weights):
+        if weight <= 0:
+            continue
+        cumulative += weight
+        if choice < cumulative:
+            return segments[idx], idx
+    return segments[-1], len(segments) - 1
+
+
+def _gamefi_calculate_reward(segment: dict[str, Any], entry_fee: float) -> float:
+    seg_type = segment.get("type")
+    try:
+        value = float(segment.get("value", 0.0) or 0.0)
+    except Exception:
+        value = 0.0
+    entry_fee = max(entry_fee, 0.0)
+    if seg_type == "flat":
+        return max(value, 0.0)
+    if seg_type == "multiplier":
+        return max(value, 0.0) * entry_fee
+    if seg_type == "retry":
+        return entry_fee
+    return 0.0
 
 
 async def _record_transfer(
@@ -3194,6 +3537,193 @@ async def transfers_submit(
     return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
 
 
+@app.get("/gamefi")
+async def gamefi_dashboard(
+    request: Request,
+    success: str | None = None,
+    error: str | None = None,
+) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _ambassador_entry_by_email(email)
+    balances = await _stake_balances(email, profile=profile)
+    scorepad_balance = balances.get("scorepad", 0.0)
+    staked_amount = balances.get("staked", 0.0)
+    total_points = balances.get("total", 0.0)
+    config = await _gamefi_config(include_inactive=False)
+    segments = list(config.get("active_segments", []))
+    total_weight = sum(max(int(seg.get("weight", 0) or 0), 0) for seg in segments)
+    segment_views = [_gamefi_segment_view(seg, total_weight=total_weight) for seg in segments]
+    wheel_gradient = _gamefi_gradient(segments)
+    success_msg = success or request.query_params.get("success", "")
+    error_msg = error or request.query_params.get("error", "")
+
+    return templates.TemplateResponse(
+        "gamefi.html",
+        {
+            "request": request,
+            "profile": profile,
+            "scorepad_balance": scorepad_balance,
+            "staked_amount": staked_amount,
+            "total_points": total_points,
+            "entry_fee": config.get("entry_fee", 0.0),
+            "pool_balance": config.get("pool_balance", 0.0),
+            "segments": segment_views,
+            "wheel_gradient": wheel_gradient,
+            "success": success_msg,
+            "error": error_msg,
+        },
+    )
+
+
+@app.post("/api/gamefi/spin")
+async def api_gamefi_spin(request: Request) -> JSONResponse:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard  # type: ignore[return-value]
+
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "not_authenticated"}, status_code=401)
+
+    config = await _gamefi_config(include_inactive=False)
+    segments = list(config.get("active_segments", []))
+    if not segments:
+        return JSONResponse({"ok": False, "error": "game_unavailable"}, status_code=503)
+
+    try:
+        entry_fee = float(config.get("entry_fee", 0.0) or 0.0)
+    except Exception:
+        entry_fee = 0.0
+    entry_fee = max(entry_fee, 0.0)
+
+    email_norm = _normalize_email(email)
+    balance_before = await _scorepad_balance(email_norm)
+    if balance_before < entry_fee - 1e-9:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "insufficient_balance",
+                "balance": balance_before,
+                "entry_fee": entry_fee,
+            },
+            status_code=400,
+        )
+
+    try:
+        segment, index = _gamefi_pick_segment(segments)
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "game_unavailable"}, status_code=503)
+
+    pipe = redis_client.pipeline()
+    pipe.hincrbyfloat("score_pad", email_norm, -entry_fee)
+    pipe.hincrbyfloat(GAMEFI_CONFIG_HASH, "pool_balance", entry_fee)
+    results = await pipe.execute()
+
+    try:
+        balance_after_fee = float(results[0] or 0.0)
+    except Exception:
+        balance_after_fee = balance_before - entry_fee
+    try:
+        pool_after_entry = float(results[1] or 0.0)
+    except Exception:
+        pool_after_entry = config.get("pool_balance", 0.0) + entry_fee
+
+    reward_target = _gamefi_calculate_reward(segment, entry_fee)
+    reward_paid = 0.0
+    pool_after = pool_after_entry
+    new_balance = balance_after_fee
+    message = ""
+
+    if segment.get("type") == "retry":
+        pipe = redis_client.pipeline()
+        pipe.hincrbyfloat("score_pad", email_norm, entry_fee)
+        pipe.hincrbyfloat(GAMEFI_CONFIG_HASH, "pool_balance", -entry_fee)
+        refund_results = await pipe.execute()
+        try:
+            new_balance = float(refund_results[0] or 0.0)
+        except Exception:
+            new_balance = balance_before
+        try:
+            pool_after = float(refund_results[1] or 0.0)
+        except Exception:
+            pool_after = max(pool_after_entry - entry_fee, 0.0)
+        reward_paid = entry_fee
+        message = "Try again! Your entry fee was returned."
+    else:
+        if reward_target > 0.0 and pool_after_entry > 0.0:
+            reward_paid = min(reward_target, pool_after_entry)
+            if reward_paid > 0:
+                pipe = redis_client.pipeline()
+                pipe.hincrbyfloat("score_pad", email_norm, reward_paid)
+                pipe.hincrbyfloat(GAMEFI_CONFIG_HASH, "pool_balance", -reward_paid)
+                payout_results = await pipe.execute()
+                try:
+                    new_balance = float(payout_results[0] or 0.0)
+                except Exception:
+                    new_balance = balance_after_fee + reward_paid
+                try:
+                    pool_after = float(payout_results[1] or 0.0)
+                except Exception:
+                    pool_after = max(pool_after_entry - reward_paid, 0.0)
+            else:
+                new_balance = balance_after_fee
+                pool_after = pool_after_entry
+        else:
+            new_balance = balance_after_fee
+            pool_after = pool_after_entry
+
+        if reward_paid >= reward_target and reward_paid > 0:
+            message = f"You landed on {segment.get('label', 'a prize')} and won {reward_paid:.2f} IGP!"
+        elif reward_paid > 0:
+            message = (
+                f"The pool is running low. Awarded {reward_paid:.2f} IGP (target {reward_target:.2f})."
+            )
+        else:
+            message = segment.get("label") or "No win this time."
+
+    if segment.get("type") == "lose":
+        message = segment.get("label") or "No win this time."
+
+    net_result = reward_paid - entry_fee
+
+    total_weight = sum(max(int(seg.get("weight", 0) or 0), 0) for seg in segments)
+    segment_view = _gamefi_segment_view(segment, total_weight=total_weight)
+    segment_view["index"] = index
+
+    await _gamefi_record_spin(
+        email_norm,
+        segment,
+        entry_fee=entry_fee,
+        payout=reward_paid,
+        pool_after=pool_after,
+        balance_after=new_balance,
+    )
+
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[gamefi] failed to refresh leaderboard cache after spin: {exc}")
+
+    response_payload = {
+        "ok": True,
+        "segment": segment_view,
+        "entry_fee": entry_fee,
+        "payout": reward_paid,
+        "net": net_result,
+        "balance": new_balance,
+        "pool_balance": pool_after,
+        "message": message,
+    }
+    return JSONResponse(response_payload)
+
+
 @app.get("/p2p")
 async def p2p_store(
     request: Request,
@@ -3704,6 +4234,36 @@ async def admin_panel(request: Request) -> Any:
     p2p_history = await _p2p_recent_history(limit=100)
     p2p_message = request.query_params.get("p2p_msg", "")
     p2p_error = request.query_params.get("p2p_err", "")
+    gamefi_config = await _gamefi_config(include_inactive=True)
+    active_segments = gamefi_config.get("active_segments", [])
+    total_weight = sum(max(int(seg.get("weight", 0) or 0), 0) for seg in active_segments)
+    gamefi_segments: list[dict[str, Any]] = []
+    for seg in gamefi_config.get("segments", []):
+        view = _gamefi_segment_view(seg, total_weight=total_weight)
+        if not seg.get("active"):
+            view["probability"] = 0.0
+            view["probability_label"] = "—"
+        gamefi_segments.append(view)
+    gamefi_gradient = _gamefi_gradient(active_segments)
+    gamefi_history_raw = await _gamefi_recent_spins(limit=30)
+    gamefi_history: list[dict[str, Any]] = []
+    for entry in gamefi_history_raw:
+        ts = _parse_iso(entry.get("timestamp")) if isinstance(entry, dict) else None
+        gamefi_history.append(
+            {
+                "timestamp": entry.get("timestamp") if isinstance(entry, dict) else "",
+                "timestamp_display": _format_dt(ts, "%b %d, %Y %H:%M UTC") if ts else (entry.get("timestamp") if isinstance(entry, dict) else ""),
+                "email": entry.get("email", "") if isinstance(entry, dict) else "",
+                "segment_label": entry.get("segment_label", "") if isinstance(entry, dict) else "",
+                "segment_type": entry.get("segment_type", "") if isinstance(entry, dict) else "",
+                "entry_fee": entry.get("entry_fee", 0.0) if isinstance(entry, dict) else 0.0,
+                "payout": entry.get("payout", 0.0) if isinstance(entry, dict) else 0.0,
+                "pool_after": entry.get("pool_after", 0.0) if isinstance(entry, dict) else 0.0,
+                "balance_after": entry.get("balance_after", 0.0) if isinstance(entry, dict) else 0.0,
+            }
+        )
+    gamefi_message = request.query_params.get("gamefi_msg", "")
+    gamefi_error = request.query_params.get("gamefi_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -3734,7 +4294,222 @@ async def admin_panel(request: Request) -> Any:
             "p2p_history": p2p_history,
             "p2p_message": p2p_message,
             "p2p_error": p2p_error,
+            "gamefi_config": gamefi_config,
+            "gamefi_segments": gamefi_segments,
+            "gamefi_gradient": gamefi_gradient,
+            "gamefi_history": gamefi_history,
+            "gamefi_types": GAMEFI_SEGMENT_TYPE_LABELS,
+            "gamefi_message": gamefi_message,
+            "gamefi_error": gamefi_error,
         },
+    )
+
+
+@app.post("/admin/gamefi/config")
+async def admin_gamefi_config(
+    request: Request,
+    entry_fee: str = Form(""),
+    pool_balance: str = Form(""),
+    pool_top_up: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    messages: list[str] = []
+    errors: list[str] = []
+
+    entry_raw = str(entry_fee or "").strip()
+    pool_raw = str(pool_balance or "").strip()
+    top_up_raw = str(pool_top_up or "").strip()
+
+    entry_value: float | None = None
+    if entry_raw:
+        try:
+            entry_value = float(entry_raw)
+        except Exception:
+            errors.append("Entry fee must be a number.")
+        else:
+            if entry_value < 0:
+                errors.append("Entry fee cannot be negative.")
+            else:
+                await _gamefi_update_config(entry_fee=entry_value, updated_by="admin")
+                messages.append(f"Entry fee set to {entry_value:.2f} IGP.")
+
+    pool_set_value: float | None = None
+    if pool_raw:
+        try:
+            pool_set_value = float(pool_raw)
+        except Exception:
+            errors.append("Pool balance must be a number.")
+        else:
+            if pool_set_value < 0:
+                errors.append("Pool balance cannot be negative.")
+            else:
+                await _gamefi_update_config(pool_balance=pool_set_value, updated_by="admin")
+                messages.append(f"Pool balance set to {pool_set_value:.2f} IGP.")
+
+    if top_up_raw:
+        try:
+            top_up_value = float(top_up_raw)
+        except Exception:
+            errors.append("Top up amount must be a number.")
+        else:
+            if top_up_value <= 0:
+                errors.append("Top up amount must be greater than zero.")
+            else:
+                new_balance_raw = await redis_client.hincrbyfloat(
+                    GAMEFI_CONFIG_HASH, "pool_balance", top_up_value
+                )
+                await _gamefi_touch("admin")
+                try:
+                    new_balance = float(new_balance_raw or 0.0)
+                except Exception:
+                    new_balance = top_up_value
+                messages.append(
+                    f"Added {top_up_value:.2f} IGP to the pool (now {new_balance:.2f} IGP)."
+                )
+
+    redirect_target = "/admin#gamefi"
+    if errors:
+        error_message = errors[0]
+        if len(errors) > 1:
+            error_message = "; ".join(errors)
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus(error_message)}#gamefi", status_code=303
+        )
+    if messages:
+        success_message = " ".join(messages)
+        return RedirectResponse(
+            f"/admin?gamefi_msg={quote_plus(success_message)}#gamefi", status_code=303
+        )
+    return RedirectResponse(redirect_target, status_code=303)
+
+
+@app.post("/admin/gamefi/segment")
+async def admin_gamefi_segment(
+    request: Request,
+    segment_id: str = Form(""),
+    label: str = Form(...),
+    segment_type: str = Form(...),
+    value: str = Form(""),
+    weight: str = Form(""),
+    color: str = Form(""),
+    active: str = Form("1"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    label_clean = _safe_text(label).strip()
+    if not label_clean:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Segment label is required.')}#gamefi",
+            status_code=303,
+        )
+
+    seg_type = str(segment_type or "").strip().lower()
+    if seg_type not in GAMEFI_SEGMENT_TYPE_LABELS:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Select a valid segment type.')}#gamefi",
+            status_code=303,
+        )
+
+    try:
+        value_num = float(str(value or "0").strip() or 0.0)
+    except Exception:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Enter a numeric reward value.')}#gamefi",
+            status_code=303,
+        )
+
+    try:
+        weight_num = int(str(weight or "0").strip() or 0)
+    except Exception:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Weight must be a whole number.')}#gamefi",
+            status_code=303,
+        )
+    if weight_num < 0:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Weight cannot be negative.')}#gamefi",
+            status_code=303,
+        )
+
+    color_clean = str(color or "").strip()
+    if color_clean and not color_clean.startswith("#"):
+        color_clean = "#" + color_clean
+    active_flag = str(active or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    config = await _gamefi_config(include_inactive=True)
+    segments = [dict(seg) for seg in config.get("segments", [])]
+    updated = False
+    segment_id_clean = str(segment_id or "").strip()
+    for idx, seg in enumerate(segments):
+        if seg.get("id") == segment_id_clean and segment_id_clean:
+            segments[idx] = {
+                "id": segment_id_clean,
+                "label": label_clean,
+                "type": seg_type,
+                "value": value_num,
+                "weight": weight_num,
+                "color": color_clean or seg.get("color") or GAMEFI_DEFAULT_COLORS[idx % len(GAMEFI_DEFAULT_COLORS)],
+                "active": active_flag,
+            }
+            updated = True
+            break
+
+    message = "Segment updated."
+    if not updated:
+        new_id = segment_id_clean or secrets.token_hex(6)
+        segments.append(
+            {
+                "id": new_id,
+                "label": label_clean,
+                "type": seg_type,
+                "value": value_num,
+                "weight": weight_num,
+                "color": color_clean
+                or GAMEFI_DEFAULT_COLORS[len(segments) % len(GAMEFI_DEFAULT_COLORS)],
+                "active": active_flag,
+            }
+        )
+        message = "Segment added."
+
+    await _gamefi_save_segments(segments, updated_by="admin")
+    return RedirectResponse(
+        f"/admin?gamefi_msg={quote_plus(message)}#gamefi", status_code=303
+    )
+
+
+@app.post("/admin/gamefi/segment/delete")
+async def admin_gamefi_segment_delete(
+    request: Request, segment_id: str = Form(...)
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    seg_id = str(segment_id or "").strip()
+    if not seg_id:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Missing segment identifier.')}#gamefi",
+            status_code=303,
+        )
+
+    config = await _gamefi_config(include_inactive=True)
+    segments = [seg for seg in config.get("segments", []) if seg.get("id") != seg_id]
+    if len(segments) == len(config.get("segments", [])):
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('Segment not found.')}#gamefi",
+            status_code=303,
+        )
+    if len(segments) < 2:
+        return RedirectResponse(
+            f"/admin?gamefi_err={quote_plus('At least two segments are required.')}#gamefi",
+            status_code=303,
+        )
+
+    await _gamefi_save_segments(segments, updated_by="admin")
+    return RedirectResponse(
+        f"/admin?gamefi_msg={quote_plus('Segment removed.')}#gamefi", status_code=303
     )
 
 
