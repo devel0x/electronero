@@ -35,6 +35,7 @@
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
                 <li class="nav-item"><a class="nav-link" href="#stakes">Stakes</a></li>
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
+                <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
         </div>
@@ -678,6 +679,162 @@
         {% if not proposals %}
         <p class="text-muted">No proposals</p>
         {% endif %}
+    </div>
+    <div id="p2p" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">P2P Rewards Shop</h1>
+                <p class="mb-0 text-light small">Configure prize inventory and monitor how ambassadors redeem their points.</p>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-info text-dark">{{ p2p_prizes|length }} prizes</span>
+                <span class="badge bg-secondary">{{ p2p_history|length }} recent redemptions</span>
+            </div>
+        </div>
+        {% if p2p_error %}
+        <div class="alert alert-danger" role="alert">{{ p2p_error }}</div>
+        {% endif %}
+        {% if p2p_message %}
+        <div class="alert alert-success" role="alert">{{ p2p_message }}</div>
+        {% endif %}
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <h2 class="h6 text-uppercase mb-3">Add Prize</h2>
+                    <form method="post" action="/admin/p2p/prizes" class="d-flex flex-column gap-2">
+                        <div>
+                            <label class="form-label small text-uppercase">Name</label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Limited Edition Hoodie" required>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small text-uppercase">Cost</label>
+                                <input type="number" step="0.01" min="0" name="cost" class="form-control form-control-sm" placeholder="250" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small text-uppercase">Quantity</label>
+                                <input type="number" min="0" name="quantity" class="form-control form-control-sm" placeholder="Unlimited">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label small text-uppercase">Description</label>
+                            <textarea name="description" class="form-control form-control-sm" rows="3" maxlength="500" placeholder="Add sizing, shipping, or wallet delivery notes."></textarea>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input type="hidden" name="active" value="0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="p2p-add-active" name="active" value="1" checked>
+                            <label class="form-check-label" for="p2p-add-active">Active immediately</label>
+                        </div>
+                        <button class="btn btn-primary btn-sm" type="submit">Add Prize</button>
+                        <p class="small text-muted mb-0">Leave quantity blank for unlimited redemptions. Cost is deducted from the ambassador&apos;s scorepad.</p>
+                    </form>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h6 text-uppercase mb-0">Current Inventory</h2>
+                        <span class="badge bg-light text-dark">{{ p2p_prizes|length }} items</span>
+                    </div>
+                    {% for prize in p2p_prizes %}
+                    <div class="bg-black bg-opacity-25 border border-secondary rounded p-3 mb-3">
+                        <form method="post" action="/admin/p2p/prizes/update" class="row g-2 align-items-end">
+                            <input type="hidden" name="prize_id" value="{{ prize.id }}">
+                            <div class="col-md-4">
+                                <label class="form-label small text-uppercase">Name</label>
+                                <input type="text" name="name" class="form-control form-control-sm" value="{{ prize.name }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Cost</label>
+                                <input type="number" step="0.01" min="0" name="cost" class="form-control form-control-sm" value="{{ '%.2f'|format(prize.cost or 0) }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase">Quantity</label>
+                                <input type="number" min="0" name="quantity" class="form-control form-control-sm" value="{{ prize.quantity if prize.quantity is not none else '' }}" placeholder="Unlimited">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-uppercase d-block">Active</label>
+                                <input type="hidden" name="active" value="0">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="active" value="1" id="p2p-active-{{ prize.id }}" {% if prize.active %}checked{% endif %}>
+                                    <label class="form-check-label" for="p2p-active-{{ prize.id }}">Visible</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small text-uppercase">Description</label>
+                                <textarea name="description" class="form-control form-control-sm" rows="2" maxlength="500">{{ prize.description }}</textarea>
+                            </div>
+                            <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+                                <button class="btn btn-sm btn-primary" type="submit">Save Changes</button>
+                                {% if prize.quantity is not none %}
+                                <span class="badge {% if prize.quantity > 0 %}bg-success{% else %}bg-secondary{% endif %}">Qty: {{ prize.quantity }}</span>
+                                {% else %}
+                                <span class="badge bg-info text-dark">Unlimited</span>
+                                {% endif %}
+                                {% if prize.last_redeemed_at %}
+                                <span class="badge bg-warning text-dark">Last redeemed {{ prize.last_redeemed_at }}</span>
+                                {% endif %}
+                            </div>
+                        </form>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2">
+                            <span class="small text-muted">Updated {{ prize.updated_at or '—' }}</span>
+                            <form method="post" action="/admin/p2p/prizes/delete" onsubmit="return confirm('Remove this prize?');" class="d-inline">
+                                <input type="hidden" name="prize_id" value="{{ prize.id }}">
+                                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No prizes configured yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="bg-dark bg-opacity-50 border border-light rounded p-3 mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 text-uppercase mb-0">Recent Redemptions</h2>
+                <span class="badge bg-light text-dark">Latest {{ p2p_history|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">When</th>
+                            <th scope="col">Ambassador</th>
+                            <th scope="col">Prize</th>
+                            <th scope="col" class="text-end">Cost</th>
+                            <th scope="col" class="text-end">Balance</th>
+                            <th scope="col">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in p2p_history %}
+                        <tr>
+                            <td class="small">{{ entry.timestamp.replace('T', ' ') if entry.timestamp else '—' }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ entry.email or '—' }}</div>
+                                <div class="small text-muted">{{ entry.telegram or '—' }}</div>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">{{ entry.prize_name or '—' }}</div>
+                                <div class="small text-muted">ID {{ entry.prize_id or '—' }}</div>
+                            </td>
+                            <td class="text-end">{{ '%.2f'|format(entry.cost or 0) }}</td>
+                            <td class="text-end">
+                                <div class="text-warning">{{ '%.2f'|format(entry.balance_before or 0) }}</div>
+                                <div class="small text-muted">→ {{ '%.2f'|format(entry.balance_after or 0) }}</div>
+                            </td>
+                            <td class="small text-break">{{ entry.note or '—' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">No redemptions recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
     <div id="tasks" class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>

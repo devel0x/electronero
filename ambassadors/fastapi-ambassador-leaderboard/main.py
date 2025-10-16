@@ -323,6 +323,13 @@ GUARDIAN_USER_FIELD = "guardian"
 STAKE_ACTIVE_SET_KEY = "stakes:active"
 STAKE_RESERVE_HASH = "stakes:reserve"
 STAKE_DURATION_DAYS = int(os.getenv("STAKE_DURATION_DAYS", "7"))
+P2P_PRIZE_INDEX_KEY = "p2p:prizes:index"
+P2P_PRIZE_HASH_PREFIX = "p2p:prize:"
+P2P_PRIZE_SEQ_KEY = "p2p:prize:seq"
+P2P_HISTORY_KEY = "p2p:history"
+P2P_HISTORY_LIMIT = int(os.getenv("P2P_HISTORY_LIMIT", "300"))
+P2P_USER_HISTORY_PREFIX = "p2p:history:user:"
+P2P_USER_HISTORY_LIMIT = int(os.getenv("P2P_USER_HISTORY_LIMIT", "100"))
 
 
 def _monday_start(dt: datetime | None = None) -> datetime:
@@ -1093,6 +1100,163 @@ async def _all_transfer_history() -> list[dict[str, Any]]:
             continue
         history.append(entry)
     return history
+
+
+def _p2p_prize_key(prize_id: str) -> str:
+    return f"{P2P_PRIZE_HASH_PREFIX}{prize_id}".strip()
+
+
+def _p2p_parse_bool(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _p2p_parse_quantity(value: Any) -> int | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except Exception:
+        return None
+
+
+def _p2p_quantity_label(quantity: int | None) -> str:
+    if quantity is None:
+        return "Unlimited"
+    if quantity < 0:
+        return "Unlimited"
+    return str(quantity)
+
+
+async def _p2p_prize(prize_id: str) -> dict[str, Any] | None:
+    pid = str(prize_id or "").strip()
+    if not pid:
+        return None
+    data = await redis_client.hgetall(_p2p_prize_key(pid))
+    if not data:
+        return None
+    quantity = _p2p_parse_quantity(data.get("quantity"))
+    try:
+        cost = float(data.get("cost", 0.0) or 0.0)
+    except Exception:
+        cost = 0.0
+    active = _p2p_parse_bool(data.get("active", "1"))
+    available = active and (quantity is None or quantity > 0)
+    return {
+        "id": data.get("id") or pid,
+        "name": _safe_text(data.get("name", "")),
+        "description": _safe_text(data.get("description", "")),
+        "cost": cost,
+        "quantity": quantity,
+        "active": active,
+        "available": available,
+        "quantity_label": _p2p_quantity_label(quantity),
+        "created_at": data.get("created_at", ""),
+        "updated_at": data.get("updated_at", ""),
+        "last_redeemed_at": data.get("last_redeemed_at", ""),
+        "last_redeemed_by": data.get("last_redeemed_by", ""),
+    }
+
+
+async def _p2p_prizes(include_inactive: bool = False) -> list[dict[str, Any]]:
+    ids = await redis_client.zrange(P2P_PRIZE_INDEX_KEY, 0, -1)
+    prizes: list[dict[str, Any]] = []
+    for pid in ids:
+        entry = await _p2p_prize(pid)
+        if not entry:
+            continue
+        if include_inactive or entry.get("active"):
+            prizes.append(entry)
+    return prizes
+
+
+async def _p2p_recent_history(limit: int = 50) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    entries = await redis_client.lrange(P2P_HISTORY_KEY, 0, limit - 1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        history.append(entry)
+    return history
+
+
+async def _p2p_user_history(email: str, limit: int = P2P_USER_HISTORY_LIMIT) -> list[dict[str, Any]]:
+    email_norm = _normalize_email(email)
+    if not email_norm or limit <= 0:
+        return []
+    key = f"{P2P_USER_HISTORY_PREFIX}{email_norm}"
+    entries = await redis_client.lrange(key, 0, limit - 1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        history.append(entry)
+    return history
+
+
+async def _record_p2p_redemption(
+    email: str,
+    prize: dict[str, Any],
+    cost: float,
+    balance_before: float,
+    note: str = "",
+) -> None:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return
+    timestamp = datetime.utcnow().isoformat()
+    balance_after = max(balance_before - cost, 0.0)
+    note_clean = _safe_text(note)[:500]
+    user_profile = await redis_client.hgetall(f"user:{email_norm}")
+    telegram = user_profile.get("telegram") or (prize or {}).get("telegram")
+    display_name = user_profile.get("name")
+    prize_id = (prize or {}).get("id") or ""
+    prize_name = (prize or {}).get("name") or prize_id
+    user_entry = {
+        "timestamp": timestamp,
+        "prize_id": prize_id,
+        "prize_name": prize_name,
+        "cost": cost,
+        "note": note_clean,
+        "balance_before": balance_before,
+        "balance_after": balance_after,
+    }
+    global_entry = {
+        "timestamp": timestamp,
+        "email": email_norm,
+        "telegram": telegram,
+        "name": display_name,
+        "prize_id": prize_id,
+        "prize_name": prize_name,
+        "cost": cost,
+        "note": note_clean,
+        "balance_before": balance_before,
+        "balance_after": balance_after,
+    }
+    pipe = redis_client.pipeline()
+    pipe.lpush(f"{P2P_USER_HISTORY_PREFIX}{email_norm}", json.dumps(user_entry))
+    pipe.ltrim(f"{P2P_USER_HISTORY_PREFIX}{email_norm}", 0, P2P_USER_HISTORY_LIMIT - 1)
+    pipe.lpush(P2P_HISTORY_KEY, json.dumps(global_entry))
+    pipe.ltrim(P2P_HISTORY_KEY, 0, P2P_HISTORY_LIMIT - 1)
+    await pipe.execute()
+
+
+async def _p2p_delete_prize(prize_id: str) -> None:
+    pid = str(prize_id or "").strip()
+    if not pid:
+        return
+    pipe = redis_client.pipeline()
+    pipe.delete(_p2p_prize_key(pid))
+    pipe.zrem(P2P_PRIZE_INDEX_KEY, pid)
+    await pipe.execute()
 
 
 async def _record_transfer(
@@ -2991,6 +3155,129 @@ async def transfers_submit(
     return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
 
 
+@app.get("/p2p")
+async def p2p_store(
+    request: Request,
+    success: str | None = None,
+    error: str | None = None,
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _ambassador_entry_by_email(email)
+    balances = await _stake_balances(email, profile=profile)
+    scorepad_balance = balances.get("scorepad", 0.0)
+    staked_amount = balances.get("staked", 0.0)
+    total_points = balances.get("total", 0.0)
+    prizes = await _p2p_prizes()
+    history = await _p2p_user_history(email)
+    success_msg = success or request.query_params.get("success", "")
+    error_msg = error or request.query_params.get("error", "")
+
+    return templates.TemplateResponse(
+        "p2p.html",
+        {
+            "request": request,
+            "profile": profile,
+            "prizes": prizes,
+            "history": history,
+            "success": success_msg,
+            "error": error_msg,
+            "scorepad_balance": scorepad_balance,
+            "staked_amount": staked_amount,
+            "total_points": total_points,
+        },
+    )
+
+
+@app.post("/p2p/redeem")
+async def p2p_redeem(
+    request: Request,
+    prize_id: str = Form(...),
+    note: str = Form(""),
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    prize = await _p2p_prize(prize_id)
+    if not prize or not prize.get("active"):
+        return await p2p_store(request, error="That prize is not available right now.")
+
+    cost = float(prize.get("cost", 0.0) or 0.0)
+    if cost <= 0:
+        return await p2p_store(request, error="Prize cost is invalid. Contact an administrator.")
+
+    quantity = prize.get("quantity")
+    if quantity is not None and quantity <= 0:
+        return await p2p_store(request, error="This prize is currently sold out.")
+
+    email_norm = _normalize_email(email)
+    balance_before = await _scorepad_balance(email_norm)
+    if balance_before < cost - 1e-9:
+        return await p2p_store(request, error="Insufficient scorepad balance for this redemption.")
+
+    prize_id_clean = str(prize.get("id", "")).strip()
+    if not prize_id_clean:
+        return await p2p_store(request, error="Unable to locate that prize. Contact support.")
+
+    prize_key = _p2p_prize_key(prize_id_clean)
+    limited_inventory = quantity is not None
+    pipe = redis_client.pipeline()
+    pipe.hincrbyfloat("score_pad", email_norm, -cost)
+    if limited_inventory:
+        pipe.hincrby(prize_key, "quantity", -1)
+    results = await pipe.execute()
+
+    new_balance_raw = results[0] if results else 0.0
+    try:
+        new_balance = float(new_balance_raw or 0.0)
+    except Exception:
+        new_balance = 0.0
+
+    quantity_after: int | None = quantity
+    if limited_inventory:
+        try:
+            quantity_after = int(results[1])
+        except Exception:
+            quantity_after = quantity
+
+    if new_balance < -1e-6 or (limited_inventory and quantity_after is not None and quantity_after < 0):
+        revert = redis_client.pipeline()
+        revert.hincrbyfloat("score_pad", email_norm, cost)
+        if limited_inventory:
+            revert.hincrby(prize_key, "quantity", 1)
+        await revert.execute()
+        return await p2p_store(
+            request,
+            error="Your balance changed while redeeming. Please try again.",
+        )
+
+    now_iso = datetime.utcnow().isoformat()
+    await redis_client.hset(
+        prize_key,
+        mapping={
+            "updated_at": now_iso,
+            "last_redeemed_at": now_iso,
+            "last_redeemed_by": email_norm,
+        },
+    )
+
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[p2p] failed to refresh leaderboard cache after redemption: {exc}")
+
+    await _record_p2p_redemption(email_norm, prize, cost, balance_before, note)
+
+    success_message = f"Redeemed {prize.get('name') or 'prize'} for {cost:.2f} points"
+    return RedirectResponse(
+        f"/p2p?success={quote_plus(success_message)}",
+        status_code=303,
+    )
+
+
 @app.get("/staking")
 async def staking_dashboard(
     request: Request,
@@ -3374,6 +3661,10 @@ async def admin_panel(request: Request) -> Any:
     }
     kyc_message = request.query_params.get("kyc_msg", "")
     kyc_error = request.query_params.get("kyc_err", "")
+    p2p_prizes = await _p2p_prizes(include_inactive=True)
+    p2p_history = await _p2p_recent_history(limit=100)
+    p2p_message = request.query_params.get("p2p_msg", "")
+    p2p_error = request.query_params.get("p2p_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -3400,8 +3691,151 @@ async def admin_panel(request: Request) -> Any:
             "kyc_counts": kyc_counts,
             "kyc_message": kyc_message,
             "kyc_error": kyc_error,
+            "p2p_prizes": p2p_prizes,
+            "p2p_history": p2p_history,
+            "p2p_message": p2p_message,
+            "p2p_error": p2p_error,
         },
     )
+
+
+@app.post("/admin/p2p/prizes")
+async def admin_p2p_create(
+    request: Request,
+    name: str = Form(...),
+    cost: str = Form(...),
+    quantity: str = Form(""),
+    description: str = Form(""),
+    active: str = Form("1"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    name_clean = _safe_text(name).strip()
+    if not name_clean:
+        message = quote_plus("Prize name is required.")
+        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    try:
+        cost_value = float(str(cost).strip())
+    except Exception:
+        cost_value = -1.0
+    if cost_value <= 0:
+        message = quote_plus("Enter a positive cost for the prize.")
+        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    quantity_value: int | None = None
+    quantity_raw = str(quantity or "").strip()
+    if quantity_raw:
+        try:
+            quantity_value = int(quantity_raw)
+        except Exception:
+            message = quote_plus("Quantity must be a whole number or left blank for unlimited stock.")
+            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        if quantity_value < 0:
+            message = quote_plus("Quantity cannot be negative.")
+            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    description_clean = _safe_text(description)[:500]
+    active_flag = _p2p_parse_bool(active)
+
+    new_id = await redis_client.incr(P2P_PRIZE_SEQ_KEY)
+    prize_id = str(new_id)
+    now_iso = datetime.utcnow().isoformat()
+    mapping: dict[str, Any] = {
+        "id": prize_id,
+        "name": name_clean,
+        "description": description_clean,
+        "cost": f"{cost_value:.2f}",
+        "active": "1" if active_flag else "0",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "created_by": "admin",
+    }
+    mapping["quantity"] = str(quantity_value) if quantity_value is not None else ""
+
+    pipe = redis_client.pipeline()
+    pipe.hset(_p2p_prize_key(prize_id), mapping=mapping)
+    pipe.zadd(P2P_PRIZE_INDEX_KEY, {prize_id: datetime.utcnow().timestamp()})
+    await pipe.execute()
+
+    message = quote_plus("Prize added to the P2P shop.")
+    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+
+
+@app.post("/admin/p2p/prizes/update")
+async def admin_p2p_update(
+    request: Request,
+    prize_id: str = Form(...),
+    name: str = Form(...),
+    cost: str = Form(...),
+    quantity: str = Form(""),
+    description: str = Form(""),
+    active: str = Form("0"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    prize = await _p2p_prize(prize_id)
+    if not prize:
+        message = quote_plus("Prize not found.")
+        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    name_clean = _safe_text(name).strip()
+    if not name_clean:
+        message = quote_plus("Prize name cannot be empty.")
+        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    try:
+        cost_value = float(str(cost).strip())
+    except Exception:
+        cost_value = -1.0
+    if cost_value <= 0:
+        message = quote_plus("Enter a positive cost for the prize.")
+        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    quantity_value: int | None = None
+    quantity_raw = str(quantity or "").strip()
+    if quantity_raw:
+        try:
+            quantity_value = int(quantity_raw)
+        except Exception:
+            message = quote_plus("Quantity must be a whole number or left blank for unlimited stock.")
+            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        if quantity_value < 0:
+            message = quote_plus("Quantity cannot be negative.")
+            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+
+    description_clean = _safe_text(description)[:500]
+    active_flag = _p2p_parse_bool(active)
+    now_iso = datetime.utcnow().isoformat()
+    mapping: dict[str, Any] = {
+        "name": name_clean,
+        "description": description_clean,
+        "cost": f"{cost_value:.2f}",
+        "active": "1" if active_flag else "0",
+        "updated_at": now_iso,
+    }
+    mapping["quantity"] = str(quantity_value) if quantity_value is not None else ""
+
+    await redis_client.hset(_p2p_prize_key(prize.get("id") or prize_id), mapping=mapping)
+
+    message = quote_plus("Prize updated successfully.")
+    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+
+
+@app.post("/admin/p2p/prizes/delete")
+async def admin_p2p_delete(
+    request: Request,
+    prize_id: str = Form(...),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    await _p2p_delete_prize(prize_id)
+
+    message = quote_plus("Prize removed from the P2P shop.")
+    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
 
 
 async def _approve_pending_applicant(email: str) -> bool:
