@@ -24,9 +24,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
 
+
 # Load environment variables
 load_dotenv()
 
+EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
@@ -1508,14 +1510,10 @@ def _unregister_email_record(email: str) -> None:
                     fh.write(f"{value}\n")
 
 
-import re
-
-EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
-
 async def _ensure_existing_ambassadors_pending() -> None:
     """Mark all existing ambassadors as pending for a one-time review sweep."""
 
-    # Sentinel check: if already done, exit
+    # Check sentinel (already run)
     if await redis_client.get(PENDING_VERIFICATION_MIGRATION_KEY):
         if not PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
             try:
@@ -1534,37 +1532,51 @@ async def _ensure_existing_ambassadors_pending() -> None:
         return
 
     try:
-        # ✅ Pass 1: mark all existing user hashes as unverified
+        # ✅ Pass 1: process user hashes safely
         async for key in redis_client.scan_iter("user:*"):
             try:
-                # Check type
+                # key is already a string in aioredis/redis-py ≥ 4.0
+                if isinstance(key, bytes):
+                    key = key.decode()
+
+                # ✅ Type check
                 key_type = await redis_client.type(key)
-                if key_type.decode() != "hash":
-                    print(f"[migration] skipping {key.decode()} - type is {key_type.decode()}")
+                if isinstance(key_type, bytes):
+                    key_type = key_type.decode()
+                if key_type != "hash":
+                    print(f"[migration] skipping {key} - not a hash ({key_type})")
                     continue
 
-                # Extract the identifier after "user:"
-                identifier = key.decode().split("user:", 1)[1]
+                # ✅ Extract user ID part
+                identifier = key.split("user:", 1)[1].strip()
 
-                # Skip bots / non-emails
+                # ✅ Skip non-email keys (numeric, bot IDs, etc.)
                 if not EMAIL_RE.match(identifier):
-                    print(f"[migration] skipping non-email key: {key.decode()}")
+                    print(f"[migration] skipping non-email key: {key}")
                     continue
 
-                # Mark as unverified
+                # ✅ Reset verification state
                 await redis_client.hset(key, mapping={"verified": 0})
                 await redis_client.hdel(key, "verified_at")
+
             except Exception as inner_exc:
-                print(f"[migration] skipping {key.decode()} due to error: {inner_exc}")
+                print(f"[migration] skipping {key} due to error: {inner_exc}")
 
-        # ✅ Pass 2: reset all referral statuses to "pending"
+        # ✅ Pass 2: normalize all referrals to 'pending'
         async for key in redis_client.scan_iter(f"{REFERRALS_HASH_PREFIX}*"):
-            referrer = key.decode().split(":", 1)[1].strip().lower()
+            if isinstance(key, bytes):
+                key = key.decode()
 
+            referrer = key.split(":", 1)[1].strip().lower()
             raw_map = await redis_client.hgetall(key)
             updates: dict[str, str] = {}
 
             for referred_email, raw in raw_map.items():
+                if isinstance(referred_email, bytes):
+                    referred_email = referred_email.decode()
+                if isinstance(raw, bytes):
+                    raw = raw.decode()
+
                 try:
                     payload = json.loads(raw)
                 except Exception:
@@ -1583,12 +1595,9 @@ async def _ensure_existing_ambassadors_pending() -> None:
             if referrer:
                 entries = await _referral_entries(referrer)
                 count = sum(1 for entry in entries if entry.get("status") != "rejected")
-                await redis_client.hset(
-                    f"user:{referrer}",
-                    mapping={"referral_count": count}
-                )
+                await redis_client.hset(f"user:{referrer}", mapping={"referral_count": count})
 
-        # ✅ Pass 3: write migration sentinel both to Redis and disk
+        # ✅ Pass 3: mark migration as done
         await redis_client.set(
             PENDING_VERIFICATION_MIGRATION_KEY,
             datetime.utcnow().isoformat()
