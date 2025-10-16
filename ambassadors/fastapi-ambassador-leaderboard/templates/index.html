@@ -105,6 +105,9 @@
           -webkit-backdrop-filter: blur(6px);
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
+        .nav-actions{
+          max-width:100%;
+        }
         thead th{
           position:sticky; top:0; z-index:2;
           background: rgba(0,0,0,0.75);
@@ -120,6 +123,29 @@
         /* Respect reduced motion */
         @media (prefers-reduced-motion: reduce){
           .fx-grid, .fx-bloom, .fx-stars{ animation: none !important; }
+        }
+        @media (max-width: 575.98px){
+          .nav-actions{
+            overflow-x:auto;
+            padding-bottom:0.35rem;
+            margin-right:-0.5rem;
+          }
+          .nav-actions > *{
+            flex:0 0 auto;
+          }
+          .navbar .btn,
+          .navbar .btn-sm,
+          .navbar .btn-outline-light,
+          .navbar .btn-outline-light.btn-sm,
+          .navbar .btn-outline-light.btn-sm:focus{
+            font-size:0.75rem;
+            padding:0.25rem 0.5rem;
+          }
+          .toast-container{
+            width:min(100%, 22rem);
+            left:50%;
+            transform:translateX(-50%);
+          }
         }
     </style>
 
@@ -147,7 +173,7 @@
       <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
       ITC Governance
     </span>
-    <div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="d-flex flex-wrap gap-2 align-items-center nav-actions">
       <span class="badge text-bg-secondary">Source: {{ source }}</span>
       <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.8f'|format(pool_balance) }}</span></span>
       <span class="badge text-bg-info">TTL {{ ttl }}s</span>

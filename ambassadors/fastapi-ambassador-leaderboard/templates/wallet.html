@@ -66,6 +66,46 @@
     code { color:#ffd166; }
     .form-text { color:rgba(255,255,255,.6); }
     footer { color:rgba(255,255,255,.5); }
+    .nav-actions {
+      max-width:100%;
+    }
+    @media (max-width: 575.98px){
+      .navbar .btn,
+      .navbar .btn-sm,
+      .navbar .btn-outline-light,
+      .navbar .btn-outline-light.btn-sm,
+      .navbar .btn-outline-light.btn-sm:focus {
+        font-size:0.75rem;
+        padding:0.25rem 0.5rem;
+      }
+      .nav-actions{
+        overflow-x:auto;
+        padding-bottom:0.35rem;
+        margin-right:-0.5rem;
+      }
+      .nav-actions > *{
+        flex:0 0 auto;
+      }
+      .glass-card{
+        padding:1.5rem;
+      }
+      header h1.h4{
+        font-size:1.15rem;
+      }
+    }
+    @media (max-width: 767.98px){
+      .glass-card{
+        border-radius:0.75rem;
+      }
+      .section-subtitle{
+        font-size:0.85rem;
+      }
+      .toast-container{
+        width:min(100%, 22rem);
+        left:50%;
+        transform:translateX(-50%);
+      }
+    }
     @media (prefers-reduced-motion: reduce){
       .glass-card:hover{ transform:none; }
       .fx-grid, .fx-bloom, .fx-stars{ animation:none !important; }
@@ -87,7 +127,7 @@
       <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
       Account Settings
     </span>
-    <div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="d-flex flex-wrap gap-2 align-items-center nav-actions">
       <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
       <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
     </div>
@@ -99,7 +139,7 @@
   <div id="kycReminderToast" class="toast align-items-center text-bg-warning border-0 shadow" role="alert" aria-live="assertive" aria-atomic="true">
     <div class="d-flex">
       <div class="toast-body">
-        <strong>Action needed:</strong> Complete KYC to become eligible for unlimited payouts. Non-KYC account are limited.
+        <strong>Action needed:</strong> Complete KYC to become eligible for payouts. Non-KYC account are limited.
       </div>
       <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>
@@ -215,19 +255,19 @@
         <div class="alert alert-success py-2" role="alert">{{ kyc_msg }}</div>
         {% endif %}
         <form method="post" action="/profile/kyc" enctype="multipart/form-data" class="row g-3">
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycName" class="form-label">Legal Name</label>
             <input id="kycName" type="text" name="full_name" value="{{ kyc.full_name or user_profile.name or '' }}" class="form-control" required />
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycCountry" class="form-label">Country</label>
             <input id="kycCountry" type="text" name="country" value="{{ kyc.country or '' }}" class="form-control" required />
           </div>
-          <div class="col-md-4">
+          <div class="col-12 col-md-4">
             <label for="kycBirthday" class="form-label">Birthday</label>
             <input id="kycBirthday" type="date" name="birthday" value="{{ kyc.birthdate or '' }}" class="form-control" max="{{ today_iso }}" required />
           </div>
-          <div class="col-md-8 d-flex flex-wrap align-items-center gap-3">
+          <div class="col-12 col-md-8 d-flex flex-column flex-md-row flex-md-wrap align-items-start align-items-md-center gap-3">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" value="yes" id="kycOver18" name="over_18" {% if kyc.over_18 == 'yes' %}checked{% endif %} />
               <label class="form-check-label small" for="kycOver18">I confirm I am over 18</label>
@@ -242,7 +282,7 @@
             </div>
             <div class="form-text">Unsure if you're a politically exposed person (PEP)? Select "No".</div>
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycDocType" class="form-label">Document Type</label>
             <select id="kycDocType" name="document_type" class="form-select">
               <option value="" {% if not kyc.document_type %}selected{% endif %}>Select document</option>
@@ -253,7 +293,7 @@
               <option value="other" {% if kyc.document_type == 'other' %}selected{% endif %}>Other Government ID</option>
             </select>
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycDocLast" class="form-label">Document # (last 4)</label>
             <input id="kycDocLast" type="text" name="document_number_last4" value="{{ kyc.document_number_last4 or '' }}" class="form-control" maxlength="10" placeholder="1234" />
           </div>
@@ -261,15 +301,15 @@
             <label for="kycAddress" class="form-label">Address</label>
             <input id="kycAddress" type="text" name="address_line" value="{{ kyc.address_line or '' }}" class="form-control" placeholder="Street, number, apartment" />
           </div>
-          <div class="col-md-4">
+          <div class="col-12 col-md-4">
             <label for="kycCity" class="form-label">City</label>
             <input id="kycCity" type="text" name="city" value="{{ kyc.city or '' }}" class="form-control" />
           </div>
-          <div class="col-md-4">
+          <div class="col-12 col-md-4">
             <label for="kycRegion" class="form-label">Region / State</label>
             <input id="kycRegion" type="text" name="region" value="{{ kyc.region or '' }}" class="form-control" />
           </div>
-          <div class="col-md-4">
+          <div class="col-12 col-md-4">
             <label for="kycPostal" class="form-label">Postal Code</label>
             <input id="kycPostal" type="text" name="postal_code" value="{{ kyc.postal_code or '' }}" class="form-control" />
           </div>
@@ -278,17 +318,17 @@
             <textarea id="kycNotes" name="additional_notes" rows="3" class="form-control" maxlength="1000" placeholder="Anything else the compliance team should know?">{{ kyc.additional_notes or '' }}</textarea>
             <div class="form-text">Optional context for the review team.</div>
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycDocument" class="form-label">Upload Document (images or PDF)</label>
             <input id="kycDocument" type="file" name="document" class="form-control" accept="image/*,.pdf" />
             <div class="form-text">Files are sent to a temporary encrypted host and deleted after verification (within 7 days).</div>
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label for="kycManualLocation" class="form-label">Current Location (Self-Reported)</label>
             <input id="kycManualLocation" type="text" name="self_reported_location" value="{{ kyc.self_reported_location or '' }}" class="form-control" placeholder="City, Country" />
             <div class="form-text">Used to compare against the IP geolocation captured automatically.</div>
           </div>
-          <div class="col-md-6 col-xl-4">
+          <div class="col-12 col-md-6 col-xl-4">
             <label class="form-label">Submission Source</label>
             <div class="form-control bg-dark text-light" style="height:auto;">
               <div><code>{{ client_ip }}</code></div>
