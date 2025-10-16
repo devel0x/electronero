@@ -307,6 +307,23 @@
                             {% endif %}
                             </span>
                         </p>
+                        <p class="mb-1"><strong>Referrals:</strong> {{ w.referral_count }}</p>
+                        {% if w.referral_count %}
+                        <div class="mb-2">
+                            <small class="text-muted">Recent</small>
+                            <ul class="small mb-0 ps-3">
+                                {% for ref in w.referrals[:5] %}
+                                <li>
+                                    {{ ref.email }}
+                                    {% if ref.telegram %} • {{ ref.telegram }}{% endif %}
+                                    {% if ref.joined_at_display %}
+                                        <span class="text-muted">({{ ref.joined_at_display }})</span>
+                                    {% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
                         <p class="mb-2"><strong>Pad:</strong> <span class="pad-display">{{ w.pad }}</span></p>
                         <div class="d-flex flex-column flex-sm-row gap-2">
                             <form method="post" action="/admin/telegram/update" class="d-flex gap-1 flex-grow-1">

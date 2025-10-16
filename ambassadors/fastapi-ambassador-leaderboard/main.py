@@ -9,6 +9,7 @@ import hashlib
 import subprocess
 import csv
 import io
+import string
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -114,6 +115,10 @@ def _load_registrations() -> set[str]:
 
 
 REGISTERED_EMAILS = _load_registrations()
+
+REFERRAL_CODE_KEY_PREFIX = "referral:code:"
+REFERRALS_HASH_PREFIX = "referrals:"
+REFERRAL_CODE_LENGTH = 8
 
 cache: Dict[str, Any] = {
     "columns": [],
@@ -1060,6 +1065,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
         else:
             await redis_client.hdel(f"user:{email}", GUARDIAN_USER_FIELD)
 
+        referrals = await _referral_entries(email)
+        referral_count = len(referrals)
+        await redis_client.hset(
+            f"user:{email}", mapping={"referral_count": referral_count}
+        )
+
         wallets.append(
             {
                 "email": email,
@@ -1074,6 +1085,8 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "active": is_active,
                 "activity": activity_label,
                 "guardian": is_guardian,
+                "referral_count": referral_count,
+                "referrals": referrals,
             }
         )
 
@@ -1256,12 +1269,178 @@ async def analytics_middleware(request: Request, call_next):
     return response
 
 
-def _normalize_telegram(handle: str) -> str:
-    h = handle.strip()
+def _normalize_handle(handle: str, *, lower: bool = True) -> str:
+    h = str(handle or "").strip()
     if not h:
         return ""
-    h = h.lstrip("@").lower()
-    return f"@{h}"
+    h = h.lstrip("@")
+    if lower:
+        h = h.lower()
+    return f"@{h}" if h else ""
+
+
+def _normalize_telegram(handle: str) -> str:
+    return _normalize_handle(handle, lower=True)
+
+
+def _generate_referral_code_value() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(REFERRAL_CODE_LENGTH))
+
+
+async def _lookup_referrer(code: str) -> str | None:
+    code_norm = str(code or "").strip().upper()
+    if not code_norm:
+        return None
+    owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{code_norm}")
+    if owner:
+        return str(owner).strip().lower()
+    return None
+
+
+async def _ensure_referral_code(email: str) -> str:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return ""
+    key = f"user:{email_norm}"
+    data = await redis_client.hgetall(key)
+    existing = str(data.get("referral_code", "")).strip().upper()
+    if existing:
+        owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{existing}")
+        if owner and str(owner).strip().lower() == email_norm:
+            if existing != data.get("referral_code", ""):
+                await redis_client.hset(key, mapping={"referral_code": existing})
+            return existing
+        if not owner:
+            pipe = redis_client.pipeline()
+            pipe.set(f"{REFERRAL_CODE_KEY_PREFIX}{existing}", email_norm)
+            pipe.hset(key, mapping={"referral_code": existing})
+            await pipe.execute()
+            return existing
+    # generate fresh code
+    while True:
+        code = _generate_referral_code_value()
+        owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{code}")
+        if not owner:
+            break
+    pipe = redis_client.pipeline()
+    pipe.hset(key, mapping={"referral_code": code})
+    pipe.set(f"{REFERRAL_CODE_KEY_PREFIX}{code}", email_norm)
+    await pipe.execute()
+    return code
+
+
+async def _record_referral(referrer_email: str, referred_email: str, telegram: str, joined_at: str) -> None:
+    referrer_norm = str(referrer_email or "").strip().lower()
+    referred_norm = str(referred_email or "").strip().lower()
+    if not referrer_norm or not referred_norm:
+        return
+    payload = {
+        "email": referred_norm,
+        "telegram": str(telegram or ""),
+        "joined_at": joined_at,
+    }
+    key = f"{REFERRALS_HASH_PREFIX}{referrer_norm}"
+    pipe = redis_client.pipeline()
+    pipe.hset(key, referred_norm, json.dumps(payload))
+    pipe.hlen(key)
+    results = await pipe.execute()
+    if results and isinstance(results[-1], int):
+        await redis_client.hset(
+            f"user:{referrer_norm}", mapping={"referral_count": results[-1]}
+        )
+
+
+async def _referral_entries(email: str) -> list[dict[str, str]]:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return []
+    raw_entries = await redis_client.hgetall(f"{REFERRALS_HASH_PREFIX}{email_norm}")
+    entries: list[dict[str, str]] = []
+    for raw_email, raw_payload in raw_entries.items():
+        try:
+            data = json.loads(raw_payload)
+        except Exception:
+            data = {}
+        joined_at = str(data.get("joined_at", ""))
+        entries.append(
+            {
+                "email": str(data.get("email", raw_email)),
+                "telegram": str(data.get("telegram", "")),
+                "joined_at": joined_at,
+                "joined_at_display": _format_timestamp(joined_at),
+            }
+        )
+    entries.sort(key=lambda item: item.get("joined_at", ""), reverse=True)
+    return entries
+
+
+def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+    tele_norm = _normalize_telegram(telegram)
+    username = tele_norm.lstrip("@") if tele_norm else ""
+    path = Path(CSV_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict[str, str]] = []
+    fieldnames = [
+        "name",
+        "telegram",
+        "points",
+        "tier",
+        "posts",
+        "engagements",
+        "referrals",
+        "email",
+    ]
+
+    if path.exists():
+        with path.open("r", newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames:
+                fieldnames = reader.fieldnames
+            for row in reader:
+                rows.append(dict(row))
+
+    found = False
+    for row in rows:
+        row_email = str(row.get("email", "")).strip().lower()
+        if row_email == email_norm:
+            if tele_norm:
+                row["telegram"] = tele_norm
+            if username:
+                row["name"] = username
+            if "tier" in row and not str(row.get("tier", "")).strip():
+                row["tier"] = "Ambassador"
+            for key in ("points", "posts", "engagements", "referrals"):
+                if key in row and not str(row.get(key, "")).strip():
+                    row[key] = "0"
+            found = True
+            break
+
+    if not found:
+        new_row = {key: "" for key in fieldnames}
+        new_row.update(
+            {
+                "name": username or (email_norm.split("@")[0] if "@" in email_norm else email_norm),
+                "telegram": tele_norm,
+                "points": "0",
+                "tier": "Ambassador",
+                "posts": "0",
+                "engagements": "0",
+                "referrals": "0",
+                "email": email_norm,
+            }
+        )
+        rows.append(new_row)
+
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 # serve /favicon.ico at the root
 @app.get("/favicon.ico", include_in_schema=False)
@@ -1342,8 +1521,20 @@ async def forgot_submit(request: Request, email: str = Form(...)) -> Any:
 
 @app.get("/register")
 async def register_form(request: Request) -> Any:
+    referral_code = request.query_params.get("ref", "").strip()
     return templates.TemplateResponse(
-        "register.html", {"request": request, "error": ""}
+        "register.html",
+        {
+            "request": request,
+            "error": "",
+            "email": request.query_params.get("email", ""),
+            "wallet": request.query_params.get("wallet", ""),
+            "telegram": request.query_params.get("telegram", ""),
+            "twitter": request.query_params.get("twitter", ""),
+            "discord": request.query_params.get("discord", ""),
+            "referral": referral_code,
+            "email_opt_in": False,
+        },
     )
 
 
@@ -1354,25 +1545,97 @@ async def register(
     password: str = Form(...),
     telegram: str = Form(...),
     wallet: str = Form(...),
+    twitter: str = Form(""),
+    discord: str = Form(""),
+    referral_code: str = Form(""),
+    email_opt_in: str = Form(""),
 ) -> Any:
     email_norm = email.strip().lower()
+    telegram_norm = _normalize_telegram(telegram)
+    twitter_norm = _normalize_handle(twitter)
+    discord_clean = str(discord or "").strip()
+    opt_in = str(email_opt_in or "").strip().lower() in {"1", "true", "yes", "on"}
+    referral_input = str(referral_code or "").strip()
+
+    form_context = {
+        "request": request,
+        "error": "",
+        "email": email,
+        "wallet": wallet,
+        "telegram": telegram,
+        "twitter": twitter,
+        "discord": discord,
+        "referral": referral_input,
+        "email_opt_in": opt_in,
+    }
     if email_norm not in REGISTERED_EMAILS:
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "error": "Email not permitted"},
+            {**form_context, "error": "Email not permitted"},
         )
     key = f"user:{email_norm}"
-    has_created = await redis_client.hexists(key, "created_at")
+    existing = await redis_client.hgetall(key)
+    has_created = "created_at" in existing
+    try:
+        existing_referral_count = int(existing.get("referral_count", 0))
+    except Exception:
+        existing_referral_count = 0
+
+    existing_referrer = str(existing.get("referred_by", "")).strip().lower()
+    referrer_email = existing_referrer
+    new_referral = None
+    if referral_input:
+        new_referral = await _lookup_referrer(referral_input)
+        if not new_referral:
+            return templates.TemplateResponse(
+                "register.html",
+                {**form_context, "error": "Referral code not recognized"},
+            )
+        if new_referral == email_norm:
+            return templates.TemplateResponse(
+                "register.html",
+                {**form_context, "error": "You cannot refer yourself"},
+            )
+    if not existing_referrer and new_referral:
+        referrer_email = new_referral
+
+    now_iso = datetime.utcnow().isoformat()
     await redis_client.hset(
         key,
         mapping={
             "password": _hash_password(password),
             "wallet": wallet.strip(),
-            "telegram": _normalize_telegram(telegram),
+            "telegram": telegram_norm,
+            "twitter": twitter_norm,
+            "discord": discord_clean,
+            "email_opt_in": 1 if opt_in else 0,
+            "referral_count": existing_referral_count,
             "verified": 0,
-            **({"created_at": datetime.utcnow().isoformat()} if not has_created else {}),
+            **({"created_at": now_iso} if not has_created else {}),
+            **(
+                {"referred_by": referrer_email, "referred_at": now_iso}
+                if referrer_email and not existing_referrer
+                else {}
+            ),
         },
     )
+    referral_code_value = await _ensure_referral_code(email_norm)
+    if referral_code_value:
+        await redis_client.hset(
+            key, mapping={"referral_code": referral_code_value}
+        )
+
+    if referrer_email and referrer_email != existing_referrer:
+        await _record_referral(
+            referrer_email, email_norm, telegram_norm, now_iso
+        )
+
+    try:
+        _ensure_leaderboard_entry(email_norm, telegram_norm)
+        await _get_cached_data(force_refresh=True)
+    except Exception as exc:
+        print(f"[register] failed to update leaderboard cache: {exc}")
+
     return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
 
 
@@ -1394,6 +1657,40 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
         return RedirectResponse("/login")
     await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/referrals")
+async def referrals_dashboard(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    referral_code = await _ensure_referral_code(email)
+    register_url = str(request.url_for("register_form"))
+    referral_link = f"{register_url}?ref={referral_code}" if referral_code else register_url
+
+    entries = await _referral_entries(email)
+    referral_count = len(entries)
+
+    user_data = await redis_client.hgetall(f"user:{email}")
+    referred_by = str(user_data.get("referred_by", ""))
+    referred_by_label = referred_by
+    if referred_by:
+        ref_profile = await redis_client.hgetall(f"user:{referred_by}")
+        if ref_profile.get("telegram"):
+            referred_by_label = ref_profile.get("telegram")
+
+    return templates.TemplateResponse(
+        "referrals.html",
+        {
+            "request": request,
+            "referral_code": referral_code,
+            "referral_link": referral_link,
+            "referral_count": referral_count,
+            "referrals": entries,
+            "referred_by": referred_by_label,
+        },
+    )
 
 
 def _transfer_totals(history: list[dict[str, Any]]) -> dict[str, float]:
