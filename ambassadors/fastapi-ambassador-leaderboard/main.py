@@ -1511,9 +1511,8 @@ def _unregister_email_record(email: str) -> None:
 
 
 async def _ensure_existing_ambassadors_pending() -> None:
-    """Mark all existing ambassadors as pending for a one-time review sweep."""
+    """Mark all existing ambassadors as pending for a one-time review sweep (safe version)."""
 
-    # Check sentinel (already run)
     if await redis_client.get(PENDING_VERIFICATION_MIGRATION_KEY):
         if not PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
             try:
@@ -1525,63 +1524,41 @@ async def _ensure_existing_ambassadors_pending() -> None:
 
     if PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
         await redis_client.set(
-            PENDING_VERIFICATION_MIGRATION_KEY,
-            datetime.utcnow().isoformat(),
-            nx=True
+            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat(), nx=True
         )
         return
 
     try:
-        # ✅ Pass 1: process user hashes safely
         async for key in redis_client.scan_iter("user:*"):
-            try:
-                # key is already a string in aioredis/redis-py ≥ 4.0
-                if isinstance(key, bytes):
-                    key = key.decode()
+            email_part = key.split(":", 1)[1].strip().lower()
 
-                # ✅ Type check
-                key_type = await redis_client.type(key)
-                if isinstance(key_type, bytes):
-                    key_type = key_type.decode()
-                if key_type != "hash":
-                    print(f"[migration] skipping {key} - not a hash ({key_type})")
-                    continue
+            # ✅ Skip numeric-only bot keys
+            if email_part.isdigit():
+                print(f"[migration] skipping numeric key: {key}")
+                continue
 
-                # ✅ Extract user ID part
-                identifier = key.split("user:", 1)[1].strip()
+            # ✅ Skip keys that are not hashes
+            key_type = await redis_client.type(key)
+            key_type_str = key_type.decode() if isinstance(key_type, (bytes, bytearray)) else str(key_type)
+            if key_type_str != "hash":
+                print(f"[migration] skipping non-hash key: {key} (type={key_type_str})")
+                continue
 
-                # ✅ Skip non-email keys (numeric, bot IDs, etc.)
-                if not EMAIL_RE.match(identifier):
-                    print(f"[migration] skipping non-email key: {key}")
-                    continue
+            # ✅ Safe migration
+            await redis_client.hset(key, mapping={"verified": 0})
+            await redis_client.hdel(key, "verified_at")
 
-                # ✅ Reset verification state
-                await redis_client.hset(key, mapping={"verified": 0})
-                await redis_client.hdel(key, "verified_at")
-
-            except Exception as inner_exc:
-                print(f"[migration] skipping {key} due to error: {inner_exc}")
-
-        # ✅ Pass 2: normalize all referrals to 'pending'
+        # ✅ Fix referral hashes too
         async for key in redis_client.scan_iter(f"{REFERRALS_HASH_PREFIX}*"):
-            if isinstance(key, bytes):
-                key = key.decode()
-
             referrer = key.split(":", 1)[1].strip().lower()
             raw_map = await redis_client.hgetall(key)
             updates: dict[str, str] = {}
 
             for referred_email, raw in raw_map.items():
-                if isinstance(referred_email, bytes):
-                    referred_email = referred_email.decode()
-                if isinstance(raw, bytes):
-                    raw = raw.decode()
-
                 try:
                     payload = json.loads(raw)
                 except Exception:
                     continue
-
                 status = str(payload.get("status", "")).strip().lower()
                 if status != "pending":
                     payload["status"] = "pending"
@@ -1597,17 +1574,12 @@ async def _ensure_existing_ambassadors_pending() -> None:
                 count = sum(1 for entry in entries if entry.get("status") != "rejected")
                 await redis_client.hset(f"user:{referrer}", mapping={"referral_count": count})
 
-        # ✅ Pass 3: mark migration as done
         await redis_client.set(
-            PENDING_VERIFICATION_MIGRATION_KEY,
-            datetime.utcnow().isoformat()
+            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat()
         )
         try:
             MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
-            PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(
-                datetime.utcnow().isoformat(),
-                encoding="utf-8"
-            )
+            PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(datetime.utcnow().isoformat(), encoding="utf-8")
         except Exception:
             print("[migration] failed to persist sentinel flag to disk")
 
