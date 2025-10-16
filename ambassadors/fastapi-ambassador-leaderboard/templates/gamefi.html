@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ project_name }} · GameFi Arcade</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+    <style>
+        :root{
+          --bg1:#1e1e2f; --bg2:#141414; --itc-red:#ff3b4e; --itc-blue:#4aa3ff; --itc-gold:#ffd166;
+        }
+        body{
+          min-height:100vh;
+          background:linear-gradient(135deg,var(--bg1),var(--bg2));
+          color:#f5f5f5;
+          overflow-x:hidden;
+        }
+        .fx-wrap{ position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+        .fx-stars{
+          position:absolute; inset:0;
+          background:
+             radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+             radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+             radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+          mix-blend-mode:screen;
+          opacity:.35;
+          filter: blur(.2px);
+        }
+        .fx-grid{
+          position:absolute; inset:-20% -20% -20% -20%;
+          background:
+            repeating-linear-gradient( to right,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+            repeating-linear-gradient( to bottom,
+              rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+          transform:rotate(1deg);
+          filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+          opacity:.35;
+        }
+        .fx-bloom{ position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter: blur(60px); opacity:.30; transform: translate(-50%, -50%) scale(1); mix-blend-mode:screen; }
+        .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:20%; top:25%; }
+        .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:80%; top:35%; }
+        .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:55%; top:80%; }
+        .glass-card{
+          background: rgba(255,255,255,0.08);
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:1rem;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 0 20px 50px rgba(0,0,0,.35);
+        }
+        .glass-card:hover{ transform: translateY(-1px); transition: transform .2s ease; }
+        .navbar{
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .nav-actions{ max-width:100%; }
+        .hero-card{
+          position:relative;
+          overflow:hidden;
+          border-radius:1.25rem;
+          background:linear-gradient(135deg, rgba(74,163,255,.25), rgba(255,59,78,.25));
+          border:1px solid rgba(255,255,255,0.12);
+          box-shadow:0 25px 60px rgba(0,0,0,.45);
+        }
+        .hero-card::before{
+          content:"";
+          position:absolute;
+          inset:0;
+          background:linear-gradient(120deg, rgba(255,209,102,.35), transparent 55%);
+          opacity:.85;
+          pointer-events:none;
+        }
+        .hero-content{ position:relative; z-index:1; }
+        .hero-title{ font-size:clamp(1.75rem, 2.5vw, 2.5rem); font-weight:700; }
+        .hero-meta{ font-size:0.95rem; opacity:0.9; }
+        .gamefi-panel{
+          position:relative;
+          overflow:hidden;
+          background:linear-gradient(135deg, rgba(31,19,53,0.75), rgba(12,12,26,0.85));
+          border:1px solid rgba(255,209,102,0.2);
+        }
+        .gamefi-panel::before,
+        .gamefi-panel::after{
+          content:"";
+          position:absolute;
+          inset:0;
+          border-radius:inherit;
+          pointer-events:none;
+        }
+        .gamefi-panel::before{
+          background:radial-gradient(circle at 20% 20%, rgba(255,59,78,0.25), transparent 60%),
+                     radial-gradient(circle at 80% 80%, rgba(74,163,255,0.2), transparent 55%);
+          mix-blend-mode:screen;
+        }
+        .gamefi-panel::after{
+          border:1px solid rgba(255,255,255,0.08);
+          box-shadow:inset 0 0 35px rgba(0,0,0,0.55);
+        }
+        .gamefi-header{ position:relative; z-index:1; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:1rem; }
+        .gamefi-chip{
+          width:68px; height:68px;
+          border-radius:50%;
+          display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(circle, #ffd166 40%, #ffae34 70%, rgba(255,209,102,0.2) 90%);
+          color:#1b1730;
+          font-weight:700;
+          letter-spacing:1px;
+          position:relative;
+          box-shadow:0 0 25px rgba(255,209,102,0.45), inset 0 0 12px rgba(0,0,0,0.35);
+        }
+        .gamefi-chip::after{ content:"IGP"; }
+        .gamefi-grid{ position:relative; z-index:1; }
+        .game-tile{
+          position:relative;
+          width:100%;
+          padding:1rem 1.1rem;
+          border-radius:0.9rem;
+          background:rgba(8,8,20,0.75);
+          border:1px solid rgba(255,255,255,0.08);
+          color:#f5f5f5;
+          text-align:left;
+          display:flex;
+          flex-direction:column;
+          gap:0.35rem;
+          transition:all .3s ease;
+          cursor:pointer;
+          box-shadow:0 18px 30px rgba(0,0,0,0.35);
+        }
+        .game-tile:not(.active){ opacity:0.8; }
+        .game-tile .tile-title{ font-weight:600; letter-spacing:0.5px; }
+        .game-tile .tile-meta{ font-size:0.8rem; text-transform:uppercase; letter-spacing:1.6px; color:rgba(255,255,255,0.6); }
+        .game-tile .tile-cover{
+          position:absolute;
+          inset:0;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          border-radius:inherit;
+          background:linear-gradient(135deg, rgba(255,59,78,0.4), rgba(74,163,255,0.4));
+          color:#0d0d19;
+          font-weight:700;
+          letter-spacing:1px;
+          text-transform:uppercase;
+          backdrop-filter:blur(6px);
+          transition:all .35s ease;
+          box-shadow:inset 0 0 35px rgba(0,0,0,0.45);
+        }
+        .game-tile.revealed .tile-cover{ opacity:0; transform:scale(0.85); pointer-events:none; }
+        .game-tile.active{ border-color:rgba(255,209,102,0.75); box-shadow:0 25px 45px rgba(255,209,102,0.25); transform:translateY(-3px); }
+        .game-tile .tile-icon{ font-size:1.8rem; }
+        .gamefi-stage{
+          position:relative;
+          z-index:1;
+          padding:1.5rem;
+          border-radius:1rem;
+          background:rgba(8,8,18,0.75);
+          border:1px solid rgba(255,255,255,0.06);
+          box-shadow:inset 0 0 25px rgba(0,0,0,0.35);
+        }
+        .game-content{ display:none; }
+        .game-content.show{ display:block; animation:fadeInUp .5s ease; }
+        @keyframes fadeInUp{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+        .igp-wheel-layout{ display:grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap:1.5rem; align-items:center; }
+        .igp-wheel-stage{ position:relative; display:flex; align-items:center; justify-content:center; }
+        .wheel-pointer{
+          position:absolute;
+          top:-18px;
+          width:0; height:0;
+          border-left:16px solid transparent;
+          border-right:16px solid transparent;
+          border-bottom:24px solid #ffd166;
+          filter:drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+          z-index:3;
+        }
+        .igp-wheel{
+          --rotation:0deg;
+          position:relative;
+          width:min(320px, 65vw);
+          aspect-ratio:1 / 1;
+          border-radius:50%;
+          background:conic-gradient(from -90deg,
+            #ffd166 0deg 45deg,
+            #4aa3ff 45deg 90deg,
+            #ff3b4e 90deg 135deg,
+            #32ffb3 135deg 180deg,
+            #be4bff 180deg 225deg,
+            #ff6f61 225deg 270deg,
+            #21d4fd 270deg 315deg,
+            #ff3b81 315deg 360deg
+          );
+          border:8px solid rgba(255,255,255,0.15);
+          box-shadow:0 25px 50px rgba(0,0,0,0.45), inset 0 0 35px rgba(0,0,0,0.35);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          transition:transform 3.2s cubic-bezier(.22,.61,.36,1);
+          transform:rotate(var(--rotation));
+        }
+        .igp-wheel::after{
+          content:"";
+          position:absolute;
+          inset:12%;
+          border-radius:50%;
+          border:2px dashed rgba(255,255,255,0.25);
+          box-shadow:inset 0 0 12px rgba(0,0,0,0.45);
+        }
+        .wheel-center{
+          position:relative;
+          z-index:2;
+          width:42%;
+          aspect-ratio:1/1;
+          border-radius:50%;
+          background:radial-gradient(circle at 30% 30%, #ffd166 0%, #f4a537 60%, #8f4d16 100%);
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          gap:0.35rem;
+          color:#220a16;
+          font-weight:700;
+          letter-spacing:1px;
+          text-transform:uppercase;
+          box-shadow:0 0 18px rgba(255,209,102,0.55);
+        }
+        .wheel-spin-btn{ font-size:0.75rem; font-weight:700; letter-spacing:1.2px; border-radius:999px; box-shadow:0 0 15px rgba(255,209,102,0.45); }
+        .wheel-spin-btn:disabled{ opacity:0.65; cursor:wait; box-shadow:none; }
+        .wheel-ledger{
+          background:rgba(14,14,28,0.75);
+          border-radius:1rem;
+          border:1px solid rgba(255,255,255,0.08);
+          padding:1.25rem;
+          box-shadow:inset 0 0 30px rgba(0,0,0,0.35);
+        }
+        .ledger-stat{ display:flex; justify-content:space-between; align-items:center; font-size:0.9rem; padding:0.35rem 0; border-bottom:1px dashed rgba(255,255,255,0.08); }
+        .ledger-stat:last-of-type{ border-bottom:none; margin-bottom:0.5rem; }
+        .ledger-value{ font-weight:600; color:#ffd166; }
+        .wheel-result{ font-size:0.95rem; font-weight:600; margin-bottom:0.75rem; color:#fffbe6; }
+        .wheel-history li{
+          font-size:0.8rem;
+          padding:0.35rem 0;
+          border-bottom:1px solid rgba(255,255,255,0.05);
+          display:flex;
+          justify-content:space-between;
+          gap:1rem;
+          color:rgba(255,255,255,0.75);
+        }
+        .wheel-history li:last-child{ border-bottom:none; }
+        .coming-soon-card{
+          position:relative;
+          overflow:hidden;
+          padding:1.5rem;
+          border-radius:1rem;
+          background:linear-gradient(145deg, rgba(18,18,40,0.9), rgba(34,14,46,0.85));
+          border:1px solid rgba(255,255,255,0.08);
+          box-shadow:0 18px 32px rgba(0,0,0,0.45);
+        }
+        .glow-ring{
+          position:absolute;
+          inset:-40% -40% auto;
+          height:60%;
+          background:radial-gradient(circle, rgba(255,59,129,0.45), transparent 65%);
+          mix-blend-mode:screen;
+          pointer-events:none;
+        }
+        .coming-soon-body{ position:relative; z-index:1; }
+        @media (max-width: 991.98px){
+          .igp-wheel-layout{ grid-template-columns: 1fr; }
+          .wheel-pointer{ top: -12px; }
+          .wheel-ledger{ padding:1rem; }
+        }
+        @media (max-width: 575.98px){
+          .gamefi-stage{ padding:1rem; }
+          .igp-wheel{ width:78vw; }
+          .nav-actions{ overflow-x:auto; padding-bottom:0.35rem; margin-right:-0.5rem; }
+          .nav-actions > *{ flex:0 0 auto; }
+          .navbar .btn{ font-size:0.75rem; padding:0.25rem 0.5rem; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .fx-grid, .fx-bloom, .fx-stars{ animation: none !important; }
+        }
+    </style>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', path='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', path='favicon-16x16.png') }}">
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', path='site.webmanifest') }}">
+    <meta name="theme-color" content="#0b1220">
+</head>
+<body>
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2 align-items-center nav-actions">
+      <span class="badge text-bg-secondary">Source: {{ source }}</span>
+      <span class="badge text-bg-success">Pool <span>{{ '%.8f'|format(pool_balance) }}</span></span>
+      <span class="badge text-bg-info">TTL {{ ttl }}s</span>
+      <a href="/" class="btn btn-sm btn-outline-light">Dashboard</a>
+      <a href="/gamefi" class="btn btn-sm btn-warning text-dark">GameFi</a>
+      <a href="/wallet" class="btn btn-sm btn-outline-light">Wallet</a>
+      <a href="/staking" class="btn btn-sm btn-outline-light">Staking</a>
+      <a href="/transfers" class="btn btn-sm btn-outline-light">Transfers</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+<div class="container py-4">
+  <section class="hero-card mb-4">
+    <div class="hero-content p-4">
+      <div class="d-flex flex-column flex-lg-row align-items-lg-end align-items-start gap-3">
+        <div>
+          <div class="text-uppercase small text-muted fw-semibold">GameFi Arcade</div>
+          <h1 class="hero-title text-warning">Spin the IGP Wheel of Fortune</h1>
+          <p class="mb-0 text-muted">Stake IGP, feel the neon rush, and let the Interchained casino decide your fate.</p>
+        </div>
+        <div class="hero-meta text-end text-lg-start">
+          <div>Entry Fee: <span data-hero-entry-fee>{{ '{:,.0f}'.format((wheel_state.entry_fee or 0)) }}</span> IGP</div>
+          <div>Your Score Pad: <span data-hero-scorepad>{{ '{:,.0f}'.format((wheel_state.scorepad_balance or 0)) }}</span> IGP</div>
+          <div>Game Pool: <span data-hero-pool>{{ '{:,.0f}'.format((wheel_state.pool_balance or 0)) }}</span> IGP</div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="glass-card p-4 mb-4 gamefi-panel">
+    <div class="gamefi-header">
+      <div>
+        <div class="text-uppercase small text-muted fw-semibold">Casino Lineup</div>
+        <h2 class="h4 mb-1 text-warning">Select a game and let the wheel decide.</h2>
+        <p class="mb-0 small text-muted">Admins control odds, pools, and table status live from the command room.</p>
+      </div>
+      <div class="gamefi-chip" aria-hidden="true"></div>
+    </div>
+    <div class="row g-4 mt-2 gamefi-grid">
+      <div class="col-12 col-lg-4">
+        <div class="d-flex flex-column gap-3" role="tablist" aria-label="GameFi arcade selection">
+          <button type="button" id="tab-wheel-of-fortune" class="game-tile active revealed" data-game="wheel-of-fortune" role="tab" aria-selected="true" aria-controls="game-wheel-of-fortune">
+            <span class="tile-icon" aria-hidden="true">🎡</span>
+            <span class="tile-title">Wheel of Fortune</span>
+            <span class="tile-meta">Live • IGP Enabled</span>
+          </button>
+          <button type="button" id="tab-mystery-box" class="game-tile" data-game="mystery-box" role="tab" aria-selected="false" aria-controls="game-mystery-box">
+            <span class="tile-icon" aria-hidden="true">🪐</span>
+            <span class="tile-title">Mystery Drop Pods</span>
+            <span class="tile-meta">Locked • Reveal to preview</span>
+            <span class="tile-cover">Tap to Reveal</span>
+          </button>
+          <button type="button" id="tab-high-roller" class="game-tile" data-game="high-roller" role="tab" aria-selected="false" aria-controls="game-high-roller">
+            <span class="tile-icon" aria-hidden="true">🎰</span>
+            <span class="tile-title">High Roller Matrix</span>
+            <span class="tile-meta">Vaulted • Invite Only</span>
+            <span class="tile-cover">Hidden Game</span>
+          </button>
+        </div>
+      </div>
+      <div class="col-12 col-lg-8">
+        <div class="gamefi-stage">
+          <div class="game-content show" data-game="wheel-of-fortune" id="game-wheel-of-fortune" role="tabpanel" aria-labelledby="tab-wheel-of-fortune">
+            {% include "partials/game_wheel_of_fortune.html" %}
+          </div>
+          <div class="game-content" data-game="mystery-box" id="game-mystery-box" role="tabpanel" aria-labelledby="tab-mystery-box" aria-hidden="true">
+            {% include "partials/game_mystery_box.html" %}
+          </div>
+          <div class="game-content" data-game="high-roller" id="game-high-roller" role="tabpanel" aria-labelledby="tab-high-roller" aria-hidden="true">
+            {% include "partials/game_high_roller.html" %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<footer class="text-center small mt-3 text-muted">Powered by FastAPI &amp; Bootstrap</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+const wheelInitialState = {{ wheel_state | tojson | safe }} || {};
+function formatNumber(value, decimals = 0, useGrouping = true) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) {
+    return (0).toFixed(decimals);
+  }
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping,
+  });
+}
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce && typeof gsap !== 'undefined') {
+    const grid = document.getElementById('fxGrid');
+    const b1 = document.getElementById('b1');
+    const b2 = document.getElementById('b2');
+    const b3 = document.getElementById('b3');
+    gsap.to(b1, { duration: 10, xPercent: -5, yPercent: 6, scale: 1.07, opacity: 0.35, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    gsap.to(b2, { duration: 12, xPercent: 4,  yPercent: -4, scale: 1.06, opacity: 0.33, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .3 });
+    gsap.to(b3, { duration: 14, xPercent: -2, yPercent: 3, scale: 1.08, opacity: 0.32, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: .6 });
+    gsap.to(grid, { duration: 20, rotation: 3, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    gsap.to(document.body, { duration: 8, '--bg1': '#1e2338', '--bg2': '#111216', ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    window.addEventListener('pointermove', (ev) => {
+      const { innerWidth: w, innerHeight: h } = window;
+      const dx = (ev.clientX - w / 2) / (w / 2);
+      const dy = (ev.clientY - h / 2) / (h / 2);
+      gsap.to([b1,b2,b3], { duration: .6, x: dx * 30, y: dy * 30, ease: 'sine.out' });
+      gsap.to(grid, { duration: .8, x: dx * 20, y: dy * 20, ease: 'sine.out' });
+    });
+  }
+})();
+(() => {
+  const panel = document.querySelector('.gamefi-panel');
+  if (!panel) return;
+  const heroEntry = document.querySelector('[data-hero-entry-fee]');
+  const heroScore = document.querySelector('[data-hero-scorepad]');
+  const heroPool = document.querySelector('[data-hero-pool]');
+  const tiles = panel.querySelectorAll('.game-tile');
+  const contents = panel.querySelectorAll('.game-content');
+  const showGame = (game, trigger) => {
+    contents.forEach((content) => {
+      const match = content.dataset.game === game;
+      content.classList.toggle('show', match);
+      content.setAttribute('aria-hidden', match ? 'false' : 'true');
+    });
+    tiles.forEach((tile) => {
+      const active = tile === trigger;
+      tile.classList.toggle('active', active);
+      tile.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) tile.classList.add('revealed');
+    });
+  };
+  tiles.forEach((tile) => {
+    tile.addEventListener('click', () => showGame(tile.dataset.game, tile));
+  });
+  const initialTile = panel.querySelector('.game-tile.active') || tiles[0];
+  if (initialTile) showGame(initialTile.dataset.game, initialTile);
+  const wheelEl = panel.querySelector('[data-game-wheel]');
+  const spinButton = panel.querySelector('[data-action="spin-wheel"]');
+  if (!wheelEl || !spinButton) return;
+  const entryFeeEl = panel.querySelector('[data-wheel-entry-fee]');
+  const bankrollEl = panel.querySelector('[data-wheel-bankroll]');
+  const poolEl = panel.querySelector('[data-wheel-pool]');
+  const resultEl = panel.querySelector('[data-wheel-result]');
+  const historyEl = panel.querySelector('[data-wheel-history]');
+  const defaultSegments = [
+    { label: '+2x IGP', type: 'multiplier', multiplier: 2, tone: 'win', index: 0 },
+    { label: '+500 IGP', type: 'fixed', amount: 500, tone: 'win', index: 1 },
+    { label: 'Try Again', type: 'retry', tone: 'neutral', index: 2 },
+    { label: '+1000 IGP', type: 'fixed', amount: 1000, tone: 'win', index: 3 },
+    { label: 'Lose Spin', type: 'lose', tone: 'lose', index: 4 },
+    { label: '+250 IGP', type: 'fixed', amount: 250, tone: 'win', index: 5 },
+    { label: '+3x IGP', type: 'multiplier', multiplier: 3, tone: 'win', index: 6 },
+    { label: 'Bonus Spin', type: 'bonus', tone: 'neutral', index: 7 },
+  ];
+  const buildSegments = (segments) => {
+    if (!Array.isArray(segments) || !segments.length) {
+      return [...defaultSegments];
+    }
+    return segments
+      .map((seg, idx) => ({
+        label: seg.label || `Slice ${idx + 1}`,
+        type: seg.type || 'fixed',
+        tone: seg.tone || 'neutral',
+        multiplier: seg.multiplier,
+        amount: seg.amount,
+        index: typeof seg.index === 'number' ? seg.index : idx,
+      }))
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  };
+  let wheelSegments = buildSegments(wheelInitialState.segments);
+  if (!wheelSegments.length) {
+    wheelSegments = [...defaultSegments];
+  }
+  let entryFee = Number(spinButton.dataset.entryFee ?? wheelInitialState.entry_fee ?? 0);
+  let bankroll = Number(bankrollEl?.dataset.value ?? wheelInitialState.scorepad_balance ?? 0);
+  let pool = Number(poolEl?.dataset.value ?? wheelInitialState.pool_balance ?? 0);
+  let rotation = 0;
+  const spinDuration = 3200;
+  const setResultTone = (tone) => {
+    if (!resultEl) return;
+    resultEl.classList.remove('text-success', 'text-danger', 'text-warning');
+    if (tone === 'win') resultEl.classList.add('text-success');
+    else if (tone === 'lose') resultEl.classList.add('text-danger');
+    else if (tone === 'neutral') resultEl.classList.add('text-warning');
+  };
+  const updateLedger = () => {
+    spinButton.dataset.entryFee = String(entryFee);
+    if (entryFeeEl) entryFeeEl.textContent = formatNumber(entryFee, 0, true);
+    if (bankrollEl) {
+      bankrollEl.dataset.value = String(bankroll);
+      bankrollEl.textContent = formatNumber(bankroll, 0, true);
+    }
+    if (poolEl) {
+      poolEl.dataset.value = String(pool);
+      poolEl.textContent = formatNumber(pool, 0, true);
+    }
+    if (heroEntry) heroEntry.textContent = formatNumber(entryFee, 0, true);
+    if (heroScore) heroScore.textContent = formatNumber(bankroll, 0, true);
+    if (heroPool) heroPool.textContent = formatNumber(pool, 0, true);
+  };
+  const renderHistory = (entries = []) => {
+    if (!historyEl) return;
+    historyEl.innerHTML = '';
+    entries.slice(0, 6).forEach((entry) => {
+      const li = document.createElement('li');
+      const time = document.createElement('span');
+      time.textContent = entry.timestamp_display || new Date(entry.timestamp || Date.now()).toLocaleTimeString();
+      const text = document.createElement('span');
+      text.textContent = entry.message || '';
+      if (entry.tone === 'win') text.classList.add('text-success');
+      else if (entry.tone === 'lose') text.classList.add('text-danger');
+      else text.classList.add('text-warning');
+      li.appendChild(time);
+      li.appendChild(text);
+      historyEl.appendChild(li);
+    });
+  };
+  const applyState = (state) => {
+    if (!state) return;
+    if (typeof state.entry_fee === 'number') entryFee = state.entry_fee;
+    if (typeof state.scorepad_balance === 'number') bankroll = state.scorepad_balance;
+    if (typeof state.pool_balance === 'number') pool = state.pool_balance;
+    if (Array.isArray(state.history)) renderHistory(state.history);
+    if (state.status_message && resultEl) {
+      resultEl.textContent = state.status_message;
+      setResultTone(state.status_tone || 'neutral');
+    }
+    if (Array.isArray(state.segments)) {
+      const built = buildSegments(state.segments);
+      if (built.length) wheelSegments = built;
+    }
+    updateLedger();
+  };
+  const drawWheel = () => {
+    if (!wheelEl) return;
+    const ctx = wheelEl;
+    const total = wheelSegments.length;
+    const sliceAngle = 360 / total;
+    const labels = wheelSegments.map((seg) => seg.label || '');
+    ctx.style.setProperty('--rotation', `${rotation}deg`);
+    ctx.setAttribute('aria-label', labels.join(' • '));
+  };
+  applyState(wheelInitialState);
+  drawWheel();
+  const spinToIndex = (index) => {
+    const total = wheelSegments.length || 1;
+    const slice = 360 / total;
+    const randomRotations = 6 + Math.floor(Math.random() * 4);
+    const target = 360 - (index * slice + slice / 2);
+    rotation += randomRotations * 360 + target - (rotation % 360);
+    wheelEl.style.setProperty('--rotation', `${rotation}deg`);
+  };
+  const fetchState = async () => {
+    const resp = await fetch('/api/gamefi/wheel/state');
+    if (!resp.ok) return;
+    const payload = await resp.json();
+    if (payload?.ok) {
+      applyState(payload.state);
+      drawWheel();
+    }
+  };
+  spinButton.addEventListener('click', async () => {
+    if (spinButton.disabled) return;
+    spinButton.disabled = true;
+    setResultTone('neutral');
+    if (resultEl) resultEl.textContent = 'Spinning the cosmic wheel...';
+    try {
+      const resp = await fetch('/api/gamefi/wheel/spin', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) {
+        const detail = data?.detail || 'Unable to spin right now.';
+        if (resultEl) {
+          resultEl.textContent = detail;
+          setResultTone('lose');
+        }
+        return;
+      }
+      const outcome = data.outcome || {};
+      if (typeof outcome.winning_index === 'number') {
+        spinToIndex(outcome.winning_index % (wheelSegments.length || 1));
+      }
+      setTimeout(async () => {
+        applyState(data.state);
+        drawWheel();
+        await fetchState();
+        spinButton.disabled = false;
+      }, spinDuration + 200);
+    } catch (err) {
+      if (resultEl) {
+        resultEl.textContent = 'Connection lost. Please try again.';
+        setResultTone('lose');
+      }
+    } finally {
+      setTimeout(() => { spinButton.disabled = false; }, spinDuration + 500);
+    }
+  });
+})();
+</script>
+</body>
+</html>

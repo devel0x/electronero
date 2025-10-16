@@ -11,6 +11,7 @@ import subprocess
 import csv
 import io
 import string
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -24,6 +25,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
+from redis.exceptions import LockError
 
 
 # Load environment variables
@@ -109,6 +111,7 @@ EXPECTED_COLUMNS = [
 
 redis_client: Redis = Redis.from_url(REDIS_URL, decode_responses=True)
 CACHE_KEY = "leaderboard_cache"
+RNG = random.SystemRandom()
 
 ANALYTICS_VISITOR_KEY = "analytics:visits"
 ANALYTICS_VISITOR_LIMIT = 500
@@ -370,6 +373,80 @@ P2P_HISTORY_LIMIT = int(os.getenv("P2P_HISTORY_LIMIT", "300"))
 P2P_USER_HISTORY_PREFIX = "p2p:history:user:"
 P2P_USER_HISTORY_LIMIT = int(os.getenv("P2P_USER_HISTORY_LIMIT", "100"))
 
+WHEEL_CONFIG_KEY = "gamefi:wheel:config"
+WHEEL_HISTORY_KEY = "gamefi:wheel:history"
+WHEEL_HISTORY_LIMIT = int(os.getenv("WHEEL_HISTORY_LIMIT", "200"))
+WHEEL_LOCK_KEY = "gamefi:wheel:lock"
+WHEEL_USER_LOCK_PREFIX = "gamefi:wheel:user:"
+WHEEL_LAST_SPIN_PREFIX = "gamefi:wheel:last_spin:"
+DEFAULT_WHEEL_ENTRY_FEE = float(os.getenv("WHEEL_DEFAULT_ENTRY_FEE", "50"))
+DEFAULT_WHEEL_POOL = float(os.getenv("WHEEL_DEFAULT_POOL", "12500"))
+DEFAULT_WHEEL_COOLDOWN_SECONDS = int(os.getenv("WHEEL_DEFAULT_COOLDOWN", "8"))
+
+DEFAULT_WHEEL_SEGMENTS = (
+    {
+        "id": "multiplier_2x",
+        "label": "+2x IGP",
+        "type": "multiplier",
+        "multiplier": 2,
+        "tone": "win",
+        "weight": 2,
+    },
+    {
+        "id": "fixed_500",
+        "label": "+500 IGP",
+        "type": "fixed",
+        "amount": 500,
+        "tone": "win",
+        "weight": 1.5,
+    },
+    {
+        "id": "retry",
+        "label": "Try Again",
+        "type": "retry",
+        "tone": "neutral",
+        "weight": 1.2,
+    },
+    {
+        "id": "fixed_1000",
+        "label": "+1000 IGP",
+        "type": "fixed",
+        "amount": 1000,
+        "tone": "win",
+        "weight": 1,
+    },
+    {
+        "id": "lose",
+        "label": "Lose Spin",
+        "type": "lose",
+        "tone": "lose",
+        "weight": 1.4,
+    },
+    {
+        "id": "fixed_250",
+        "label": "+250 IGP",
+        "type": "fixed",
+        "amount": 250,
+        "tone": "win",
+        "weight": 1.6,
+    },
+    {
+        "id": "multiplier_3x",
+        "label": "+3x IGP",
+        "type": "multiplier",
+        "multiplier": 3,
+        "tone": "win",
+        "weight": 0.75,
+    },
+    {
+        "id": "bonus",
+        "label": "Bonus Spin",
+        "type": "bonus",
+        "tone": "neutral",
+        "weight": 1.25,
+    },
+)
+
 
 def _monday_start(dt: datetime | None = None) -> datetime:
     dt = dt or datetime.utcnow()
@@ -412,6 +489,268 @@ async def _scorepad_balance(email: str) -> float:
 
 def _normalize_email(email: str) -> str:
     return str(email or "").strip().lower()
+
+
+def _default_wheel_segments() -> list[dict[str, Any]]:
+    return [dict(segment) for segment in DEFAULT_WHEEL_SEGMENTS]
+
+
+def _mask_email(email: str) -> str:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return "anon"
+    local, _, domain = email_norm.partition("@")
+    if len(local) <= 2:
+        masked_local = f"{local[:1]}***"
+    else:
+        masked_local = f"{local[:2]}***{local[-1]}"
+    domain_hint = domain.split(".")[0] if domain else "mail"
+    return f"{masked_local}@{domain_hint}"
+
+
+def _format_clock(ts: str) -> str:
+    if not ts:
+        return ""
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            return ts
+    return dt.strftime("%H:%M:%S")
+
+
+def _coerce_wheel_config(raw: dict[str, Any]) -> dict[str, Any]:
+    config = dict(raw)
+    try:
+        entry_fee = float(config.get("entry_fee", DEFAULT_WHEEL_ENTRY_FEE) or 0.0)
+    except Exception:
+        entry_fee = DEFAULT_WHEEL_ENTRY_FEE
+    try:
+        pool_balance = float(config.get("pool_balance", DEFAULT_WHEEL_POOL) or 0.0)
+    except Exception:
+        pool_balance = DEFAULT_WHEEL_POOL
+    try:
+        cooldown = int(config.get("cooldown_seconds", DEFAULT_WHEEL_COOLDOWN_SECONDS) or 0)
+    except Exception:
+        cooldown = DEFAULT_WHEEL_COOLDOWN_SECONDS
+    enabled_flag = str(config.get("enabled", "1") or "1").strip()
+    segments_raw = config.get("segments")
+    if isinstance(segments_raw, str):
+        try:
+            segments = json.loads(segments_raw)
+        except json.JSONDecodeError:
+            segments = _default_wheel_segments()
+    elif isinstance(segments_raw, list):
+        segments = [dict(s) for s in segments_raw]
+    else:
+        segments = _default_wheel_segments()
+    if not segments:
+        segments = _default_wheel_segments()
+
+    normalized_segments: list[dict[str, Any]] = []
+    for idx, segment in enumerate(segments):
+        seg = {
+            "id": segment.get("id") or f"segment_{idx}",
+            "label": segment.get("label") or "Spin",
+            "type": segment.get("type") or "fixed",
+            "tone": segment.get("tone") or "neutral",
+            "weight": float(segment.get("weight", 1.0) or 1.0),
+        }
+        if "multiplier" in segment:
+            try:
+                seg["multiplier"] = float(segment.get("multiplier") or 0.0)
+            except Exception:
+                seg["multiplier"] = 0.0
+        if "amount" in segment:
+            try:
+                seg["amount"] = float(segment.get("amount") or 0.0)
+            except Exception:
+                seg["amount"] = 0.0
+        normalized_segments.append(seg)
+
+    return {
+        "entry_fee": max(0.0, entry_fee),
+        "pool_balance": max(0.0, pool_balance),
+        "cooldown_seconds": max(0, cooldown),
+        "enabled": enabled_flag not in {"0", "false", "off"},
+        "segments": normalized_segments,
+    }
+
+
+async def _ensure_wheel_config() -> dict[str, Any]:
+    raw = await redis_client.hgetall(WHEEL_CONFIG_KEY)
+    if raw:
+        return _coerce_wheel_config(raw)
+    now_iso = datetime.utcnow().isoformat()
+    config = {
+        "entry_fee": DEFAULT_WHEEL_ENTRY_FEE,
+        "pool_balance": DEFAULT_WHEEL_POOL,
+        "cooldown_seconds": DEFAULT_WHEEL_COOLDOWN_SECONDS,
+        "enabled": 1,
+        "segments": json.dumps(_default_wheel_segments()),
+        "updated_at": now_iso,
+    }
+    await redis_client.hset(WHEEL_CONFIG_KEY, mapping=config)
+    return _coerce_wheel_config(config)
+
+
+async def _wheel_history(limit: int = 10) -> list[dict[str, Any]]:
+    entries = await redis_client.lrange(WHEEL_HISTORY_KEY, 0, max(limit, 0) - 1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            payload = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        created_at = str(payload.get("created_at", ""))
+        history.append(
+            {
+                "player": payload.get("player", "anon"),
+                "message": payload.get("message", ""),
+                "tone": payload.get("tone", "neutral"),
+                "payout": float(payload.get("payout", 0.0) or 0.0),
+                "entry_fee": float(payload.get("entry_fee", 0.0) or 0.0),
+                "timestamp": created_at,
+                "timestamp_display": _format_clock(created_at),
+                "segment_id": payload.get("segment_id", ""),
+                "segment_label": payload.get("segment_label", ""),
+            }
+        )
+    return history
+
+
+async def _wheel_state(email: str | None, limit: int = 6) -> dict[str, Any]:
+    config = await _ensure_wheel_config()
+    scorepad = await _scorepad_balance(email or "") if email else 0.0
+    history = await _wheel_history(limit)
+    status_message = "Ready to spin. Good luck!"
+    status_tone = "neutral"
+    if history:
+        status_message = history[0]["message"] or status_message
+        status_tone = history[0]["tone"] or status_tone
+    segments = []
+    for idx, segment in enumerate(config["segments"]):
+        seg = dict(segment)
+        seg["index"] = idx
+        segments.append(seg)
+    return {
+        "entry_fee": config["entry_fee"],
+        "pool_balance": config["pool_balance"],
+        "scorepad_balance": scorepad,
+        "cooldown_seconds": config["cooldown_seconds"],
+        "enabled": config["enabled"],
+        "segments": segments,
+        "history": history,
+        "status_message": status_message,
+        "status_tone": status_tone,
+    }
+
+
+async def _record_wheel_spin(entry: dict[str, Any]) -> None:
+    payload = json.dumps(entry)
+    await redis_client.lpush(WHEEL_HISTORY_KEY, payload)
+    await redis_client.ltrim(WHEEL_HISTORY_KEY, 0, WHEEL_HISTORY_LIMIT - 1)
+
+
+def _choose_wheel_segment(segments: list[dict[str, Any]]) -> tuple[int, dict[str, Any]]:
+    if not segments:
+        raise ValueError("no wheel segments configured")
+    weights = [max(float(seg.get("weight", 1.0) or 0.0), 0.0) for seg in segments]
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        total_weight = float(len(segments))
+        weights = [1.0 for _ in segments]
+    roll = RNG.random() * total_weight
+    cumulative = 0.0
+    for idx, segment in enumerate(segments):
+        cumulative += weights[idx]
+        if roll <= cumulative or idx == len(segments) - 1:
+            return idx, segment
+    return len(segments) - 1, segments[-1]
+
+
+def _wheel_outcome(
+    segment: dict[str, Any],
+    entry_fee: float,
+    pool_after_fee: float,
+) -> tuple[float, str, str, dict[str, float]]:
+    seg_type = str(segment.get("type", "")).strip().lower()
+    label = segment.get("label") or "Spin"
+    tone = segment.get("tone", "neutral")
+    pool_available = max(0.0, pool_after_fee)
+    payout = 0.0
+    message = label
+    detail: dict[str, float] = {}
+
+    if seg_type == "multiplier":
+        try:
+            multiplier = float(segment.get("multiplier", 0.0) or 0.0)
+        except Exception:
+            multiplier = 0.0
+        potential = max(0.0, entry_fee * multiplier)
+        payout = min(pool_available, potential)
+        detail["potential"] = potential
+        detail["multiplier"] = multiplier
+        if payout <= 0:
+            tone = "neutral"
+            message = "The pool is empty. Admins need to reload rewards."
+        elif payout + 1e-6 < potential:
+            tone = "neutral"
+            message = f"Pool light! Paid out {payout:.0f} IGP of {potential:.0f}."
+        else:
+            tone = "win"
+            message = f"Multiplier hit! +{payout:.0f} IGP."
+    elif seg_type == "fixed":
+        try:
+            amount = float(segment.get("amount", 0.0) or 0.0)
+        except Exception:
+            amount = 0.0
+        potential = max(0.0, amount)
+        payout = min(pool_available, potential)
+        detail["potential"] = potential
+        if payout <= 0:
+            tone = "neutral"
+            message = "The pool is empty. Admins need to reload rewards."
+        elif payout + 1e-6 < potential:
+            tone = "neutral"
+            message = f"Partial win: paid {payout:.0f} IGP from the remaining pool."
+        else:
+            tone = "win"
+            message = f"Jackpot drop! +{payout:.0f} IGP."
+    elif seg_type == "bonus":
+        refund = min(pool_available, max(0.0, entry_fee))
+        payout = refund
+        detail["refund"] = refund
+        if refund <= 0:
+            tone = "neutral"
+            message = "Bonus unlocked, but the pool is empty. No refund issued."
+        elif refund + 1e-6 < entry_fee:
+            tone = "neutral"
+            message = "Bonus spin unlocked! Partial refund applied while the pool refills."
+        else:
+            tone = "neutral"
+            message = "Bonus spin! Entry refunded — keep the wheel moving."
+    elif seg_type == "retry":
+        refund = min(pool_available, max(0.0, entry_fee))
+        payout = refund
+        detail["refund"] = refund
+        if refund <= 0:
+            tone = "neutral"
+            message = "Try again streak triggered, but the pool is empty. Entry stays staked."
+        elif refund + 1e-6 < entry_fee:
+            tone = "neutral"
+            message = "Try again streak triggered with a partial refund while the pool reloads."
+        else:
+            tone = "neutral"
+            message = "Try again! Entry fee refunded for another spin."
+    else:
+        payout = 0.0
+        tone = "lose"
+        message = "House wins — bank the lesson and spin again when ready."
+
+    return payout, message, tone, detail
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -3685,6 +4024,7 @@ async def admin_panel(request: Request) -> Any:
     proposals = await _pending_proposals()
     recoveries = await _all_recoveries()
     analytics = await _analytics_dashboard(page=page, limit=limit)
+    gamefi_state = await _wheel_state(None, limit=15)
     maintenance_enabled = await _maintenance_enabled()
     # transfers = await _all_transfer_history()
     pending_referrals = await _pending_referrals()
@@ -3718,6 +4058,7 @@ async def admin_panel(request: Request) -> Any:
             "proposals": proposals,
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
+            "gamefi_state": gamefi_state,
             # "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
             "pending_referrals": pending_referrals,
@@ -4831,6 +5172,7 @@ async def index(request: Request) -> Any:
         if str(row.get("email", "")).strip().lower() not in guardians
     ]
     rows = [{k: row.get(k, "") for k in columns} for row in filtered_rows]
+    wheel_state = await _wheel_state(email, limit=8)
     return templates.TemplateResponse(
         "index.html",
         {
@@ -4847,8 +5189,244 @@ async def index(request: Request) -> Any:
             "igp_to_itc": data["igp_to_itc"],
             "itc_to_igp": data["itc_to_igp"],
             "show_kyc_toast": profile_ctx["show_kyc_toast"],
+            "wheel_state": wheel_state,
         },
     )
+
+
+@app.get("/gamefi")
+async def gamefi(request: Request) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
+
+    is_admin = await _current_admin(request)
+    if await _maintenance_enabled() and not is_admin:
+        return templates.TemplateResponse(
+            "maintenance.html",
+            {"request": request},
+            status_code=503,
+        )
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    await _build_profile_account_context(request, email)
+    data = await _get_cached_data()
+    wheel_state = await _wheel_state(email, limit=10)
+
+    return templates.TemplateResponse(
+        "gamefi.html",
+        {
+            "request": request,
+            "project_name": "Interchained × Elara – Ambassadors",
+            "pool_balance": data["pool_balance"],
+            "source": data["source"],
+            "ttl": CACHE_TTL_SECONDS,
+            "wheel_state": wheel_state,
+        },
+    )
+
+
+@app.get("/api/gamefi/wheel/state")
+async def api_wheel_state(request: Request) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    state = await _wheel_state(email, limit=10)
+    return JSONResponse({"ok": True, "state": state})
+
+
+@app.post("/api/gamefi/wheel/spin")
+async def api_wheel_spin(request: Request) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    email_norm = _normalize_email(email)
+    config = await _ensure_wheel_config()
+    if not config["enabled"]:
+        return JSONResponse(
+            {"ok": False, "error": "wheel_disabled", "detail": "Wheel is currently paused by admins."},
+            status_code=423,
+        )
+
+    entry_fee = float(config.get("entry_fee", 0.0) or 0.0)
+    segments = list(config.get("segments", []))
+    cooldown = int(config.get("cooldown_seconds", 0) or 0)
+
+    if entry_fee <= 0:
+        return JSONResponse(
+            {"ok": False, "error": "invalid_config", "detail": "Entry fee is not configured."},
+            status_code=503,
+        )
+    if not segments:
+        return JSONResponse(
+            {"ok": False, "error": "invalid_config", "detail": "Reward segments are not configured."},
+            status_code=503,
+        )
+
+    now = datetime.utcnow()
+    if cooldown > 0:
+        last_spin_key = f"{WHEEL_LAST_SPIN_PREFIX}{email_norm}"
+        last_spin_raw = await redis_client.get(last_spin_key)
+        if last_spin_raw:
+            last_spin_dt = _parse_iso(last_spin_raw)
+            if last_spin_dt is not None:
+                elapsed = (now - last_spin_dt).total_seconds()
+                if elapsed < cooldown:
+                    retry_after = max(int(cooldown - elapsed + 0.999), 1)
+                    return JSONResponse(
+                        {
+                            "ok": False,
+                            "error": "cooldown_active",
+                            "detail": f"Please wait {retry_after} seconds before spinning again.",
+                            "retry_after": retry_after,
+                        },
+                        status_code=429,
+                    )
+
+    user_lock = redis_client.lock(
+        f"{WHEEL_USER_LOCK_PREFIX}{email_norm}", timeout=8, blocking=False
+    )
+    if not await user_lock.acquire(blocking=False):
+        return JSONResponse(
+            {"ok": False, "error": "spin_in_progress", "detail": "Another spin is already processing."},
+            status_code=429,
+        )
+
+    global_lock = redis_client.lock(WHEEL_LOCK_KEY, timeout=8, blocking_timeout=4)
+    payout = 0.0
+    pool_after_fee = 0.0
+    balance_after_fee = 0.0
+    pool_final = 0.0
+    balance_final = 0.0
+    segment_index = 0
+    segment: dict[str, Any] = {}
+    message = ""
+    tone = "neutral"
+    detail: dict[str, float] = {}
+    try:
+        try:
+            acquired = await global_lock.acquire(blocking=True)
+        except LockError:
+            acquired = False
+        if not acquired:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "busy",
+                    "detail": "Casino wheel is busy. Please try again in a moment.",
+                },
+                status_code=429,
+            )
+
+        balance_before = await _scorepad_balance(email_norm)
+        if balance_before + 1e-9 < entry_fee:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "insufficient_funds",
+                    "detail": "Insufficient IGP on your score pad for this spin.",
+                    "scorepad_balance": balance_before,
+                },
+                status_code=400,
+            )
+
+        pipe = redis_client.pipeline()
+        pipe.hincrbyfloat("score_pad", email_norm, -entry_fee)
+        pipe.hincrbyfloat(WHEEL_CONFIG_KEY, "pool_balance", entry_fee)
+        results = await pipe.execute()
+        balance_after_fee = float(results[0] or 0.0)
+        pool_after_fee = float(results[1] or 0.0)
+
+        try:
+            segment_index, segment = _choose_wheel_segment(segments)
+        except ValueError:
+            revert = redis_client.pipeline()
+            revert.hincrbyfloat("score_pad", email_norm, entry_fee)
+            revert.hset(WHEEL_CONFIG_KEY, mapping={"pool_balance": pool_after_fee})
+            await revert.execute()
+            return JSONResponse(
+                {"ok": False, "error": "invalid_config", "detail": "Wheel segments unavailable."},
+                status_code=503,
+            )
+
+        payout, message, tone, detail = _wheel_outcome(segment, entry_fee, pool_after_fee)
+        payout = max(0.0, payout)
+        pool_final = max(0.0, pool_after_fee - payout)
+        balance_final = max(0.0, balance_after_fee + payout)
+
+        adjust_pipe = redis_client.pipeline()
+        if payout > 0:
+            adjust_pipe.hincrbyfloat("score_pad", email_norm, payout)
+        adjust_pipe.hset(WHEEL_CONFIG_KEY, mapping={"pool_balance": pool_final})
+        await adjust_pipe.execute()
+
+        if pool_final < -1e-6 or balance_final < -1e-6:
+            revert = redis_client.pipeline()
+            revert.hincrbyfloat("score_pad", email_norm, entry_fee)
+            revert.hset(WHEEL_CONFIG_KEY, mapping={"pool_balance": pool_after_fee})
+            if payout > 0:
+                revert.hincrbyfloat("score_pad", email_norm, -payout)
+            await revert.execute()
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "state_conflict",
+                    "detail": "Wheel state changed during your spin. Please try again.",
+                },
+                status_code=409,
+            )
+
+        await redis_client.set(
+            f"{WHEEL_LAST_SPIN_PREFIX}{email_norm}",
+            now.isoformat(),
+            ex=max(cooldown, 1) if cooldown else None,
+        )
+    finally:
+        try:
+            await global_lock.release()
+        except LockError:
+            pass
+        try:
+            await user_lock.release()
+        except LockError:
+            pass
+
+    history_entry = {
+        "email": email_norm,
+        "player": _mask_email(email_norm),
+        "segment_id": segment.get("id", ""),
+        "segment_label": segment.get("label", ""),
+        "message": message,
+        "tone": tone,
+        "entry_fee": entry_fee,
+        "payout": payout,
+        "pool_balance": pool_final,
+        "scorepad_balance": balance_final,
+        "detail": detail,
+        "created_at": now.isoformat(),
+    }
+    await _record_wheel_spin(history_entry)
+
+    history = await _wheel_history(10)
+
+    response_payload = {
+        "ok": True,
+        "segment_index": segment_index,
+        "segment": segment,
+        "entry_fee": entry_fee,
+        "payout": payout,
+        "pool_balance": pool_final,
+        "scorepad_balance": balance_final,
+        "tone": tone,
+        "message": message,
+        "history": history,
+        "cooldown_seconds": cooldown,
+    }
+    return JSONResponse(response_payload)
 
 
 @app.get("/api/leaderboard.json")
