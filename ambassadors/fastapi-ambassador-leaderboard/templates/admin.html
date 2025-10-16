@@ -35,6 +35,7 @@
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
                 <li class="nav-item"><a class="nav-link" href="#stakes">Stakes</a></li>
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
+                <li class="nav-item"><a class="nav-link" href="#otc">OTC Desk</a></li>
                 <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
                 <li class="nav-item"><a class="nav-link" href="#gamefi">GameFi</a></li>
             </ul>
@@ -680,6 +681,223 @@
         {% if not proposals %}
         <p class="text-muted">No proposals</p>
         {% endif %}
+    </div>
+    <div id="otc" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">OTC Desk Oversight</h1>
+                <p class="mb-0 text-light small">Approve currencies, monitor bids and asks, and record settlement details for ambassador OTC trades.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge bg-info text-dark">1 ITC ≈ {{ '%.6f'|format(otc_itc_to_igp or 0) }} IGP</span>
+                <span class="badge bg-secondary">1 IGP ≈ {{ '%.6f'|format(otc_igp_to_itc or 0) }} ITC</span>
+                <span class="badge bg-warning text-dark">Pending Volume {{ otc_pending_value_display }} IGP</span>
+            </div>
+        </div>
+        {% if otc_error %}
+        <div class="alert alert-danger" role="alert">{{ otc_error }}</div>
+        {% endif %}
+        {% if otc_message %}
+        <div class="alert alert-success" role="alert">{{ otc_message }}</div>
+        {% endif %}
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <h2 class="h6 text-uppercase mb-3">Approved Currencies</h2>
+                    <form method="post" action="/admin/otc/currencies" class="d-flex flex-column gap-2 mb-3">
+                        <div>
+                            <label class="form-label small text-uppercase">Currency Code</label>
+                            <input type="text" name="code" class="form-control form-control-sm" placeholder="USDX" required>
+                        </div>
+                        <div>
+                            <label class="form-label small text-uppercase">Display Label</label>
+                            <input type="text" name="label" class="form-control form-control-sm" placeholder="USD Stablecoin">
+                        </div>
+                        <div class="form-check form-switch">
+                            <input type="hidden" name="active" value="0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="currency-active" name="active" value="1" checked>
+                            <label class="form-check-label small text-uppercase" for="currency-active">Active Immediately</label>
+                        </div>
+                        <button class="btn btn-primary btn-sm">Add or Update Currency</button>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Currency</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for currency in otc_currencies %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ currency.label }}</div>
+                                        <div class="small text-muted">{{ currency.code }}</div>
+                                        {% if currency.updated_at %}<div class="small text-muted">Updated {{ currency.updated_at }}</div>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if currency.active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Disabled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <form method="post" action="/admin/otc/currencies/toggle" class="d-inline">
+                                            <input type="hidden" name="code" value="{{ currency.code }}">
+                                            <input type="hidden" name="state" value="{% if currency.active %}0{% else %}1{% endif %}">
+                                            {% if currency.active %}
+                                            <button class="btn btn-outline-warning btn-sm">Disable</button>
+                                            {% else %}
+                                            <button class="btn btn-outline-success btn-sm">Enable</button>
+                                            {% endif %}
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-3">No currencies registered.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h6 text-uppercase mb-0">Pending Orders</h2>
+                        <span class="badge bg-warning text-dark">{{ otc_pending_orders|length }} awaiting action</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Order</th>
+                                    <th scope="col">Ambassador</th>
+                                    <th scope="col">Request</th>
+                                    <th scope="col">IGP</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in otc_pending_orders %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">#{{ order.id }}</div>
+                                        <div class="small text-muted">{{ order.created_at_display or '—' }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ order.ambassador_name or order.ambassador_label }}</div>
+                                        <div class="small text-muted">{{ order.ambassador_email_display }}</div>
+                                        {% if order.ambassador_telegram %}<div class="small text-muted">{{ order.ambassador_telegram }}</div>{% endif %}
+                                        {% if order.ambassador_wallet %}<div class="small text-break">Wallet: {{ order.ambassador_wallet }}</div>{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ order.side_badge }} mb-1">{{ order.side_label }}</span>
+                                        <div class="small">{{ order.amount_display }} {{ order.currency_label }}</div>
+                                        <div class="small text-muted">@ {{ order.price_display }} IGP</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ order.total_display }} IGP</div>
+                                        <div class="small text-muted">Scorepad before: {{ order.scorepad_before_display }}</div>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/admin/otc/orders/verify" class="mb-2">
+                                            <input type="hidden" name="order_id" value="{{ order.id }}">
+                                            <div class="mb-1">
+                                                <input type="text" name="wallet_destination" class="form-control form-control-sm" placeholder="Destination wallet" value="{{ order.wallet_destination or '' }}" required>
+                                            </div>
+                                            <div class="mb-1">
+                                                <input type="text" name="transaction_hash" class="form-control form-control-sm" placeholder="Transaction hash (optional)" value="{{ order.transaction_hash or '' }}">
+                                            </div>
+                                            <button class="btn btn-success btn-sm w-100">Verify</button>
+                                        </form>
+                                        <form method="post" action="/admin/otc/orders/reject" class="mb-0">
+                                            <input type="hidden" name="order_id" value="{{ order.id }}">
+                                            <div class="mb-1">
+                                                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason (optional)">
+                                            </div>
+                                            <button class="btn btn-danger btn-sm w-100">Reject &amp; Refund</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No pending OTC orders.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h6 text-uppercase mb-0">Recent Order History</h2>
+                        <span class="badge bg-secondary">{{ otc_recent_orders|length }} records</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Order</th>
+                                    <th scope="col">Ambassador</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col">Totals</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in otc_recent_orders %}
+                                <tr class="{% if order.status == 'pending' %}table-warning{% endif %}">
+                                    <td>
+                                        <div class="fw-semibold">#{{ order.id }}</div>
+                                        <div class="small text-muted">{{ order.created_at_display or '—' }}</div>
+                                        {% if order.updated_at_display and order.updated_at_display != order.created_at_display %}
+                                        <div class="small text-muted">Updated {{ order.updated_at_display }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ order.ambassador_name or order.ambassador_label }}</div>
+                                        <div class="small text-muted">{{ order.ambassador_email_display }}</div>
+                                        {% if order.ambassador_telegram %}<div class="small text-muted">{{ order.ambassador_telegram }}</div>{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ order.side_badge }} mb-1">{{ order.side_label }}</span>
+                                        <div class="small">{{ order.amount_display }} {{ order.currency_label }}</div>
+                                        <div class="small text-muted">@ {{ order.price_display }} IGP</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ order.total_display }} IGP</div>
+                                        <div class="small text-muted">Scorepad after: {{ order.scorepad_after_display }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ order.status_badge }}">{{ order.status_label }}</span>
+                                        {% if order.reviewed_by %}<div class="small text-muted">By {{ order.reviewed_by }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">
+                                        {% if order.transaction_hash %}<div>Tx: <span class="text-break">{{ order.transaction_hash }}</span></div>{% endif %}
+                                        {% if order.wallet_destination %}<div>Wallet: <span class="text-break">{{ order.wallet_destination }}</span></div>{% endif %}
+                                        {% if order.rejection_reason %}<div class="text-warning">Reason: {{ order.rejection_reason }}</div>{% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No OTC order history recorded yet.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="p2p" class="glass-card p-3 mt-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
