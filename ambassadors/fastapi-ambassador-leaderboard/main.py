@@ -1405,6 +1405,8 @@ async def _referral_entries(email: str) -> list[dict[str, str]]:
 async def _set_referral_status(
     referrer_email: str, referred_email: str, status: str
 ) -> None:
+    """Update referral status safely. Never delete; always preserve record history."""
+
     referrer_norm = str(referrer_email or "").strip().lower()
     referred_norm = str(referred_email or "").strip().lower()
     if not referrer_norm or not referred_norm:
@@ -1417,21 +1419,37 @@ async def _set_referral_status(
     except Exception:
         payload = {}
 
-    payload.update({
-        "email": referred_norm,
-        "status": status,
-    })
-    timestamp = datetime.utcnow().isoformat()
-    if status == "approved":
-        payload["approved_at"] = timestamp
-    elif status == "rejected":
-        payload["rejected_at"] = timestamp
+    # Always preserve core fields
+    payload["email"] = referred_norm
+    payload["status"] = status
+    payload["last_status_change"] = datetime.utcnow().isoformat()
 
+    # Update timestamps based on status, never delete record
+    if status == "approved":
+        payload["approved_at"] = datetime.utcnow().isoformat()
+        payload.pop("rejected_at", None)
+    elif status == "rejected":
+        payload["rejected_at"] = datetime.utcnow().isoformat()
+        payload.pop("approved_at", None)
+    elif status == "pending":
+        # Clear other timestamps if reverting to pending
+        payload.pop("approved_at", None)
+        payload.pop("rejected_at", None)
+
+    # ✅ Always write back the updated payload — no deletes ever
     await redis_client.hset(key, referred_norm, json.dumps(payload))
+
+    # ✅ Keep referral_count accurate (pending + approved only)
     entries = await _referral_entries(referrer_norm)
-    count = sum(1 for entry in entries if entry.get("status") != "rejected")
+    active_count = sum(
+        1 for entry in entries if entry.get("status") in {"pending", "approved"}
+    )
     await redis_client.hset(
-        f"user:{referrer_norm}", mapping={"referral_count": count}
+        f"user:{referrer_norm}", mapping={"referral_count": active_count}
+    )
+
+    print(
+        f"[referrals] ✅ Updated {referred_norm} for {referrer_norm} → {status}"
     )
 
 
@@ -2517,32 +2535,37 @@ async def _approve_pending_applicant(email: str) -> bool:
 
 
 async def _reject_pending_applicant(email: str) -> bool:
+    """Mark a pending applicant as rejected without deleting their record."""
+
     email_norm = str(email or "").strip().lower()
     if not email_norm:
         return False
 
-    removed_from_leaderboard = _remove_leaderboard_entry(email_norm)
+    # ✅ Remove from leaderboard (optional — you might still want this)
+    # removed_from_leaderboard = _remove_leaderboard_entry(email_norm)
 
     key = f"user:{email_norm}"
     data = await redis_client.hgetall(key)
     if data:
         referrer = str(data.get("referred_by", "")).strip().lower()
         if referrer:
+            # ✅ Only update referral status — don't delete anything
             await _set_referral_status(referrer, email_norm, "rejected")
 
-        referral_code = str(data.get("referral_code", "")).strip().upper()
-        if referral_code:
-            await redis_client.delete(f"{REFERRAL_CODE_KEY_PREFIX}{referral_code}")
+        # ✅ Mark the user as rejected instead of deleting them
+        await redis_client.hset(
+            key,
+            mapping={
+                "verified": 0,
+                "rejected": 1,
+                "rejected_at": datetime.utcnow().isoformat(),
+            },
+        )
 
-        await redis_client.delete(key)
-        await redis_client.delete(f"recovery:{email_norm}")
-        await redis_client.delete(f"posts:{email_norm}")
-        await redis_client.delete(f"posts_verified:{email_norm}")
-        await redis_client.delete(f"posts_rejected:{email_norm}")
-        await redis_client.delete(f"tasks:{email_norm}")
-        await redis_client.delete(f"transfers:{email_norm}")
-        await redis_client.delete(f"{ACTIVITY_ZSET_PREFIX}{email_norm}")
+        # 🚨 DO NOT DELETE user data, tasks, transfers, etc.
+        # Leave these for audit trails or potential reinstatement later.
 
+    # ✅ Optional: still remove them from CSV records if you want
     _unregister_email_record(email_norm)
 
     return removed_from_leaderboard
