@@ -35,7 +35,7 @@ SHEET_CSV_URL: str | None = os.getenv("SHEET_CSV_URL")
 CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
-EXPLORER_URL = "https://explorer.interchained.org/api"
+EXPLORER_API = "https://explorer.interchained.org/api/address"
 
 # Task definitions for the checklist panel
 TASK_LIST = [
@@ -594,24 +594,30 @@ def _get_pool_balance() -> float:
         return 250.0
 
     try:
-        # ✅ Pull live chain data from explorer
-        r = requests.get(f"{EXPLORER_URL}/address/{addr}")
+        # Call explorer API
+        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=10)
         r.raise_for_status()
         data = r.json()
 
-        funded = float(data.get("chain_stats", {}).get("funded_txo_sum", 0)) / 1e8
-        spent = float(data.get("chain_stats", {}).get("spent_txo_sum", 0)) / 1e8
-        base_amount = funded - spent
+        # Parse balance from balanceSat (in satoshis)
+        balance_sat = data.get("txHistory", {}).get("balanceSat", 0)
+        base_amount = balance_sat / 1e8  # convert to ITC
 
-        # ✅ Apply your governance math (same logic as before)
-        ops_amount = base_amount * 9000 / 10000
-        operations_reserve = 6030
+        # Apply ops deduction and reserve logic
+        ops_amount = base_amount * 0.90        # 90% allocation logic
+        operations_reserve = 6030              # fixed reserve
         true_amount = base_amount - ops_amount - operations_reserve
 
+        # Return half the remaining amount as pool distribution
         return max(true_amount / 2, 0.0)
+
+    except requests.RequestException as e:
+        print(f"[pool_balance] Explorer API error: {e}")
     except Exception as e:
-        print(f"[pool_balance] explorer API error: {e}")
-        return 250.0
+        print(f"[pool_balance] Unexpected error: {e}")
+
+    # fallback default
+    return 250.0
 
 
 async def _load_csv() -> Dict[str, Any]:
