@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
 import re
 import ipaddress
+import mimetypes
+import base64
 import os, json, shutil, shlex, subprocess
 import secrets
 import hashlib
@@ -15,8 +16,6 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import quote_plus
 import requests
-
-
 import pandas as pd
 import httpx
 from dotenv import load_dotenv
@@ -38,6 +37,9 @@ AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 EXPLORER_API = "https://explorer.interchained.org/api/address"
 POOL_CACHE_KEY = "ambassador:pool_balance_cache"
 POOL_CACHE_TTL = 120  # cache for 2 minutes
+
+TINIFY_API_KEY = "VprDVvZQhDl8g064XrxrrxpGqTg9y4Nh"
+TINIFY_ENDPOINT = "https://api.tinify.com/shrink"
 
 KYC_STATUS_PENDING = "pending"
 KYC_STATUS_VERIFIED = "verified"
@@ -202,52 +204,76 @@ def _parse_birthdate(value: str) -> tuple[bool, str]:
 async def _upload_temp_document(file: UploadFile | None) -> tuple[bool, str, str]:
     if not file or not getattr(file, "filename", ""):
         return True, "", ""
+
+    # ✅ 1. Read file content
     try:
         content = await file.read()
     except Exception as exc:
         return False, "", f"Unable to read uploaded document: {exc}"
+
     if not content:
         return False, "", "Uploaded document was empty"
     if len(content) > KYC_DOCUMENT_MAX_BYTES:
-        return (
-            False,
-            "",
-            "Document is too large. Maximum size is 5 MB.",
-        )
+        return False, "", "Document is too large. Maximum size is 5 MB."
+
+    # ✅ 2. Enforce PNG only
+    mime_type, _ = mimetypes.guess_type(file.filename)
+    if mime_type != "image/png":
+        return False, "", "Only PNG files are allowed."
+
+    # ✅ 3. Compress image with TinyPNG
+    try:
+        async with httpx.AsyncClient(timeout=60.0, auth=("api", TINIFY_API_KEY)) as client:
+            compress_resp = await client.post(
+                TINIFY_ENDPOINT,
+                content=content
+            )
+
+        if compress_resp.status_code != 201:
+            return False, "", f"Compression failed: {compress_resp.text}"
+
+        compressed_url = compress_resp.headers.get("Location")
+        if not compressed_url:
+            return False, "", "Compression API did not return a location URL."
+
+        # ✅ 4. Download compressed image
+        async with httpx.AsyncClient(timeout=60.0, auth=("api", TINIFY_API_KEY)) as client:
+            download_resp = await client.get(compressed_url)
+
+        if download_resp.status_code != 200:
+            return False, "", f"Failed to download compressed image: {download_resp.text}"
+
+        compressed_content = download_resp.content
+
+    except Exception as exc:
+        return False, "", f"Image compression failed: {exc}"
+
+    # ✅ 5. Upload compressed PNG to temp storage
     headers = {"X-Delete-After": str(KYC_DELETE_AFTER_SECONDS)}
     payload = {
         "file": (
             file.filename,
-            content,
-            file.content_type or "application/octet-stream",
+            compressed_content,
+            "image/png",
         )
     }
+
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 KYC_TEMP_UPLOAD_ENDPOINT, files=payload, headers=headers
             )
     except Exception as exc:
         return False, "", f"Upload failed: {exc}"
+
     if response.status_code != 200:
         return False, "", f"Upload failed ({response.status_code})"
+
     url = response.text.strip()
     if not url.startswith("http"):
         return False, "", "Unexpected response from upload service"
+
     return True, url, ""
-
-
-async def _set_user_kyc_status(email: str, status: str) -> None:
-    email_norm = str(email or "").strip().lower()
-    if not email_norm:
-        return
-    normalized = _normalize_kyc_status(status)
-    await redis_client.hset(
-        f"user:{email_norm}",
-        mapping={
-            "kyc_status": normalized,
-        },
-    )
 
 
 async def _get_kyc_record(email: str) -> dict[str, Any]:
