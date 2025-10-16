@@ -346,7 +346,7 @@ async def _stake_balances(email: str, profile: dict[str, Any] | None = None) -> 
     available = max(total_points - staked, 0.0)
     return {
         "total": total_points,
-        "available": available,
+        "available": total_points,
         "staked": staked,
         "scorepad": pad_balance,
     }
