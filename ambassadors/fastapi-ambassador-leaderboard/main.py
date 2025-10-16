@@ -595,41 +595,52 @@ async def _get_pool_balance() -> float:
     if not addr:
         return 500.0
 
+    # ✅ 1. Try Redis cache first
     try:
         cached = await redis_client.get(POOL_BALANCE_CACHE_KEY)
         if cached is not None:
-            return float(cached)
+            cached_val = float(cached)
+            return cached_val if cached_val >= 500.0 else 500.0
     except Exception as e:
         print(f"[pool_balance] Redis cache read failed: {e}")
 
+    # ✅ 2. Fallback to Explorer API if cache is missing/expired
     try:
-        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=30)
+        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=45)
         r.raise_for_status()
         data = r.json()
 
-        # ✅ Only use balanceSat and ignore txHistory errors
-        balance_sat = (
-            data.get("txHistory", {}).get("balanceSat") 
-            or data.get("balanceSat") 
-            or 0
-        )
+        # Extract balance (satoshis → ITC)
+        balance_sat = data.get("txHistory", {}).get("balanceSat", 0)
         base_amount = balance_sat / 1e8
 
+        # Apply operations + reserve deductions
         ops_amount = base_amount * 0.90
         operations_reserve = 6030
         true_amount = base_amount - ops_amount - operations_reserve
+
         result = max(true_amount / 2, 0.0)
 
-        await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
+        # ✅ Always enforce a minimum of 500.0
+        if result < 500.0:
+            result = 500.0
+
+        # ✅ 3. Cache result for 2 minutes
+        try:
+            await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
+        except Exception as e:
+            print(f"[pool_balance] Redis cache write failed: {e}")
+
         return result
 
     except requests.Timeout:
-        print("[pool_balance] Explorer API timeout (30s)")
+        print("[pool_balance] Explorer API timeout (45s)")
     except requests.RequestException as e:
         print(f"[pool_balance] Explorer API error: {e}")
     except Exception as e:
         print(f"[pool_balance] Unexpected error: {e}")
 
+    # ✅ 4. Final fallback if everything fails
     return 500.0
     
 
