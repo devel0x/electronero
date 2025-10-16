@@ -164,7 +164,30 @@
   </div>
 </nav>
 
+{% if show_kyc_toast %}
+<div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 2000;">
+  <div id="kycReminderToast" class="toast align-items-center text-bg-warning border-0 shadow" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body">
+        <strong>Action needed:</strong> Complete KYC to become eligible for payouts.
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="container py-4">
+    <section class="glass-card p-4 mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+      <div>
+        <h2 class="h4 mb-1">Account Settings</h2>
+        <p class="mb-0 text-muted small">Update your wallet, profile details, and KYC documents from the dedicated settings page.</p>
+      </div>
+      <a href="/wallet" class="btn btn-primary">Open Account Settings</a>
+    </div>
+  </section>
+
   <section class="hero-card mb-4">
     <div class="hero-content p-4">
       <div class="d-flex flex-column flex-lg-row align-items-lg-end align-items-start gap-3">
@@ -440,6 +463,16 @@ setInterval(() => refreshData(true), autoRefresh);
   };
   window.addEventListener('mousemove', parallax, { passive:true });
 })();
+
+{% if show_kyc_toast %}
+document.addEventListener('DOMContentLoaded', function () {
+  var toastEl = document.getElementById('kycReminderToast');
+  if (toastEl && typeof bootstrap !== 'undefined') {
+    var toast = bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false });
+    toast.show();
+  }
+});
+{% endif %}
 </script>
 </body>
 </html>
