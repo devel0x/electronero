@@ -2566,9 +2566,9 @@ async def _reject_pending_applicant(email: str) -> bool:
         # Leave these for audit trails or potential reinstatement later.
 
     # ✅ Optional: still remove them from CSV records if you want
-    _unregister_email_record(email_norm)
+    # _unregister_email_record(email_norm)
 
-    return removed_from_leaderboard
+    return True
 
 
 @app.post("/admin/referrals/approve")
