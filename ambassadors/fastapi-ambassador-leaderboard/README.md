@@ -1,6 +1,6 @@
 # FastAPI Ambassador Leaderboard
 
-This project is a small FastAPI application that serves an ambassador leaderboard for the Interchained × Elara program. It reads data from a CSV file or a Google Sheet published as CSV, ranks ambassadors by points, and presents both an HTML interface and a JSON API. Pending rewards for each ambassador are calculated by splitting the balance of a configured ITC ambassador pool address in proportion to the ambassadors' points.
+This project is a small FastAPI application that serves an ambassador leaderboard for the Interchained × Elara program. It reads data from a CSV file or a Google Sheet published as CSV, ranks ambassadors by points, and presents both an HTML interface and a JSON API. Pending rewards for each ambassador are calculated by splitting the balance of a configured ITC ambassador pool address in proportion to the ambassadors' points. A weekly IGP staking module lets ambassadors reserve part of their score for a one-week lock, keeps those balances out of transfers, and returns the staked amount automatically when an administrator or the ambassador manually releases it ahead of payouts.
 
 The application is protected by an email/password login screen. Only addresses listed in `data/registrations.csv` under the `ambassadors` column may sign in. Users register once to set a password, Telegram username, and wallet address; credentials and profile data are stored in Redis alongside sessions and leaderboard cache data.
 
@@ -21,6 +21,15 @@ Administrators also gain new controls and insights:
 - **Visitor analytics dashboard** – The admin landing view now summarizes total and unique visits, surfaces the latest visitor activity (including IP addresses, resolved city/region/country labels, and the most recent path hit), and highlights top locations so admins can spot traffic trends at a glance.
 - **User growth chart** – Registration timestamps are aggregated server-side to chart the cumulative number of ambassadors over time, giving admins a quick visual of community growth alongside the tabular analytics cards.
 - **Transfer ledger** – Every ambassador-to-ambassador point transfer is streamed into an admin-facing ledger with the source, destination, Telegram handles, timestamps, and amounts so finance and ops teams can audit scorepad movements without querying Redis directly.
+- **Staking console** – A dedicated staking hero card highlights the total IGP locked for the active week, and a ghost-key bulk unstake workflow lets admins manually release balances before payouts without relying on an automated reset.
+
+## Weekly staking cycle
+
+- Ambassadors visit the **Staking** panel to review their available, total, and currently locked IGP balances. The dashboard prevents double stakes by allowing only one active reservation per user during the weekly window.
+- Submitting the staking form moves the requested amount out of the user's scorepad and into a reserved balance tracked under Redis. The amount no longer appears in the transferable balance, ensuring the staked IGP cannot be sent elsewhere until it is released.
+- An on-page timeline card summarizes the stake amount, start time, payout window, and remaining lock duration. Ambassadors can trigger a manual unstake before the payout week begins, instantly returning the IGP to their scorepad and available transfer balance.
+- Administrators can mirror the same release action in bulk through the ghost-gated admin console, making it easy to unwind reservations for multiple emails at once while keeping the leaderboard cache in sync.
+- Stake duration defaults to seven days but can be tuned by setting the `STAKE_DURATION_DAYS` environment variable before launching the application.
 
 ## Ambassador transfer workflow
 
@@ -53,7 +62,8 @@ Ambassadors may submit governance proposals and vote yes or no on active items. 
     - Optionally set `AMBASSADOR_POOL_ADDRESS` so the app can fetch the address balance via `interchained-cli` and show pending rewards.
     - Ensure `REGISTRATIONS_CSV` points to a CSV listing authorized ambassador emails.
     - Set `REDIS_URL` if your Redis server differs from the default `redis://localhost:6379/0`.
-    - Set `GHOST_EXPORT_KEY` to a secret password required for JSON/CSV exports and reset actions.
+    - Set `GHOST_EXPORT_KEY` to a secret password required for JSON/CSV exports, reset actions, and the admin staking console.
+    - Optionally set `STAKE_DURATION_DAYS` (defaults to 7) to adjust how long weekly IGP stakes remain locked.
 3. **Run the server**
    ```bash
    uvicorn main:app --reload
@@ -69,9 +79,12 @@ There is no special build step for this app. Installing the dependencies and run
 - `GET /health` – simple health check.
 - `GET /verify` – page for ambassadors to submit post URLs.
 - `GET /tasks` – task checklist for ambassadors with apply buttons.
+- `GET /staking` – view the staking dashboard showing available, total, and locked balances.
 - `GET /transfers` – authenticated transfer panel showing available balance, rolodex search, and personal history.
 - `GET /proposals` – list active proposals and submit new ones.
 - `GET /raid` – table of verified posts with each submitter's wallet and Telegram handle.
+- `POST /staking` – submit a new stake for the upcoming payout window (authenticated users).
+- `POST /staking/unstake` – release the active stake and return the balance to the scorepad (authenticated users).
 - `POST /proposals/submit` – submit a new proposal (authenticated users).
 - `POST /proposals/vote` – vote yes or no on a proposal (authenticated users).
 - `POST /transfers` – submit a points transfer to another ambassador (authenticated users; enforces balance checks).
@@ -89,6 +102,7 @@ There is no special build step for this app. Installing the dependencies and run
 - `POST /admin/scorepad/slash` – reset pad points to zero for every inactive ambassador (admin only, requires `GHOST_EXPORT_KEY`).
 - `GET /api/admin/export?fmt=json|csv&ghost=GHOST` – download scores, pending rewards, wallets, emails, Telegram handles, verification flags, weekly activity status, and verified-post counts (admin only, requires `GHOST_EXPORT_KEY`).
 - `POST /admin/activity/reset` – clear weekly activity state for all ambassadors (admin only, requires `GHOST_EXPORT_KEY`).
+- `POST /admin/stakes/unstake` – ghost-gated bulk unstake endpoint for releasing one or more reserved balances (admin only, requires `GHOST_EXPORT_KEY`).
 - Admin reset actions also require the `GHOST_EXPORT_KEY`.
 
 If `AMBASSADOR_POOL_ADDRESS` is set and `interchained-cli` is available, the app tracks the pool's balance and displays each ambassador's pending reward in both the HTML table and the JSON API response.

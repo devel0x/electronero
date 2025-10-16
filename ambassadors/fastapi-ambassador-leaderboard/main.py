@@ -149,6 +149,9 @@ VERIFIED_SEARCH_LIMIT = int(os.getenv("VERIFIED_SEARCH_LIMIT", "50"))
 TRANSFER_GLOBAL_LOG_KEY = "transfers:global"
 GUARDIAN_SET_KEY = "guardians:emails"
 GUARDIAN_USER_FIELD = "guardian"
+STAKE_ACTIVE_SET_KEY = "stakes:active"
+STAKE_RESERVE_HASH = "stakes:reserve"
+STAKE_DURATION_DAYS = int(os.getenv("STAKE_DURATION_DAYS", "7"))
 
 
 def _monday_start(dt: datetime | None = None) -> datetime:
@@ -188,6 +191,287 @@ async def _scorepad_balance(email: str) -> float:
         return float(raw or 0.0)
     except Exception:
         return 0.0
+
+
+def _normalize_email(email: str) -> str:
+    return str(email or "").strip().lower()
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+
+def _format_dt(value: datetime | None, pattern: str = "%b %d, %Y") -> str:
+    if not value:
+        return ""
+    return value.strftime(pattern)
+
+
+def _format_duration(delta: timedelta) -> str:
+    total_seconds = int(delta.total_seconds())
+    if total_seconds <= 0:
+        return "Completed"
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if not parts:
+        parts.append("<1m")
+    return " ".join(parts)
+
+
+def _stake_key(email_norm: str) -> str:
+    return f"stake:{email_norm}"
+
+
+async def _cleanup_stake_reserve(email_norm: str) -> None:
+    raw = await redis_client.hget(STAKE_RESERVE_HASH, email_norm)
+    try:
+        value = float(raw or 0.0)
+    except Exception:
+        value = 0.0
+    if value <= 1e-9:
+        await redis_client.hdel(STAKE_RESERVE_HASH, email_norm)
+
+
+async def _staked_amount(email: str) -> float:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return 0.0
+    raw = await redis_client.hget(STAKE_RESERVE_HASH, email_norm)
+    try:
+        value = float(raw or 0.0)
+    except Exception:
+        value = 0.0
+    return value if value > 0 else 0.0
+
+
+async def _get_stake(email: str) -> dict[str, Any] | None:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return None
+    data = await redis_client.hgetall(_stake_key(email_norm))
+    if not data:
+        return None
+    try:
+        amount = float(data.get("amount", 0) or 0)
+    except Exception:
+        amount = 0.0
+    if amount <= 0:
+        return None
+    started_at = _parse_iso(data.get("started_at"))
+    week_start = _parse_iso(data.get("week_start"))
+    week_end = _parse_iso(data.get("week_end"))
+    payout_week_start = _parse_iso(data.get("payout_week_start"))
+    payout_week_end = _parse_iso(data.get("payout_week_end"))
+    ends_at = _parse_iso(data.get("ends_at"))
+    if not ends_at and week_end:
+        ends_at = week_end
+    elif not ends_at and started_at:
+        ends_at = started_at + timedelta(days=STAKE_DURATION_DAYS)
+    return {
+        "email": email_norm,
+        "amount": amount,
+        "status": data.get("status", "active"),
+        "created_by": data.get("created_by", "user"),
+        "started_at": started_at,
+        "week_start": week_start,
+        "week_end": week_end,
+        "payout_week_start": payout_week_start,
+        "payout_week_end": payout_week_end,
+        "ends_at": ends_at,
+        "snapshots": {
+            "display_name": data.get("display_name"),
+            "telegram": data.get("telegram_snapshot") or data.get("telegram"),
+        },
+    }
+
+
+def _stake_view(stake: dict[str, Any]) -> dict[str, Any]:
+    view = dict(stake)
+    ends_at = stake.get("ends_at")
+    if not ends_at and stake.get("week_end"):
+        ends_at = stake.get("week_end")
+    view["ends_at"] = ends_at
+    delta = (ends_at - datetime.utcnow()) if ends_at else timedelta()
+    view["time_remaining_label"] = _format_duration(delta)
+    view["is_mature"] = delta.total_seconds() <= 0
+    view["started_at_display"] = _format_dt(stake.get("started_at"), "%b %d, %Y %H:%M UTC")
+    view["week_start_display"] = _format_dt(stake.get("week_start"))
+    view["week_end_display"] = _format_dt(stake.get("week_end"))
+    view["payout_start_display"] = _format_dt(stake.get("payout_week_start"))
+    view["payout_end_display"] = _format_dt(stake.get("payout_week_end"))
+    view["ends_at_display"] = _format_dt(ends_at)
+    try:
+        view["amount_display"] = f"{float(stake.get('amount', 0.0) or 0.0):.2f}"
+    except Exception:
+        view["amount_display"] = f"{stake.get('amount', 0.0)}"
+    if view["payout_start_display"] and view["payout_end_display"]:
+        view["payout_window_display"] = (
+            f"{view['payout_start_display']} – {view['payout_end_display']}"
+        )
+    else:
+        view["payout_window_display"] = view.get("payout_start_display", "")
+    return view
+
+
+async def _stake_balances(
+    email: str, profile: dict[str, Any] | None = None
+) -> dict[str, float]:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return {"total": 0.0, "available": 0.0, "staked": 0.0, "scorepad": 0.0}
+    profile_data = profile
+    if profile_data is None:
+        profile_data = await _ambassador_entry_by_email(email_norm)
+    pad_balance = await _scorepad_balance(email_norm)
+    net_points = 0.0
+    if profile_data and profile_data.get("guardian"):
+        net_points = max(pad_balance, 0.0)
+    elif profile_data:
+        try:
+            net_points = float(profile_data.get("points", 0.0) or 0.0)
+        except Exception:
+            net_points = 0.0
+    else:
+        net_points = max(pad_balance, 0.0)
+    staked = await _staked_amount(email_norm)
+    total_points = max(net_points + staked, 0.0)
+    available = max(net_points, 0.0)
+    return {
+        "total": total_points,
+        "available": available,
+        "staked": staked,
+        "scorepad": pad_balance,
+    }
+
+
+async def _create_stake(
+    email: str, amount: float, created_by: str = "user"
+) -> tuple[bool, str | None]:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return False, "Invalid email provided."
+    if amount <= 0:
+        return False, "Stake amount must be positive."
+    existing = await _get_stake(email_norm)
+    if existing:
+        return False, "An active stake already exists."
+    balances = await _stake_balances(email_norm)
+    available = balances.get("available", 0.0)
+    if amount > available + 1e-9:
+        return False, "Insufficient points available to stake that amount."
+    now = datetime.utcnow()
+    week_start = _monday_start(now)
+    week_end = week_start + timedelta(days=7)
+    payout_week_start = week_end
+    payout_week_end = payout_week_start + timedelta(days=7)
+    ends_at = now + timedelta(days=STAKE_DURATION_DAYS)
+    mapping: dict[str, Any] = {
+        "email": email_norm,
+        "amount": f"{amount:.8f}",
+        "status": "active",
+        "created_by": created_by,
+        "started_at": now.isoformat(),
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "payout_week_start": payout_week_start.isoformat(),
+        "payout_week_end": payout_week_end.isoformat(),
+        "ends_at": ends_at.isoformat(),
+        "duration_days": str(STAKE_DURATION_DAYS),
+    }
+    profile_snapshot = await redis_client.hgetall(f"user:{email_norm}")
+    if profile_snapshot.get("name"):
+        mapping["display_name"] = profile_snapshot["name"]
+    if profile_snapshot.get("telegram"):
+        mapping["telegram_snapshot"] = profile_snapshot["telegram"]
+    pipe = redis_client.pipeline()
+    pipe.hset(_stake_key(email_norm), mapping=mapping)
+    pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
+    if amount:
+        pipe.hincrbyfloat("score_pad", email_norm, -amount)
+    pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
+    await pipe.execute()
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[staking] failed to refresh leaderboard cache after stake: {exc}")
+    return True, None
+
+
+async def _release_stake(email: str) -> tuple[bool, str | None]:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return False, "Invalid email provided."
+    stake = await _get_stake(email_norm)
+    if not stake:
+        return False, "No active stake found."
+    amount = float(stake.get("amount", 0.0) or 0.0)
+    pipe = redis_client.pipeline()
+    if amount:
+        pipe.hincrbyfloat("score_pad", email_norm, amount)
+    pipe.delete(_stake_key(email_norm))
+    pipe.srem(STAKE_ACTIVE_SET_KEY, email_norm)
+    if amount:
+        pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, -amount)
+    await pipe.execute()
+    await _cleanup_stake_reserve(email_norm)
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[staking] failed to refresh leaderboard cache after release: {exc}")
+    return True, None
+
+
+async def _all_active_stakes() -> list[dict[str, Any]]:
+    members = await redis_client.smembers(STAKE_ACTIVE_SET_KEY)
+    stakes: list[dict[str, Any]] = []
+    for email_norm in sorted(members):
+        stake = await _get_stake(email_norm)
+        if not stake:
+            await redis_client.srem(STAKE_ACTIVE_SET_KEY, email_norm)
+            continue
+        profile = await _ambassador_entry_by_email(email_norm)
+        balances = await _stake_balances(email_norm, profile=profile)
+        user_profile = await redis_client.hgetall(f"user:{email_norm}")
+        telegram_display = (
+            user_profile.get("telegram")
+            or (stake.get("snapshots") or {}).get("telegram")
+            or (profile or {}).get("telegram")
+        )
+        name_display = (
+            user_profile.get("name")
+            or (stake.get("snapshots") or {}).get("display_name")
+            or (profile or {}).get("name")
+        )
+        view = _stake_view(stake)
+        view.update(
+            {
+                "email": email_norm,
+                "telegram": telegram_display,
+                "name": name_display,
+                "points": balances["total"],
+                "available_points": balances["available"],
+            }
+        )
+        stakes.append(view)
+    stakes.sort(
+        key=lambda item: item.get("week_start")
+        or item.get("started_at")
+        or datetime.min
+    )
+    return stakes
 
 
 async def _activity_window_bounds(now: datetime | None = None) -> tuple[float, float]:
@@ -2107,6 +2391,7 @@ async def transfers_page(request: Request, success: str | None = None, error: st
                 "error": error or "No leaderboard profile found. Contact an administrator.",
                 "success": success or "",
                 "available_points": 0.0,
+                "staked_amount": await _staked_amount(email),
                 "history": history,
                 "totals": totals,
             },
@@ -2114,10 +2399,10 @@ async def transfers_page(request: Request, success: str | None = None, error: st
 
     history = await _transfer_history(email)
     totals = _transfer_totals(history)
-    pad_balance = await _scorepad_balance(email)
-    available_points = float(profile.get("points", 0.0))
-    if profile.get("guardian"):
-        available_points = max(pad_balance, 0.0)
+    balances = await _stake_balances(email, profile=profile)
+    pad_balance = balances["scorepad"]
+    available_points = balances["available"]
+    staked_amount = balances["staked"]
     success_msg = success or request.query_params.get("success", "")
     error_msg = error or request.query_params.get("error", "")
 
@@ -2132,6 +2417,7 @@ async def transfers_page(request: Request, success: str | None = None, error: st
             "history": history,
             "totals": totals,
             "scorepad_balance": pad_balance,
+            "staked_amount": staked_amount,
         },
     )
 
@@ -2172,10 +2458,8 @@ async def transfers_submit(
     if error_message:
         return await transfers_page(request, error=error_message)
 
-    source_pad_balance = await _scorepad_balance(email)
-    available_points = float(source_profile.get("points", 0.0))
-    if source_profile.get("guardian"):
-        available_points = max(source_pad_balance, 0.0)
+    source_balances = await _stake_balances(email, profile=source_profile)
+    available_points = source_balances["available"]
     if amount_value > available_points:
         return await transfers_page(
             request,
@@ -2186,10 +2470,8 @@ async def transfers_submit(
     if not receiver_email:
         return await transfers_page(request, error="Destination ambassador is missing an email. Contact support.")
 
-    dest_pad_balance = await _scorepad_balance(receiver_email)
-    receiver_points_before = float(destination_profile.get("points", 0.0))
-    if destination_profile.get("guardian"):
-        receiver_points_before = max(dest_pad_balance, 0.0)
+    dest_balances = await _stake_balances(receiver_email, profile=destination_profile)
+    receiver_points_before = dest_balances["available"]
 
     pipe = redis_client.pipeline()
     pipe.hincrbyfloat("score_pad", email, -amount_value)
@@ -2212,6 +2494,95 @@ async def transfers_submit(
     dest_display = destination_profile.get("telegram") or destination_profile.get("email_display") or receiver_email
     success_message = f"Transferred {amount_value:.2f} points to {dest_display}"
     return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
+
+
+@app.get("/staking")
+async def staking_dashboard(
+    request: Request,
+    success: str | None = None,
+    error: str | None = None,
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _ambassador_entry_by_email(email)
+    balances = await _stake_balances(email, profile=profile)
+    stake_record = await _get_stake(email)
+    stake_view = _stake_view(stake_record) if stake_record else None
+    success_msg = success or request.query_params.get("success", "")
+    error_msg = error or request.query_params.get("error", "")
+
+    return templates.TemplateResponse(
+        "staking.html",
+        {
+            "request": request,
+            "profile": profile,
+            "available_points": balances["available"],
+            "total_points": balances["total"],
+            "staked_amount": balances["staked"],
+            "scorepad_balance": balances["scorepad"],
+            "stake": stake_view,
+            "success": success_msg,
+            "error": error_msg,
+            "stake_duration_days": STAKE_DURATION_DAYS,
+        },
+    )
+
+
+@app.post("/staking")
+async def staking_submit(request: Request, amount: str = Form(...)) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    try:
+        amount_value = float(str(amount).strip())
+    except Exception:
+        amount_value = -1.0
+
+    if amount_value <= 0:
+        return await staking_dashboard(request, error="Enter a positive amount to stake.")
+
+    profile = await _ambassador_entry_by_email(email)
+    balances = await _stake_balances(email, profile=profile)
+
+    if balances["staked"] > 0:
+        return await staking_dashboard(request, error="You already have an active stake.")
+
+    if balances["available"] <= 0:
+        return await staking_dashboard(request, error="No points available to stake.")
+
+    if amount_value > balances["available"]:
+        return await staking_dashboard(request, error="Stake amount exceeds your available balance.")
+
+    ok, err = await _create_stake(email, amount_value, created_by="user")
+    if not ok:
+        return await staking_dashboard(request, error=err or "Unable to create stake right now.")
+
+    success_message = f"Staked {amount_value:.2f} IGP for weekly rewards."
+    return RedirectResponse(
+        f"/staking?success={quote_plus(success_message)}",
+        status_code=303,
+    )
+
+
+@app.post("/staking/unstake")
+async def staking_unstake(request: Request) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    ok, err = await _release_stake(email)
+    if ok:
+        return RedirectResponse(
+            f"/staking?success={quote_plus('Stake released back to your balance.')}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/staking?error={quote_plus(err or 'Unable to unstake right now.')}",
+        status_code=303,
+    )
 
 
 @app.get("/api/transfers/rolodex")
@@ -2496,6 +2867,10 @@ async def admin_panel(request: Request) -> Any:
     maintenance_enabled = await _maintenance_enabled()
     transfers = await _all_transfer_history()
     pending_referrals = await _pending_referrals()
+    stakes = await _all_active_stakes()
+    stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
+    stakes_message = request.query_params.get("stakes_msg", "")
+    stakes_error = request.query_params.get("stakes_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -2513,6 +2888,11 @@ async def admin_panel(request: Request) -> Any:
             "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
             "pending_referrals": pending_referrals,
+            "stakes": stakes,
+            "stakes_total": stakes_total,
+            "stakes_message": stakes_message,
+            "stakes_error": stakes_error,
+            "stake_duration_days": STAKE_DURATION_DAYS,
         },
     )
 
@@ -2659,6 +3039,56 @@ async def admin_referral_reject(
             print(f"[admin] failed to refresh leaderboard cache: {exc}")
 
     return RedirectResponse("/admin#referrals", status_code=303)
+
+
+@app.post("/admin/stakes/unstake")
+async def admin_stakes_unstake(
+    request: Request, emails: str = Form(""), ghost: str = Form("")
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return RedirectResponse("/admin?stakes_err=Invalid+ghost+key#stakes", status_code=303)
+
+    raw = str(emails or "").strip()
+    if not raw:
+        return RedirectResponse("/admin?stakes_err=Provide+one+or+more+emails#stakes", status_code=303)
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[\n,]", raw):
+        value_norm = _normalize_email(part)
+        if value_norm and value_norm not in seen:
+            seen.add(value_norm)
+            candidates.append(value_norm)
+
+    if not candidates:
+        return RedirectResponse("/admin?stakes_err=No+valid+emails+found#stakes", status_code=303)
+
+    successes = 0
+    failures: list[str] = []
+    for candidate in candidates:
+        ok, err = await _release_stake(candidate)
+        if ok:
+            successes += 1
+        else:
+            failures.append(f"{candidate}: {err or 'unable to unstake'}")
+
+    params: list[tuple[str, str]] = []
+    if successes:
+        label = "stake" if successes == 1 else "stakes"
+        params.append(("stakes_msg", f"Unstaked {successes} {label}."))
+    if failures:
+        joined = "; ".join(failures[:5])
+        params.append(("stakes_err", joined))
+
+    query = "&".join(f"{key}={quote_plus(value)}" for key, value in params if value)
+    redirect_url = "/admin#stakes"
+    if query:
+        redirect_url = f"/admin?{query}#stakes"
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.post("/admin/maintenance")

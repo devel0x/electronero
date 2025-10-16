@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IGP Staking</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="{{ url_for('static', path='custom.css') }}" rel="stylesheet" />
+  <style>
+    :root { --bg1:#1e1e2f; --bg2:#141414; }
+    body {
+      min-height:100vh;
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));
+      color:#f5f5f5;
+      overflow-x:hidden;
+    }
+    .fx-wrap{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+    .fx-stars{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.18) 0 40%, transparent 50%) 0 0/180px 180px,
+        radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,.15) 0 40%, transparent 50%) 0 0/140px 140px,
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.10) 0 40%, transparent 50%) 0 0/220px 220px;
+      mix-blend-mode:screen; opacity:.35; filter: blur(.2px);
+    }
+    .fx-grid{
+      position:absolute; inset:-20% -20% -20% -20%;
+      background:
+        repeating-linear-gradient(to right, rgba(255,255,255,.02) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0 1px, transparent 1px 60px);
+      transform:rotate(1deg); opacity:.35; filter: drop-shadow(0 0 20px rgba(255,255,255,.05));
+    }
+    .fx-bloom{ position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter: blur(60px); opacity:.30; mix-blend-mode:screen; transform: translate(-50%,-50%); }
+    .b1{ background:radial-gradient(circle at 40% 40%, rgba(255,59,78,.65), transparent 60%); left:22%; top:28%; }
+    .b2{ background:radial-gradient(circle at 60% 60%, rgba(74,163,255,.7), transparent 60%); left:78%; top:34%; }
+    .b3{ background:radial-gradient(circle at 50% 50%, rgba(255,209,102,.55), transparent 60%); left:52%; top:78%; }
+
+    .glass-card{
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:1rem;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .glass-subcard{
+      background: rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:0.75rem;
+    }
+    .navbar{ backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); }
+    .stat-card{ background:rgba(255,255,255,0.05); border-radius:0.75rem; padding:1rem; min-width:150px; }
+    .stat-card h2{ font-size:0.9rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,.75); }
+    .stat-card .value{ font-size:1.6rem; font-weight:700; color:#fff; }
+    .info-list li{ margin-bottom:0.35rem; }
+    @media (prefers-reduced-motion: reduce){ .fx-grid,.fx-bloom,.fx-stars{ animation:none !important; } }
+  </style>
+</head>
+<body>
+<div class="fx-wrap" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-grid" id="fxGrid"></div>
+  <div class="fx-bloom b1" id="b1"></div>
+  <div class="fx-bloom b2" id="b2"></div>
+  <div class="fx-bloom b3" id="b3"></div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark bg-opacity-50">
+  <div class="container-fluid">
+    <span class="navbar-brand">
+      <img width="28" height="28" class="me-2" src="{{ url_for('static', path='itc.png') }}" alt="ITC logo" />
+      ITC Governance
+    </span>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/staking" class="btn btn-sm btn-light text-dark">Staking</a>
+      <a href="/transfers" class="btn btn-sm btn-outline-light">Transfers</a>
+      <a href="/referrals" class="btn btn-sm btn-outline-light">Referrals</a>
+      <a href="/wallet" class="btn btn-sm btn-outline-light">Wallet</a>
+      <a href="/tasks" class="btn btn-sm btn-outline-light">Tasks</a>
+      <a href="/verify" class="btn btn-sm btn-outline-light">Verify</a>
+      <a href="/proposals" class="btn btn-sm btn-outline-light">Proposals</a>
+      <a href="/raid" class="btn btn-sm btn-outline-light">Raid</a>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="glass-card p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+      <div>
+        <h1 class="h4 mb-2">Weekly IGP Staking</h1>
+        <p class="mb-0 text-light small">
+          Reserve your IGP for {{ stake_duration_days }} days to join the next ITC payout cycle. Staked balances are locked but you can manually unstake at any time before payouts.
+        </p>
+      </div>
+      <div class="d-flex flex-wrap gap-3 justify-content-end">
+        <div class="stat-card text-center">
+          <h2>Available</h2>
+          <div class="value">{{ '%.2f'|format(available_points or 0) }}</div>
+        </div>
+        <div class="stat-card text-center">
+          <h2>Staked</h2>
+          <div class="value text-info">{{ '%.2f'|format(staked_amount or 0) }}</div>
+        </div>
+        <div class="stat-card text-center">
+          <h2>Total IGP</h2>
+          <div class="value text-warning">{{ '%.2f'|format(total_points or 0) }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success" role="alert">{{ success }}</div>
+    {% endif %}
+
+    <div class="glass-subcard p-4 mb-4">
+      <h2 class="h6 text-uppercase text-secondary mb-3">How it works</h2>
+      <ul class="info-list small text-light mb-0">
+        <li>Stake once per week – double stakes are disabled so choose your amount carefully.</li>
+        <li>Your staked IGP is reserved and removed from transfers until you unstake.</li>
+        <li>Payouts are handled the following week in ITC, as usual for the ambassador pool.</li>
+        <li>You may unstake manually before payouts, and admins can bulk unstake through the console.</li>
+      </ul>
+    </div>
+
+    {% if stake %}
+    <div class="glass-subcard p-4 mb-4">
+      <div class="d-flex justify-content-between flex-wrap gap-3 align-items-center mb-3">
+        <div>
+          <h2 class="h5 mb-1">Active Stake</h2>
+          <p class="text-light small mb-0">Reserved for the payout window beginning {{ stake.payout_start_display or '—' }}.</p>
+        </div>
+        <div class="text-end">
+          <div class="display-6 fw-bold text-info">{{ stake.amount_display }} IGP</div>
+          <div class="small text-uppercase text-secondary">Committed</div>
+        </div>
+      </div>
+      <div class="row g-3 small text-light">
+        <div class="col-md-3">
+          <div class="text-uppercase text-secondary fw-semibold">Week Of</div>
+          <div>{{ stake.week_start_display or '—' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-uppercase text-secondary fw-semibold">Stake Ends</div>
+          <div>{{ stake.ends_at_display or stake.week_end_display or '—' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-uppercase text-secondary fw-semibold">Payout Window</div>
+          <div>{{ stake.payout_window_display or '—' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-uppercase text-secondary fw-semibold">Time Remaining</div>
+          <div class="fw-semibold">{{ stake.time_remaining_label }}</div>
+        </div>
+      </div>
+      {% if stake.is_mature %}
+      <div class="alert alert-warning mt-3 mb-0" role="alert">
+        This stake has completed its lock period. Unstake when you are ready to move the IGP back to your available balance.
+      </div>
+      {% else %}
+      <div class="alert alert-info mt-3 mb-0" role="alert">
+        Your stake remains locked until the payout window. You can still unstake manually if you need to free the balance.
+      </div>
+      {% endif %}
+      <form method="post" action="/staking/unstake" class="mt-3">
+        <button type="submit" class="btn btn-outline-light" onclick="return confirm('Unstake this balance? It will return to your available IGP.')">
+          Unstake Balance
+        </button>
+      </form>
+    </div>
+    {% else %}
+    <form method="post" class="glass-subcard p-4 mb-4">
+      <h2 class="h5 mb-3">Start a Stake</h2>
+      <div class="mb-3">
+        <label for="stake-amount" class="form-label">Amount to Stake</label>
+        <input type="number" step="0.01" min="0.01" max="{{ '%.2f'|format(available_points or 0) }}" class="form-control" id="stake-amount" name="amount" placeholder="100" required />
+        <div class="form-text text-light">Enter any amount up to your available IGP balance.</div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <small class="text-light">Stakes lock immediately. You can unstake before payouts if plans change.</small>
+        <button type="submit" class="btn btn-primary">Stake IGP</button>
+      </div>
+    </form>
+    {% endif %}
+
+    <div class="glass-subcard p-4">
+      <h2 class="h6 text-uppercase text-secondary mb-2">Need to adjust?</h2>
+      <p class="small text-light mb-0">
+        Contact an administrator if you require assistance. Admins can bulk unstake reserved balances through the ghost-gated console, and no automatic unstake is performed.
+      </p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
