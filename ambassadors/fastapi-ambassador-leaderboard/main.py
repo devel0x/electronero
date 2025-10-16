@@ -379,6 +379,9 @@ WHEEL_HISTORY_LIMIT = int(os.getenv("WHEEL_HISTORY_LIMIT", "200"))
 WHEEL_LOCK_KEY = "gamefi:wheel:lock"
 WHEEL_USER_LOCK_PREFIX = "gamefi:wheel:user:"
 WHEEL_LAST_SPIN_PREFIX = "gamefi:wheel:last_spin:"
+WHEEL_SEGMENT_FIELD_RE = re.compile(
+    r"segment_(\d+)_(id|label|type|tone|weight|multiplier|amount|index)"
+)
 DEFAULT_WHEEL_ENTRY_FEE = float(os.getenv("WHEEL_DEFAULT_ENTRY_FEE", "50"))
 DEFAULT_WHEEL_POOL = float(os.getenv("WHEEL_DEFAULT_POOL", "12500"))
 DEFAULT_WHEEL_COOLDOWN_SECONDS = int(os.getenv("WHEEL_DEFAULT_COOLDOWN", "8"))
@@ -536,6 +539,9 @@ def _coerce_wheel_config(raw: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         cooldown = DEFAULT_WHEEL_COOLDOWN_SECONDS
     enabled_flag = str(config.get("enabled", "1") or "1").strip()
+    status_message = _safe_text(config.get("status_message", "")).strip()
+    status_tone_raw = str(config.get("status_tone", "neutral") or "neutral").strip().lower()
+    status_tone = status_tone_raw if status_tone_raw in {"neutral", "win", "lose", "bonus"} else "neutral"
     segments_raw = config.get("segments")
     if isinstance(segments_raw, str):
         try:
@@ -551,11 +557,21 @@ def _coerce_wheel_config(raw: dict[str, Any]) -> dict[str, Any]:
 
     normalized_segments: list[dict[str, Any]] = []
     for idx, segment in enumerate(segments):
+        seg_type_raw = str(segment.get("type") or "fixed").strip().lower()
+        seg_type = (
+            seg_type_raw
+            if seg_type_raw in {"fixed", "multiplier", "bonus", "retry", "lose"}
+            else "fixed"
+        )
+        seg_tone_raw = str(segment.get("tone") or "neutral").strip().lower()
+        seg_tone = (
+            seg_tone_raw if seg_tone_raw in {"neutral", "win", "lose", "bonus"} else "neutral"
+        )
         seg = {
             "id": segment.get("id") or f"segment_{idx}",
             "label": segment.get("label") or "Spin",
-            "type": segment.get("type") or "fixed",
-            "tone": segment.get("tone") or "neutral",
+            "type": seg_type,
+            "tone": seg_tone,
             "weight": float(segment.get("weight", 1.0) or 1.0),
         }
         if "multiplier" in segment:
@@ -568,6 +584,11 @@ def _coerce_wheel_config(raw: dict[str, Any]) -> dict[str, Any]:
                 seg["amount"] = float(segment.get("amount") or 0.0)
             except Exception:
                 seg["amount"] = 0.0
+        try:
+            seg_index = int(segment.get("index", idx) or idx)
+        except Exception:
+            seg_index = idx
+        seg["index"] = max(0, seg_index)
         normalized_segments.append(seg)
 
     return {
@@ -576,6 +597,8 @@ def _coerce_wheel_config(raw: dict[str, Any]) -> dict[str, Any]:
         "cooldown_seconds": max(0, cooldown),
         "enabled": enabled_flag not in {"0", "false", "off"},
         "segments": normalized_segments,
+        "status_message": status_message,
+        "status_tone": status_tone,
     }
 
 
@@ -590,6 +613,8 @@ async def _ensure_wheel_config() -> dict[str, Any]:
         "cooldown_seconds": DEFAULT_WHEEL_COOLDOWN_SECONDS,
         "enabled": 1,
         "segments": json.dumps(_default_wheel_segments()),
+        "status_message": "Ready to spin. Good luck!",
+        "status_tone": "neutral",
         "updated_at": now_iso,
     }
     await redis_client.hset(WHEEL_CONFIG_KEY, mapping=config)
@@ -625,15 +650,18 @@ async def _wheel_state(email: str | None, limit: int = 6) -> dict[str, Any]:
     config = await _ensure_wheel_config()
     scorepad = await _scorepad_balance(email or "") if email else 0.0
     history = await _wheel_history(limit)
-    status_message = "Ready to spin. Good luck!"
-    status_tone = "neutral"
-    if history:
+    config_message = config.get("status_message") or ""
+    status_message = config_message or "Ready to spin. Good luck!"
+    status_tone = config.get("status_tone") or "neutral"
+    if not config_message and history:
         status_message = history[0]["message"] or status_message
         status_tone = history[0]["tone"] or status_tone
+    raw_segments = list(config["segments"])
+    raw_segments.sort(key=lambda seg: seg.get("index", 0))
     segments = []
-    for idx, segment in enumerate(config["segments"]):
+    for idx, segment in enumerate(raw_segments):
         seg = dict(segment)
-        seg["index"] = idx
+        seg["index"] = segment.get("index", idx)
         segments.append(seg)
     return {
         "entry_fee": config["entry_fee"],
@@ -645,6 +673,8 @@ async def _wheel_state(email: str | None, limit: int = 6) -> dict[str, Any]:
         "history": history,
         "status_message": status_message,
         "status_tone": status_tone,
+        "admin_status_message": config_message,
+        "admin_status_tone": config.get("status_tone", "neutral"),
     }
 
 
@@ -4044,6 +4074,8 @@ async def admin_panel(request: Request) -> Any:
     p2p_history = await _p2p_recent_history(limit=100)
     p2p_message = request.query_params.get("p2p_msg", "")
     p2p_error = request.query_params.get("p2p_err", "")
+    gamefi_message = request.query_params.get("gamefi_msg", "")
+    gamefi_error = request.query_params.get("gamefi_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -4059,6 +4091,8 @@ async def admin_panel(request: Request) -> Any:
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
             "gamefi_state": gamefi_state,
+            "gamefi_message": gamefi_message,
+            "gamefi_error": gamefi_error,
             # "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
             "pending_referrals": pending_referrals,
@@ -4077,6 +4111,208 @@ async def admin_panel(request: Request) -> Any:
             "p2p_error": p2p_error,
         },
     )
+
+
+@app.post("/admin/gamefi/wheel")
+async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    form = await request.form()
+    config = await _ensure_wheel_config()
+
+    entry_fee = config["entry_fee"]
+    entry_fee_raw = form.get("entry_fee")
+    if entry_fee_raw is not None and str(entry_fee_raw).strip() != "":
+        try:
+            entry_fee = float(str(entry_fee_raw).replace(",", "").strip())
+        except Exception:
+            err = quote_plus("Entry fee must be a valid number.")
+            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+    if entry_fee < 0:
+        err = quote_plus("Entry fee cannot be negative.")
+        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+
+    pool_balance = config["pool_balance"]
+    pool_adjust_raw = form.get("pool_adjust")
+    pool_adjust_amount = 0.0
+    if pool_adjust_raw is not None and str(pool_adjust_raw).strip() != "":
+        try:
+            pool_adjust_amount = float(str(pool_adjust_raw).replace(",", "").strip())
+        except Exception:
+            err = quote_plus("Pool adjustment must be a valid number.")
+            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        new_balance = pool_balance + pool_adjust_amount
+        if new_balance < 0:
+            err = quote_plus("Pool balance cannot drop below zero.")
+            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        pool_balance = new_balance
+    else:
+        pool_balance_raw = form.get("pool_balance")
+        if pool_balance_raw is not None and str(pool_balance_raw).strip() != "":
+            try:
+                pool_balance = float(str(pool_balance_raw).replace(",", "").strip())
+            except Exception:
+                err = quote_plus("Pool balance must be a valid number.")
+                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            if pool_balance < 0:
+                err = quote_plus("Pool balance cannot be negative.")
+                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+
+    cooldown_seconds = config["cooldown_seconds"]
+    cooldown_raw = form.get("cooldown_seconds")
+    if cooldown_raw is not None and str(cooldown_raw).strip() != "":
+        try:
+            cooldown_seconds = int(float(str(cooldown_raw).replace(",", "").strip()))
+        except Exception:
+            err = quote_plus("Cooldown must be a whole number of seconds.")
+            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+    if cooldown_seconds < 0:
+        err = quote_plus("Cooldown cannot be negative.")
+        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+
+    enabled_value = str(form.get("enabled", "")).strip().lower()
+    enabled = enabled_value not in {"", "0", "false", "off"}
+
+    status_message = _safe_text(form.get("status_message", "")).strip()
+    if len(status_message) > 240:
+        status_message = status_message[:240]
+    status_tone_raw = str(form.get("status_tone", "neutral") or "neutral").strip().lower()
+    status_tone = (
+        status_tone_raw if status_tone_raw in {"neutral", "win", "lose", "bonus"} else "neutral"
+    )
+
+    segment_rows: dict[int, dict[str, Any]] = {}
+    for key, value in form.multi_items():
+        match = WHEEL_SEGMENT_FIELD_RE.fullmatch(key)
+        if not match:
+            continue
+        idx = int(match.group(1))
+        field = match.group(2)
+        segment_rows.setdefault(idx, {})[field] = value
+
+    segments: list[dict[str, Any]] = []
+    for _, row in sorted(segment_rows.items(), key=lambda item: item[0]):
+        has_values = any(str(row.get(field, "")).strip() for field in ("label", "id", "type", "weight", "multiplier", "amount"))
+        if not has_values:
+            continue
+        label_raw = _safe_text(row.get("label", ""))
+        seg_label = label_raw.strip() or f"Slice {len(segments) + 1}"
+        seg_id_raw = _safe_text(row.get("id", ""))
+        seg_id = seg_id_raw.strip() or f"segment_{len(segments)}"
+        seg_type_raw = str(row.get("type", "") or "").strip().lower()
+        seg_type = (
+            seg_type_raw
+            if seg_type_raw in {"fixed", "multiplier", "bonus", "retry", "lose"}
+            else "fixed"
+        )
+        seg_tone_raw = str(row.get("tone", "") or "").strip().lower()
+        seg_tone = (
+            seg_tone_raw if seg_tone_raw in {"neutral", "win", "lose", "bonus"} else "neutral"
+        )
+        weight_raw = str(row.get("weight", "")).strip()
+        if weight_raw:
+            try:
+                seg_weight = float(weight_raw.replace(",", ""))
+            except Exception:
+                err = quote_plus(f"Weight for slice '{seg_label}' must be numeric.")
+                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        else:
+            seg_weight = 0.0
+        seg_weight = max(0.0, seg_weight)
+
+        index_raw = str(row.get("index", "")).strip()
+        if index_raw:
+            try:
+                seg_index = int(float(index_raw.replace(",", "")))
+            except Exception:
+                err = quote_plus(f"Index for slice '{seg_label}' must be numeric.")
+                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            seg_index = max(0, seg_index)
+        else:
+            seg_index = len(segments)
+
+        segment_entry: dict[str, Any] = {
+            "id": seg_id,
+            "label": seg_label,
+            "type": seg_type,
+            "tone": seg_tone,
+            "weight": seg_weight,
+            "index": seg_index,
+        }
+
+        if seg_type == "multiplier":
+            multiplier_raw = str(row.get("multiplier", "")).strip()
+            if multiplier_raw:
+                try:
+                    multiplier_value = float(multiplier_raw.replace(",", ""))
+                except Exception:
+                    err = quote_plus(f"Multiplier for slice '{seg_label}' must be numeric.")
+                    return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            else:
+                multiplier_value = 0.0
+            segment_entry["multiplier"] = max(0.0, multiplier_value)
+        elif seg_type == "fixed":
+            amount_raw = str(row.get("amount", "")).strip()
+            if amount_raw:
+                try:
+                    amount_value = float(amount_raw.replace(",", ""))
+                except Exception:
+                    err = quote_plus(f"Amount for slice '{seg_label}' must be numeric.")
+                    return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            else:
+                amount_value = 0.0
+            segment_entry["amount"] = max(0.0, amount_value)
+
+        segments.append(segment_entry)
+
+    if not segments:
+        err = quote_plus("Configure at least one wheel slice before saving.")
+        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+
+    segments_sorted = sorted(segments, key=lambda seg: seg.get("index", 0))
+    for idx, segment in enumerate(segments_sorted):
+        segment["index"] = idx
+
+    now_iso = datetime.utcnow().isoformat()
+    payload = {
+        "entry_fee": f"{max(0.0, entry_fee):.6f}",
+        "pool_balance": f"{max(0.0, pool_balance):.6f}",
+        "cooldown_seconds": str(max(0, cooldown_seconds)),
+        "enabled": "1" if enabled else "0",
+        "segments": json.dumps(segments_sorted),
+        "status_message": status_message,
+        "status_tone": status_tone,
+        "updated_at": now_iso,
+    }
+
+    global_lock = redis_client.lock(WHEEL_LOCK_KEY, timeout=8, blocking_timeout=4)
+    try:
+        try:
+            acquired = await global_lock.acquire(blocking=True)
+        except LockError:
+            acquired = False
+        if not acquired:
+            err = quote_plus("Wheel is busy. Please try again.")
+            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+
+        await redis_client.hset(WHEEL_CONFIG_KEY, mapping=payload)
+    finally:
+        try:
+            await global_lock.release()
+        except LockError:
+            pass
+
+    if pool_adjust_amount:
+        direction = "increased" if pool_adjust_amount > 0 else "decreased"
+        msg = (
+            f"Wheel updated. Pool {direction} by {abs(pool_adjust_amount):.0f} IGP "
+            f"(now {max(0.0, pool_balance):.0f})."
+        )
+    else:
+        msg = "Wheel configuration updated."
+    message = quote_plus(msg)
+    return RedirectResponse(f"/admin?gamefi_msg={message}#gamefi", status_code=303)
 
 
 @app.post("/admin/p2p/prizes")

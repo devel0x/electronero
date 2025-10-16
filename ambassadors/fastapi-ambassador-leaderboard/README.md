@@ -44,9 +44,9 @@ duplicate URLs are automatically rejected.
 - **Maintenance mode** – Pause ambassador access while keeping admin tools live.
 - **Transfer ledger** – Audit every send/receive event, including Telegram
   shortcuts and balance snapshots.
-- **GameFi control deck** – Monitor the wheel pool, entry fee, cooldown, and
-  slice odds directly from the admin panel with quick links into the ambassador
-  arcade.
+- **GameFi control deck** – Monitor and edit the wheel pool, entry fee,
+  cooldown, and slice odds directly from the admin panel with quick links into
+  the ambassador arcade.
 
 ## Account & KYC center
 Ambassadors manage their wallet, profile, and compliance information from the
@@ -127,9 +127,14 @@ Admins gain a "GameFi" card in the control panel that summarizes:
 ### Configuration & tuning
 Wheel odds and state live in Redis so you can tweak them without redeploying:
 
+- Use the admin dashboard's **GameFi Control Deck** to pause or resume the
+  wheel, change the entry fee and cooldown, top up or drain the IGP pool, and
+  edit slice ordering, odds, and payouts. Submitting the form acquires the
+  casino lock and applies the change set atomically.
 - `gamefi:wheel:config` – Hash storing `entry_fee`, `pool_balance`,
-  `cooldown_seconds`, `enabled`, and a JSON-encoded `segments` list. Update it
-  via `redis-cli` or your preferred tooling:
+  `cooldown_seconds`, `enabled`, a JSON-encoded `segments` list, and optional
+  `status_message`/`status_tone`. Update it via `redis-cli` or your preferred
+  tooling if you need to automate adjustments:
 
   ```bash
   redis-cli HSET gamefi:wheel:config entry_fee 100 cooldown_seconds 12
