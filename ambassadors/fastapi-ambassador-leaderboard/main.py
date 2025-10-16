@@ -595,7 +595,6 @@ async def _get_pool_balance() -> float:
     if not addr:
         return 500.0
 
-    # ✅ 1. Try Redis cache first
     try:
         cached = await redis_client.get(POOL_BALANCE_CACHE_KEY)
         if cached is not None:
@@ -603,43 +602,34 @@ async def _get_pool_balance() -> float:
     except Exception as e:
         print(f"[pool_balance] Redis cache read failed: {e}")
 
-    # ✅ 2. Query the explorer API asynchronously
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(f"{EXPLORER_API}/{addr}")
-            resp.raise_for_status()
-            data = resp.json()
+        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=30)
+        r.raise_for_status()
+        data = r.json()
 
-            # ✅ Safely parse balance
-            balance_sat = data.get("txHistory", {}).get("balanceSat")
-            if balance_sat is None:
-                print("[pool_balance] balanceSat missing — defaulting to 0")
-                balance_sat = 0
+        # ✅ Only use balanceSat and ignore txHistory errors
+        balance_sat = (
+            data.get("txHistory", {}).get("balanceSat") 
+            or data.get("balanceSat") 
+            or 0
+        )
+        base_amount = balance_sat / 1e8
 
-            base_amount = float(balance_sat) / 1e8  # satoshis → ITC
+        ops_amount = base_amount * 0.90
+        operations_reserve = 6030
+        true_amount = base_amount - ops_amount - operations_reserve
+        result = max(true_amount / 2, 0.0)
 
-            # ✅ Ops + reserve logic
-            ops_amount = base_amount * 0.90
-            operations_reserve = 6030
-            true_amount = base_amount - ops_amount - operations_reserve
-            result = max(true_amount / 2, 0.0)
+        await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
+        return result
 
-            # ✅ 3. Cache for 2 minutes
-            try:
-                await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
-            except Exception as e:
-                print(f"[pool_balance] Redis cache write failed: {e}")
-
-            return result
-
-    except httpx.TimeoutException:
+    except requests.Timeout:
         print("[pool_balance] Explorer API timeout (30s)")
-    except httpx.RequestError as e:
-        print(f"[pool_balance] Explorer API request error: {e}")
+    except requests.RequestException as e:
+        print(f"[pool_balance] Explorer API error: {e}")
     except Exception as e:
         print(f"[pool_balance] Unexpected error: {e}")
 
-    # ✅ 4. Final fallback
     return 500.0
     
 
