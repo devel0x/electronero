@@ -530,74 +530,86 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
     if amount <= 0:
         return False, "Stake amount must be positive."
 
-    # ✅ Check if already staked
-    existing = await _get_stake(email_norm)
-    if existing:
-        return False, "An active stake already exists."
-
-    # ✅ Get balances and raw score_pad before staking
-    balances = await _stake_balances(email_norm)
-    total_points = balances.get("total", 0.0)
-    current_scorepad = await _scorepad_balance(email_norm)
-
-    # ✅ Hard guard: never allow staking more than total points
-    if amount > total_points + 1e-9:
-        return False, f"Stake amount exceeds your total balance ({total_points:.2f} IGP)."
-
-    # ✅ Critical guard: ensure score_pad covers this stake
-    if current_scorepad < amount - 1e-9:
-        return False, (
-            f"Insufficient unlocked balance. You currently have {current_scorepad:.2f} IGP available to stake."
-        )
-
-    # ✅ Safety cap
-    if amount > MAX_STAKE:
-        return False, f"Stake amount exceeds the maximum allowed of {MAX_STAKE} IGP."
-
-    # ---------- stake logic continues ----------
-    now = datetime.utcnow()
-    week_start = _monday_start(now)
-    week_end = week_start + timedelta(days=7)
-    ends_at = now + timedelta(days=STAKE_DURATION_DAYS)
-
-    payout_week_start = _monday_start(ends_at + timedelta(days=STAKE_DURATION_DAYS))
-    if payout_week_start <= ends_at:
-        payout_week_start += timedelta(days=STAKE_DURATION_DAYS)
-    payout_week_end = payout_week_start + timedelta(days=STAKE_DURATION_DAYS)
-
-    mapping: dict[str, Any] = {
-        "email": email_norm,
-        "amount": f"{amount:.8f}",
-        "status": "active",
-        "created_by": created_by,
-        "started_at": now.isoformat(),
-        "week_start": week_start.isoformat(),
-        "week_end": week_end.isoformat(),
-        "payout_week_start": payout_week_start.isoformat(),
-        "payout_week_end": payout_week_end.isoformat(),
-        "ends_at": ends_at.isoformat(),
-        "duration_days": str(STAKE_DURATION_DAYS),
-    }
-
-    profile_snapshot = await redis_client.hgetall(f"user:{email_norm}")
-    if profile_snapshot.get("name"):
-        mapping["display_name"] = profile_snapshot["name"]
-    if profile_snapshot.get("telegram"):
-        mapping["telegram_snapshot"] = profile_snapshot["telegram"]
-
-    pipe = redis_client.pipeline()
-    pipe.hset(_stake_key(email_norm), mapping=mapping)
-    pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
-    if amount:
-        pipe.hincrbyfloat("score_pad", email_norm, -amount)
-        pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
-        await pipe.execute()
+    # ✅ Try to acquire a short-lived lock (prevents double-click / double-submit)
+    lock_key = f"stake:lock:{email_norm}"
+    lock_acquired = await redis_client.set(lock_key, "1", nx=True, ex=15)  # expires after 15s
+    if not lock_acquired:
+        return False, "A staking operation is already in progress. Please wait a moment."
 
     try:
-        await _load_csv()
-    except Exception as exc:
-        print(f"[staking] failed to refresh leaderboard cache after stake: {exc}")
-    return True, None
+        # ✅ Check if already staked
+        existing = await _get_stake(email_norm)
+        if existing:
+            return False, "An active stake already exists."
+
+        # ✅ Get balances and raw score_pad before staking
+        balances = await _stake_balances(email_norm)
+        total_points = balances.get("total", 0.0)
+        current_scorepad = await _scorepad_balance(email_norm)
+
+        # ✅ Hard guard: never allow staking more than total points
+        if amount > total_points + 1e-9:
+            return False, f"Stake amount exceeds your total balance ({total_points:.2f} IGP)."
+
+        # ✅ Critical guard: ensure score_pad covers this stake
+        if current_scorepad < amount - 1e-9:
+            return False, (
+                f"Insufficient unlocked balance. You currently have {current_scorepad:.2f} IGP available to stake."
+            )
+
+        # ✅ Safety cap
+        if amount > MAX_STAKE:
+            return False, f"Stake amount exceeds the maximum allowed of {MAX_STAKE} IGP."
+
+        # ---------- stake logic continues ----------
+        now = datetime.utcnow()
+        week_start = _monday_start(now)
+        week_end = week_start + timedelta(days=7)
+        ends_at = now + timedelta(days=STAKE_DURATION_DAYS)
+
+        payout_week_start = _monday_start(ends_at + timedelta(days=STAKE_DURATION_DAYS))
+        if payout_week_start <= ends_at:
+            payout_week_start += timedelta(days=STAKE_DURATION_DAYS)
+        payout_week_end = payout_week_start + timedelta(days=STAKE_DURATION_DAYS)
+
+        mapping: dict[str, Any] = {
+            "email": email_norm,
+            "amount": f"{amount:.8f}",
+            "status": "active",
+            "created_by": created_by,
+            "started_at": now.isoformat(),
+            "week_start": week_start.isoformat(),
+            "week_end": week_end.isoformat(),
+            "payout_week_start": payout_week_start.isoformat(),
+            "payout_week_end": payout_week_end.isoformat(),
+            "ends_at": ends_at.isoformat(),
+            "duration_days": str(STAKE_DURATION_DAYS),
+        }
+
+        profile_snapshot = await redis_client.hgetall(f"user:{email_norm}")
+        if profile_snapshot.get("name"):
+            mapping["display_name"] = profile_snapshot["name"]
+        if profile_snapshot.get("telegram"):
+            mapping["telegram_snapshot"] = profile_snapshot["telegram"]
+
+        pipe = redis_client.pipeline()
+        pipe.hset(_stake_key(email_norm), mapping=mapping)
+        pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
+        if amount:
+            pipe.hincrbyfloat("score_pad", email_norm, -amount)
+            pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
+        await pipe.execute()
+
+        try:
+            await _load_csv()
+        except Exception as exc:
+            print(f"[staking] failed to refresh leaderboard cache after stake: {exc}")
+
+        return True, None
+
+    finally:
+        # ✅ Always release the lock — even if an exception occurs
+        await redis_client.delete(lock_key)
 
 
 async def _release_stake(email: str) -> tuple[bool, str | None]:
