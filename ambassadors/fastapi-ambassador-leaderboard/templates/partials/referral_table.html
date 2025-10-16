@@ -16,7 +16,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in pending_list %}
+      {% for item in pending_list if '@' in item.email %}
       <tr>
         <td>
           <input class="form-check-input referral-select" type="checkbox" name="emails" value="{{ item.email }}" form="referral-bulk-form">
