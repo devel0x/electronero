@@ -30,6 +30,8 @@ duplicate URLs are automatically rejected.
   send or receive points from teammates with full audit history.
 - **Tasks & governance** – Apply for community tasks, submit proposals, and vote
   once admins approve them.
+- **GameFi arcade** – Slip into the neon `/gamefi` hub to spin the IGP Wheel of
+  Fortune, review ledger history, and peek at the upcoming casino lineup.
 
 ### Admin experience
 - **Wallet operations** – Inline editing of wallets, Telegram handles, and
@@ -42,6 +44,9 @@ duplicate URLs are automatically rejected.
 - **Maintenance mode** – Pause ambassador access while keeping admin tools live.
 - **Transfer ledger** – Audit every send/receive event, including Telegram
   shortcuts and balance snapshots.
+- **GameFi control deck** – Monitor the wheel pool, entry fee, cooldown, and
+  slice odds directly from the admin panel with quick links into the ambassador
+  arcade.
 
 ## Account & KYC center
 Ambassadors manage their wallet, profile, and compliance information from the
@@ -97,6 +102,47 @@ finance and compliance teams see eligibility while preparing payouts.
   direction badges, Telegram shortcuts, and the post-transfer balance snapshot
   for traceability.
 
+## GameFi arcade
+
+### Ambassador view
+The `/gamefi` route unlocks a dedicated casino-inspired destination with the
+IGP Wheel of Fortune front and centre. Ambassadors can:
+
+- Spin against backend-selected segments that respect Redis locks, pool
+  balances, and cooldown timers.
+- Track live house metrics (entry fee, bankroll, pool health) alongside a neon
+  spin history ticker.
+- Preview upcoming drops such as the Mystery Drop Pods and High Roller Matrix
+  modes through animated teaser partials.
+
+### Admin control deck
+Admins gain a "GameFi" card in the control panel that summarizes:
+
+- Current entry fee, pool balance, cooldown, and the latest wheel status
+  message.
+- Every configured slice with its multiplier or fixed payout, tone, and weight.
+- Recent spin transcripts plus quick configuration hints and a one-click link
+  that opens the ambassador-facing arcade in a new tab.
+
+### Configuration & tuning
+Wheel odds and state live in Redis so you can tweak them without redeploying:
+
+- `gamefi:wheel:config` – Hash storing `entry_fee`, `pool_balance`,
+  `cooldown_seconds`, `enabled`, and a JSON-encoded `segments` list. Update it
+  via `redis-cli` or your preferred tooling:
+
+  ```bash
+  redis-cli HSET gamefi:wheel:config entry_fee 100 cooldown_seconds 12
+  redis-cli HSET gamefi:wheel:config enabled 1 pool_balance 20000
+  redis-cli HSET gamefi:wheel:config segments "$(cat segments.json)"
+  ```
+
+- `gamefi:wheel:history` – List capturing the most recent spins for auditing and
+  surfacing status copy in both the admin deck and ambassador wheel.
+
+After updating the config hash, the next ambassador request automatically picks
+up the new values—no process restart required.
+
 ## Requirements
 - Python 3.11+
 - Pinned dependencies listed in `requirements.txt`
@@ -140,8 +186,13 @@ server such as `uvicorn` or `gunicorn` with
 
 ## API endpoints
 - `GET /` – HTML leaderboard page.
+- `GET /gamefi` – Neon casino hub with the IGP Wheel of Fortune (authenticated).
 - `GET /api/leaderboard.json` – JSON leaderboard (add `?refresh=true` to bypass
   cache).
+- `GET /api/gamefi/wheel/state` – Current wheel entry fee, pool, and slice
+  configuration (authenticated).
+- `POST /api/gamefi/wheel/spin` – Atomically deduct the entry fee, resolve a
+  slice, and log the spin (authenticated).
 - `GET /health` – Basic health check.
 - `GET /verify` – Submit social posts for verification.
 - `GET /tasks` – Task checklist with application forms.
