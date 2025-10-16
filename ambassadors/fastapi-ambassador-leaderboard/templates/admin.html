@@ -37,6 +37,7 @@
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
                 <li class="nav-item"><a class="nav-link" href="#otc">OTC Desk</a></li>
                 <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
+                <li class="nav-item"><a class="nav-link" href="#gamefi">GameFi</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
         </div>
@@ -1054,6 +1055,244 @@
             </div>
         </div>
     </div>
+    <div id="gamefi" class="glass-card p-3 mt-4">
+        {% set wheel = gamefi_state or {} %}
+        {% set segments = wheel.segments or [] %}
+        {% set history = wheel.history or [] %}
+        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">GameFi Control Deck</h1>
+                <p class="mb-0 text-light small">Preview the ambassador casino hub, adjust the IGP pool, entry fee, and slice odds, and audit the spins driving the Wheel of Fortune.</p>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge {% if wheel.enabled %}bg-success{% else %}bg-secondary{% endif %} text-uppercase">{{ 'Wheel Online' if wheel.enabled else 'Wheel Paused' }}</span>
+                <span class="badge bg-warning text-dark">Cooldown: {{ wheel.cooldown_seconds or 0 }}s</span>
+                <a href="/gamefi" class="btn btn-sm btn-warning text-dark" target="_blank" rel="noopener">Open Ambassador View</a>
+            </div>
+        </div>
+        {% if gamefi_error %}
+        <div class="alert alert-danger mt-3" role="alert">{{ gamefi_error }}</div>
+        {% elif gamefi_message %}
+        <div class="alert alert-success mt-3" role="alert">{{ gamefi_message }}</div>
+        {% endif %}
+        <form id="gamefi-form" method="post" action="/admin/gamefi/wheel" class="row g-3 mt-1">
+            <div class="col-xl-4">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <h2 class="h6 text-uppercase text-secondary mb-3">House Controls</h2>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="gamefi-enabled">Wheel Status</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="gamefi-enabled" name="enabled" value="1" {% if wheel.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="gamefi-enabled">Allow ambassador spins</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="entry-fee">Entry Fee (IGP)</label>
+                        <input id="entry-fee" type="number" step="0.01" min="0" class="form-control form-control-sm bg-dark text-light border-light" name="entry_fee" value="{{ '%.2f'|format(wheel.entry_fee or 0) }}">
+                        <div class="form-text text-muted">Charged per spin and added to the pool before rewards resolve.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="pool-balance">Pool Balance (IGP)</label>
+                        <input id="pool-balance" type="number" step="0.01" min="0" class="form-control form-control-sm bg-dark text-light border-light" name="pool_balance" value="{{ '%.2f'|format(wheel.pool_balance or 0) }}">
+                        <div class="form-text text-muted">Set the exact available bankroll for payouts.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="pool-adjust">Adjust Pool (±IGP)</label>
+                        <input id="pool-adjust" type="number" step="0.01" class="form-control form-control-sm bg-dark text-light border-light" name="pool_adjust" placeholder="0">
+                        <div class="form-text text-muted">Optional delta. Positive numbers top up; negative numbers drain.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="cooldown-seconds">Cooldown (seconds)</label>
+                        <input id="cooldown-seconds" type="number" step="1" min="0" class="form-control form-control-sm bg-dark text-light border-light" name="cooldown_seconds" value="{{ wheel.cooldown_seconds or 0 }}">
+                        <div class="form-text text-muted">Spacing between spins per ambassador.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="status-message">Status Message</label>
+                        <textarea id="status-message" name="status_message" rows="3" class="form-control form-control-sm bg-dark text-light border-light" placeholder="Ready to spin. Good luck!">{{ wheel.admin_status_message or '' }}</textarea>
+                        <div class="form-text text-muted">Optional copy shown on the ambassador wheel regardless of recent spins.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-uppercase text-secondary" for="status-tone">Status Tone</label>
+                        {% set tone_choice = wheel.admin_status_tone or wheel.status_tone or 'neutral' %}
+                        <select id="status-tone" class="form-select form-select-sm bg-dark text-light border-light" name="status_tone">
+                            <option value="neutral" {% if tone_choice == 'neutral' %}selected{% endif %}>Neutral</option>
+                            <option value="win" {% if tone_choice == 'win' %}selected{% endif %}>Win</option>
+                            <option value="lose" {% if tone_choice == 'lose' %}selected{% endif %}>Lose</option>
+                            <option value="bonus" {% if tone_choice == 'bonus' %}selected{% endif %}>Bonus</option>
+                        </select>
+                    </div>
+                    <div>
+                        <h3 class="h6 text-uppercase text-secondary mb-2">Recent Spins</h3>
+                        <ul class="list-unstyled small mb-0">
+                            {% for item in history[:6] %}
+                            <li class="d-flex justify-content-between gap-3 border-bottom border-light border-opacity-10 py-1">
+                                <span class="text-muted">{{ item.timestamp_display or '--:--:--' }}</span>
+                                <span class="text-end {% if item.tone == 'win' %}text-success{% elif item.tone == 'lose' %}text-danger{% else %}text-warning{% endif %}">{{ item.message }}</span>
+                            </li>
+                            {% else %}
+                            <li class="text-muted">No spins recorded yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100 d-flex flex-column">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+                        <h2 class="h6 text-uppercase text-secondary mb-0">Wheel Segments</h2>
+                        <button type="button" id="add-segment" class="btn btn-outline-info btn-sm">Add Slice</button>
+                    </div>
+                    <p class="small text-light">Update slice labels, payout types, weights, and the order ambassadors experience on the wheel.</p>
+                    <div class="table-responsive flex-grow-1">
+                        <table class="table table-dark table-sm align-middle mb-0" id="segments-table">
+                            <thead class="table-light text-dark">
+                                <tr>
+                                    <th scope="col">Slice</th>
+                                    <th scope="col">Payout</th>
+                                    <th scope="col">Weight &amp; Order</th>
+                                    <th scope="col">Tone</th>
+                                    <th scope="col" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for seg in segments %}
+                                <tr class="segment-row">
+                                    <td>
+                                        <div class="mb-2">
+                                            <label class="form-label small text-uppercase text-secondary mb-1" for="segment-label-{{ loop.index0 }}">Label</label>
+                                            <input id="segment-label-{{ loop.index0 }}" type="text" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_label" data-field="label" value="{{ seg.label or 'Segment ' ~ (loop.index0 + 1) }}">
+                                        </div>
+                                        <div>
+                                            <label class="form-label small text-uppercase text-secondary mb-1" for="segment-id-{{ loop.index0 }}">Slice ID</label>
+                                            <input id="segment-id-{{ loop.index0 }}" type="text" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_id" data-field="id" value="{{ seg.id or 'segment_' ~ loop.index0 }}">
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <label class="form-label small text-uppercase text-secondary mb-1" for="segment-type-{{ loop.index0 }}">Outcome</label>
+                                        <select id="segment-type-{{ loop.index0 }}" class="form-select form-select-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_type" data-field="type">
+                                            <option value="fixed" {% if seg.type == 'fixed' %}selected{% endif %}>Fixed Amount</option>
+                                            <option value="multiplier" {% if seg.type == 'multiplier' %}selected{% endif %}>Multiplier</option>
+                                            <option value="bonus" {% if seg.type == 'bonus' %}selected{% endif %}>Bonus Spin</option>
+                                            <option value="retry" {% if seg.type == 'retry' %}selected{% endif %}>Try Again</option>
+                                            <option value="lose" {% if seg.type == 'lose' %}selected{% endif %}>House Wins</option>
+                                        </select>
+                                        <div class="row g-2 mt-2">
+                                            <div class="col-6">
+                                                <label class="form-label small text-uppercase text-secondary mb-1" for="segment-multiplier-{{ loop.index0 }}">Multiplier</label>
+                                                <input id="segment-multiplier-{{ loop.index0 }}" type="number" step="0.01" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_multiplier" data-field="multiplier" value="{% if seg.multiplier is defined %}{{ '%.2f'|format(seg.multiplier or 0) }}{% endif %}">
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label small text-uppercase text-secondary mb-1" for="segment-amount-{{ loop.index0 }}">Amount</label>
+                                                <input id="segment-amount-{{ loop.index0 }}" type="number" step="0.01" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_amount" data-field="amount" value="{% if seg.amount is defined %}{{ '%.2f'|format(seg.amount or 0) }}{% endif %}">
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <label class="form-label small text-uppercase text-secondary mb-1" for="segment-weight-{{ loop.index0 }}">Weight</label>
+                                        <input id="segment-weight-{{ loop.index0 }}" type="number" step="0.01" min="0" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_weight" data-field="weight" value="{{ '%.2f'|format(seg.weight or 0) }}">
+                                        <label class="form-label small text-uppercase text-secondary mb-1 mt-2" for="segment-index-{{ loop.index0 }}">Index</label>
+                                        <input id="segment-index-{{ loop.index0 }}" type="number" step="1" min="0" class="form-control form-control-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_index" data-field="index" value="{{ seg.index if seg.index is defined else loop.index0 }}">
+                                    </td>
+                                    <td>
+                                        <label class="form-label small text-uppercase text-secondary mb-1" for="segment-tone-{{ loop.index0 }}">Tone</label>
+                                        <select id="segment-tone-{{ loop.index0 }}" class="form-select form-select-sm bg-dark text-light border-light" name="segment_{{ loop.index0 }}_tone" data-field="tone">
+                                            <option value="neutral" {% if seg.tone == 'neutral' %}selected{% endif %}>Neutral</option>
+                                            <option value="win" {% if seg.tone == 'win' %}selected{% endif %}>Win</option>
+                                            <option value="lose" {% if seg.tone == 'lose' %}selected{% endif %}>Lose</option>
+                                            <option value="bonus" {% if seg.tone == 'bonus' %}selected{% endif %}>Bonus</option>
+                                        </select>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-outline-danger btn-sm remove-segment w-100">Remove</button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr class="text-center" data-placeholder="true">
+                                    <td colspan="5" class="text-muted py-3">No slices configured. Add at least one slice to enable the wheel.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <template id="segment-row-template">
+                        <tr class="segment-row">
+                            <td>
+                                <div class="mb-2">
+                                    <label class="form-label small text-uppercase text-secondary mb-1">Label</label>
+                                    <input type="text" class="form-control form-control-sm bg-dark text-light border-light" data-field="label">
+                                </div>
+                                <div>
+                                    <label class="form-label small text-uppercase text-secondary mb-1">Slice ID</label>
+                                    <input type="text" class="form-control form-control-sm bg-dark text-light border-light" data-field="id">
+                                </div>
+                            </td>
+                            <td>
+                                <label class="form-label small text-uppercase text-secondary mb-1">Outcome</label>
+                                <select class="form-select form-select-sm bg-dark text-light border-light" data-field="type">
+                                    <option value="fixed">Fixed Amount</option>
+                                    <option value="multiplier">Multiplier</option>
+                                    <option value="bonus">Bonus Spin</option>
+                                    <option value="retry">Try Again</option>
+                                    <option value="lose">House Wins</option>
+                                </select>
+                                <div class="row g-2 mt-2">
+                                    <div class="col-6">
+                                        <label class="form-label small text-uppercase text-secondary mb-1">Multiplier</label>
+                                        <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-light border-light" data-field="multiplier">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small text-uppercase text-secondary mb-1">Amount</label>
+                                        <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-light border-light" data-field="amount">
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <label class="form-label small text-uppercase text-secondary mb-1">Weight</label>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm bg-dark text-light border-light" data-field="weight">
+                                <label class="form-label small text-uppercase text-secondary mb-1 mt-2">Index</label>
+                                <input type="number" step="1" min="0" class="form-control form-control-sm bg-dark text-light border-light" data-field="index">
+                            </td>
+                            <td>
+                                <label class="form-label small text-uppercase text-secondary mb-1">Tone</label>
+                                <select class="form-select form-select-sm bg-dark text-light border-light" data-field="tone">
+                                    <option value="neutral">Neutral</option>
+                                    <option value="win">Win</option>
+                                    <option value="lose">Lose</option>
+                                    <option value="bonus">Bonus</option>
+                                </select>
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-outline-danger btn-sm remove-segment w-100">Remove</button>
+                            </td>
+                        </tr>
+                    </template>
+                    <p class="small text-muted mt-3 mb-0">Weights determine odds relative to other slices. Index controls clockwise order on the wheel (0 is the top slice beneath the spinner).</p>
+                </div>
+            </div>
+            <div class="col-xl-3">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100 d-flex flex-column">
+                    <h2 class="h6 text-uppercase text-secondary mb-3">Arcade Preview</h2>
+                    <p class="small text-light flex-grow-0">Tune values here and the ambassador hub updates on their next refresh without touching Redis directly.</p>
+                    <ul class="small text-muted mb-3 flex-grow-1">
+                        <li><strong>Wheel of Fortune</strong> — Live today with Redis-backed odds and pool balancing.</li>
+                        <li><strong>Mystery Drop Pods</strong> — Pod reveals with rarity streaks and key pricing.</li>
+                        <li><strong>High Roller Matrix</strong> — Progressive multiplier ladder for whales.</li>
+                    </ul>
+                    <div class="small text-muted border border-light border-opacity-10 rounded p-2">
+                        <div class="fw-semibold text-uppercase text-secondary mb-1">Config Keys</div>
+                        <div><code>gamefi:wheel:config</code> — entry fee, cooldown, pool, segments.</div>
+                        <div><code>gamefi:wheel:history</code> — latest spin log ({{ history|length }} kept in preview).</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mt-1">
+                    <small class="text-muted">Saving locks the wheel, updates Redis atomically, and immediately reflects across the ambassador arcade.</small>
+                    <button type="submit" class="btn btn-warning text-dark">Save GameFi Configuration</button>
+                </div>
+            </div>
+        </form>
+    </div>
     <div id="tasks" class="glass-card p-3 mt-4">
         <h1 class="h5">Task Applications</h1>
         <form id="tasks-bulk-form" method="post" action="/admin/tasks/bulk"></form>
@@ -1251,6 +1490,119 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
             },
         });
+    }
+
+    const segmentsTable = document.getElementById('segments-table');
+    if (segmentsTable) {
+        const tbody = segmentsTable.querySelector('tbody');
+        const template = document.getElementById('segment-row-template');
+        const addSegmentButton = document.getElementById('add-segment');
+
+        const removePlaceholders = () => {
+            if (!tbody) {
+                return;
+            }
+            tbody.querySelectorAll('tr[data-placeholder]').forEach(row => row.remove());
+        };
+
+        const ensurePlaceholder = () => {
+            if (!tbody) {
+                return;
+            }
+            const hasSegmentRows = tbody.querySelector('tr.segment-row');
+            if (hasSegmentRows) {
+                return;
+            }
+            let placeholder = tbody.querySelector('tr[data-placeholder]');
+            if (!placeholder) {
+                placeholder = document.createElement('tr');
+                placeholder.setAttribute('data-placeholder', 'true');
+                placeholder.className = 'text-center';
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.className = 'text-muted py-3';
+                cell.textContent = 'No slices configured. Add at least one slice to enable the wheel.';
+                placeholder.appendChild(cell);
+                tbody.appendChild(placeholder);
+            }
+        };
+
+        let nextIndex = 0;
+        const updateNextIndex = () => {
+            let maxIndex = -1;
+            if (tbody) {
+                tbody.querySelectorAll('input[name^="segment_"]').forEach(input => {
+                    const name = input.getAttribute('name');
+                    if (!name) {
+                        return;
+                    }
+                    const match = name.match(/^segment_(\d+)_/);
+                    if (!match) {
+                        return;
+                    }
+                    const idx = Number(match[1]);
+                    if (Number.isFinite(idx)) {
+                        maxIndex = Math.max(maxIndex, idx);
+                    }
+                });
+            }
+            nextIndex = maxIndex + 1;
+            if (!Number.isFinite(nextIndex) || nextIndex < 0) {
+                nextIndex = 0;
+            }
+        };
+
+        updateNextIndex();
+
+        if (addSegmentButton && template && tbody) {
+            addSegmentButton.addEventListener('click', () => {
+                updateNextIndex();
+                removePlaceholders();
+                const clone = template.content.firstElementChild.cloneNode(true);
+                const currentIndex = nextIndex++;
+                clone.querySelectorAll('[data-field]').forEach(element => {
+                    const field = element.getAttribute('data-field');
+                    if (!field) {
+                        return;
+                    }
+                    element.setAttribute('name', `segment_${currentIndex}_${field}`);
+                    if (element.tagName === 'SELECT') {
+                        if (field === 'tone') {
+                            element.value = 'neutral';
+                        } else if (field === 'type') {
+                            element.value = 'fixed';
+                        }
+                    } else if (element.tagName === 'INPUT') {
+                        if (field === 'label') {
+                            element.value = `Slice ${currentIndex + 1}`;
+                        } else if (field === 'id') {
+                            element.value = `segment_${currentIndex}`;
+                        } else if (field === 'index') {
+                            element.value = `${currentIndex}`;
+                        } else {
+                            element.value = '';
+                        }
+                    }
+                });
+                tbody.appendChild(clone);
+            });
+        }
+
+        segmentsTable.addEventListener('click', event => {
+            const removeButton = event.target.closest('.remove-segment');
+            if (!removeButton) {
+                return;
+            }
+            event.preventDefault();
+            const row = removeButton.closest('tr');
+            if (row) {
+                row.remove();
+            }
+            updateNextIndex();
+            ensurePlaceholder();
+        });
+
+        ensurePlaceholder();
     }
 
     function promptExport(fmt) {
