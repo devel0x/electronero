@@ -1508,70 +1508,103 @@ def _unregister_email_record(email: str) -> None:
                     fh.write(f"{value}\n")
 
 
+import re
+
+EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+
 async def _ensure_existing_ambassadors_pending() -> None:
     """Mark all existing ambassadors as pending for a one-time review sweep."""
 
+    # Sentinel check: if already done, exit
     if await redis_client.get(PENDING_VERIFICATION_MIGRATION_KEY):
         if not PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
             try:
                 MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
-                PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(
-                    "redis", encoding="utf-8"
-                )
+                PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text("redis", encoding="utf-8")
             except Exception:
                 pass
         return
 
     if PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
         await redis_client.set(
-            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat(), nx=True
+            PENDING_VERIFICATION_MIGRATION_KEY,
+            datetime.utcnow().isoformat(),
+            nx=True
         )
         return
 
     try:
+        # ✅ Pass 1: mark all existing user hashes as unverified
         async for key in redis_client.scan_iter("user:*"):
-            await redis_client.hset(key, mapping={"verified": 0})
-            await redis_client.hdel(key, "verified_at")
+            try:
+                # Check type
+                key_type = await redis_client.type(key)
+                if key_type.decode() != "hash":
+                    print(f"[migration] skipping {key.decode()} - type is {key_type.decode()}")
+                    continue
 
+                # Extract the identifier after "user:"
+                identifier = key.decode().split("user:", 1)[1]
+
+                # Skip bots / non-emails
+                if not EMAIL_RE.match(identifier):
+                    print(f"[migration] skipping non-email key: {key.decode()}")
+                    continue
+
+                # Mark as unverified
+                await redis_client.hset(key, mapping={"verified": 0})
+                await redis_client.hdel(key, "verified_at")
+            except Exception as inner_exc:
+                print(f"[migration] skipping {key.decode()} due to error: {inner_exc}")
+
+        # ✅ Pass 2: reset all referral statuses to "pending"
         async for key in redis_client.scan_iter(f"{REFERRALS_HASH_PREFIX}*"):
-            referrer = key.split(":", 1)[1].strip().lower()
+            referrer = key.decode().split(":", 1)[1].strip().lower()
+
             raw_map = await redis_client.hgetall(key)
             updates: dict[str, str] = {}
+
             for referred_email, raw in raw_map.items():
                 try:
                     payload = json.loads(raw)
                 except Exception:
                     continue
+
                 status = str(payload.get("status", "")).strip().lower()
                 if status != "pending":
                     payload["status"] = "pending"
                     payload.pop("approved_at", None)
                     payload.pop("rejected_at", None)
                     updates[referred_email] = json.dumps(payload)
+
             if updates:
                 await redis_client.hset(key, mapping=updates)
+
             if referrer:
                 entries = await _referral_entries(referrer)
                 count = sum(1 for entry in entries if entry.get("status") != "rejected")
                 await redis_client.hset(
-                    f"user:{referrer}", mapping={"referral_count": count}
+                    f"user:{referrer}",
+                    mapping={"referral_count": count}
                 )
 
+        # ✅ Pass 3: write migration sentinel both to Redis and disk
         await redis_client.set(
-            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat()
+            PENDING_VERIFICATION_MIGRATION_KEY,
+            datetime.utcnow().isoformat()
         )
         try:
             MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
             PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(
-                datetime.utcnow().isoformat(), encoding="utf-8"
+                datetime.utcnow().isoformat(),
+                encoding="utf-8"
             )
         except Exception:
             print("[migration] failed to persist sentinel flag to disk")
-    except Exception as exc:
-        print(
-            f"[migration] failed to queue existing ambassadors for review: {exc}"
-        )
 
+    except Exception as exc:
+        print(f"[migration] failed to queue existing ambassadors for review: {exc}")
+        
 
 async def _pending_referrals() -> list[dict[str, Any]]:
     pending: list[dict[str, Any]] = []
