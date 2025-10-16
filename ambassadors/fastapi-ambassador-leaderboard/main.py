@@ -1720,14 +1720,25 @@ def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
         "email",
     ]
 
+    # ✅ SAFER READ: try utf-8 first, fallback to latin-1 to avoid decode crash
     if path.exists():
-        with path.open("r", newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            if reader.fieldnames:
-                fieldnames = reader.fieldnames
-            for row in reader:
-                rows.append(dict(row))
+        try:
+            with path.open("r", newline="", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh)
+                if reader.fieldnames:
+                    fieldnames = reader.fieldnames
+                for row in reader:
+                    rows.append(dict(row))
+        except UnicodeDecodeError:
+            print("[leaderboard] ⚠️ Non-UTF-8 bytes detected — attempting fallback decode...")
+            with path.open("r", newline="", encoding="latin-1") as fh:
+                reader = csv.DictReader(fh)
+                if reader.fieldnames:
+                    fieldnames = reader.fieldnames
+                for row in reader:
+                    rows.append(dict(row))
 
+    # ✅ Update existing row or create new one
     found = False
     for row in rows:
         row_email = str(row.get("email", "")).strip().lower()
@@ -1760,6 +1771,7 @@ def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
         )
         rows.append(new_row)
 
+    # ✅ Write back as clean UTF-8
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
