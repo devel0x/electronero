@@ -727,7 +727,7 @@ async def _load_csv() -> Dict[str, Any]:
             df.loc[non_guardian_mask, "points"].map(rank_map).astype(int)
         )
 
-    pool_balance = round(_get_pool_balance(), 8)
+    pool_balance = round(await _get_pool_balance(), 8)
     total_points = float(df.loc[non_guardian_mask, "points"].sum())
     igp_to_itc = pool_balance / total_points if total_points else 0.0
     itc_to_igp = total_points / pool_balance if pool_balance else 0.0
