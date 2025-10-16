@@ -94,6 +94,14 @@ SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
 MAX_STAKE = 10000.0
 
+SHOP_PRODUCT_PREFIX = "shop:product:"
+SHOP_PRODUCT_INDEX_KEY = "shop:product_ids"
+SHOP_PRODUCT_ID_KEY = "shop:next_product_id"
+SHOP_PURCHASE_HISTORY_PREFIX = "shop:purchases:"
+SHOP_PURCHASE_GLOBAL_KEY = "shop:purchases:global"
+SHOP_LEDGER_EMAIL = "shop@ambassador"
+SHOP_LEDGER_DISPLAY = "Ambassador Shop"
+
 EXPECTED_COLUMNS = [
     "name",
     "telegram",
@@ -400,6 +408,202 @@ def _format_duration(delta: timedelta) -> str:
     if not parts:
         parts.append("<1m")
     return " ".join(parts)
+
+
+def _shop_product_key(product_id: str | int) -> str:
+    return f"{SHOP_PRODUCT_PREFIX}{product_id}"
+
+
+def _parse_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(str(value))
+    except Exception:
+        return default
+
+
+def _parse_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _shop_product_from_data(product_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    if not data:
+        return None
+
+    price = _parse_float(data.get("price", 0.0))
+    quantity = _parse_int(data.get("quantity", 0))
+    sold = _parse_int(data.get("sold", 0))
+    published = str(data.get("published", "0")) == "1"
+    created_raw = str(data.get("created_at", ""))
+    updated_raw = str(data.get("updated_at", ""))
+    created_dt = _parse_iso(created_raw)
+    updated_dt = _parse_iso(updated_raw)
+
+    product: dict[str, Any] = {
+        "id": str(product_id),
+        "name": data.get("name", ""),
+        "description": data.get("description", ""),
+        "price": price,
+        "price_display": f"{price:.2f}",
+        "quantity": quantity,
+        "sold": sold,
+        "published": published,
+        "created_at": created_raw,
+        "updated_at": updated_raw,
+        "created_at_display": _format_dt(created_dt, "%b %d, %Y %H:%M UTC"),
+        "updated_at_display": _format_dt(updated_dt, "%b %d, %Y %H:%M UTC"),
+        "created_at_dt": created_dt,
+        "updated_at_dt": updated_dt,
+        "is_sold_out": quantity <= 0,
+    }
+    return product
+
+
+async def _all_shop_products(include_hidden: bool = True) -> list[dict[str, Any]]:
+    product_ids = await redis_client.smembers(SHOP_PRODUCT_INDEX_KEY)
+    products: list[dict[str, Any]] = []
+    for pid in product_ids:
+        if not pid:
+            continue
+        data = await redis_client.hgetall(_shop_product_key(pid))
+        product = _shop_product_from_data(str(pid), data)
+        if not product:
+            continue
+        if not include_hidden and not product.get("published"):
+            continue
+        products.append(product)
+    products.sort(
+        key=lambda item: item.get("created_at_dt") or datetime.min,
+        reverse=True,
+    )
+    return products
+
+
+async def _get_shop_product(product_id: str) -> dict[str, Any] | None:
+    if not product_id:
+        return None
+    data = await redis_client.hgetall(_shop_product_key(product_id))
+    return _shop_product_from_data(str(product_id), data)
+
+
+async def _create_shop_product(
+    name: str,
+    description: str,
+    price: float,
+    quantity: int,
+    published: bool,
+) -> dict[str, Any] | None:
+    product_id = await redis_client.incr(SHOP_PRODUCT_ID_KEY)
+    now_iso = datetime.utcnow().isoformat()
+    mapping = {
+        "id": str(product_id),
+        "name": name,
+        "description": description,
+        "price": f"{price:.8f}",
+        "quantity": str(max(quantity, 0)),
+        "sold": str(0),
+        "published": "1" if published else "0",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    pipe = redis_client.pipeline()
+    pipe.hset(_shop_product_key(product_id), mapping=mapping)
+    pipe.sadd(SHOP_PRODUCT_INDEX_KEY, str(product_id))
+    await pipe.execute()
+    return await _get_shop_product(str(product_id))
+
+
+async def _set_shop_publication(product_id: str, publish: bool) -> bool:
+    if not product_id:
+        return False
+    key = _shop_product_key(product_id)
+    if not await redis_client.exists(key):
+        return False
+    await redis_client.hset(
+        key,
+        mapping={
+            "published": "1" if publish else "0",
+            "updated_at": datetime.utcnow().isoformat(),
+        },
+    )
+    return True
+
+
+async def _record_shop_purchase(
+    email: str,
+    product: dict[str, Any],
+    price: float,
+    balance_after: float,
+    remaining: int,
+) -> None:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "buyer": email_norm,
+        "product_id": str(product.get("id", "")),
+        "product_name": product.get("name", ""),
+        "price": float(price or 0.0),
+        "balance_after": float(balance_after or 0.0),
+        "remaining": int(remaining),
+    }
+    payload = json.dumps(entry)
+    pipe = redis_client.pipeline()
+    pipe.lpush(f"{SHOP_PURCHASE_HISTORY_PREFIX}{email_norm}", payload)
+    pipe.lpush(SHOP_PURCHASE_GLOBAL_KEY, payload)
+    if pipe.command_stack:
+        await pipe.execute()
+
+
+def _decorate_purchase_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    ts = _parse_iso(entry.get("timestamp"))
+    entry["timestamp_display"] = _format_dt(ts, "%b %d, %Y %H:%M UTC") if ts else ""
+    try:
+        price_val = float(entry.get("price", 0.0) or 0.0)
+    except Exception:
+        price_val = 0.0
+    try:
+        balance_val = float(entry.get("balance_after", 0.0) or 0.0)
+    except Exception:
+        balance_val = 0.0
+    entry["price_display"] = f"{price_val:.2f}"
+    entry["balance_after_display"] = f"{balance_val:.2f}"
+    entry["remaining"] = _parse_int(entry.get("remaining", 0))
+    entry["buyer"] = _normalize_email(entry.get("buyer", ""))
+    return entry
+
+
+async def _recent_shop_purchases(limit: int = 20) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    entries = await redis_client.lrange(SHOP_PURCHASE_GLOBAL_KEY, 0, limit - 1)
+    records: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        records.append(_decorate_purchase_entry(data))
+    return records
+
+
+async def _user_shop_purchases(email: str, limit: int = 20) -> list[dict[str, Any]]:
+    email_norm = _normalize_email(email)
+    if not email_norm or limit <= 0:
+        return []
+    key = f"{SHOP_PURCHASE_HISTORY_PREFIX}{email_norm}"
+    entries = await redis_client.lrange(key, 0, limit - 1)
+    records: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        records.append(_decorate_purchase_entry(data))
+    return records
 
 
 def _stake_key(email_norm: str) -> str:
@@ -2991,6 +3195,119 @@ async def transfers_submit(
     return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
 
 
+@app.get("/shop")
+async def shop_page(
+    request: Request,
+    success: str | None = None,
+    error: str | None = None,
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _ambassador_entry_by_email(email)
+    balances = await _stake_balances(email, profile=profile)
+    available_points = max(balances["total"] - balances["staked"], 0.0)
+    products = await _all_shop_products(include_hidden=False)
+    purchases = await _user_shop_purchases(email, limit=20)
+
+    success_msg = success or request.query_params.get("success", "")
+    error_msg = error or request.query_params.get("error", "")
+
+    return templates.TemplateResponse(
+        "shop.html",
+        {
+            "request": request,
+            "profile": profile,
+            "products": products,
+            "available_points": available_points,
+            "total_points": balances["total"],
+            "staked_amount": balances["staked"],
+            "scorepad_balance": balances["scorepad"],
+            "success": success_msg,
+            "error": error_msg,
+            "purchases": purchases,
+        },
+    )
+
+
+@app.post("/shop/purchase")
+async def shop_purchase(request: Request, product_id: str = Form(...)) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    product = await _get_shop_product(product_id)
+    if not product or not product.get("published"):
+        return await shop_page(request, error="This item is not available right now.")
+
+    profile = await _ambassador_entry_by_email(email)
+    if not profile:
+        return await shop_page(request, error="Unable to locate your leaderboard profile. Contact support.")
+
+    balances = await _stake_balances(email, profile=profile)
+    available_points = max(balances["total"] - balances["staked"], 0.0)
+    price = float(product.get("price", 0.0) or 0.0)
+    if price > available_points + 1e-9:
+        return await shop_page(request, error="Purchase exceeds your available balance.")
+
+    if product.get("quantity", 0) <= 0:
+        return await shop_page(request, error="This item is sold out.")
+
+    product_key = _shop_product_key(product["id"])
+    pipe = redis_client.pipeline()
+    pipe.hincrby(product_key, "quantity", -1)
+    pipe.hincrby(product_key, "sold", 1)
+    if price:
+        pipe.hincrbyfloat("score_pad", email, -price)
+    pipe.hset(product_key, "updated_at", datetime.utcnow().isoformat())
+    results = await pipe.execute()
+
+    new_quantity_raw = results[0] if results else product.get("quantity", 0)
+    try:
+        new_quantity = int(new_quantity_raw)
+    except Exception:
+        new_quantity = product.get("quantity", 0)
+
+    if new_quantity < 0:
+        rollback = redis_client.pipeline()
+        rollback.hincrby(product_key, "quantity", 1)
+        rollback.hincrby(product_key, "sold", -1)
+        if price:
+            rollback.hincrbyfloat("score_pad", email, price)
+        await rollback.execute()
+        return await shop_page(request, error="This item just sold out. Try another reward.")
+
+    product = dict(product)
+    product["quantity"] = new_quantity
+
+    new_balance = await _scorepad_balance(email)
+    await _record_shop_purchase(email, product, price, new_balance, new_quantity)
+
+    try:
+        await _load_csv()
+    except Exception as exc:
+        print(f"[shop] failed to refresh leaderboard cache after purchase: {exc}")
+
+    shop_profile = {
+        "email": SHOP_LEDGER_EMAIL,
+        "email_display": SHOP_LEDGER_DISPLAY,
+        "telegram": "",
+        "name": product.get("name", SHOP_LEDGER_DISPLAY),
+    }
+
+    await _record_transfer(
+        profile,
+        shop_profile,
+        price,
+        sender_total_before=available_points,
+        receiver_total_before=0.0,
+    )
+
+    success_message = f"Redeemed {product.get('name', 'reward')} for {price:.2f} IGP."
+    return RedirectResponse(f"/shop?success={quote_plus(success_message)}", status_code=303)
+
+
 @app.get("/staking")
 async def staking_dashboard(
     request: Request,
@@ -3366,6 +3683,10 @@ async def admin_panel(request: Request) -> Any:
     stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
     stakes_message = request.query_params.get("stakes_msg", "")
     stakes_error = request.query_params.get("stakes_err", "")
+    shop_products = await _all_shop_products(include_hidden=True)
+    shop_purchases = await _recent_shop_purchases(limit=25)
+    shop_message = request.query_params.get("shop_msg", "")
+    shop_error = request.query_params.get("shop_err", "")
     kyc_records = await _all_kyc_records()
     kyc_counts = {
         "pending": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_PENDING),
@@ -3400,6 +3721,10 @@ async def admin_panel(request: Request) -> Any:
             "kyc_counts": kyc_counts,
             "kyc_message": kyc_message,
             "kyc_error": kyc_error,
+            "shop_products": shop_products,
+            "shop_purchases": shop_purchases,
+            "shop_message": shop_message,
+            "shop_error": shop_error,
         },
     )
 
@@ -3509,6 +3834,83 @@ async def admin_referral_approve(
             print(f"[admin] failed to refresh leaderboard cache: {exc}")
 
     return RedirectResponse("/admin#referrals", status_code=303)
+
+
+@app.post("/admin/shop/products")
+async def admin_shop_create_product(
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    price: str = Form("0"),
+    quantity: str = Form("0"),
+    published: str = Form("0"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    name_value = str(name or "").strip()
+    description_value = str(description or "").strip()
+    try:
+        price_value = float(str(price).strip())
+    except Exception:
+        price_value = -1.0
+    try:
+        quantity_value = int(str(quantity).strip())
+    except Exception:
+        quantity_value = -1
+
+    if not name_value:
+        return RedirectResponse(
+            f"/admin?shop_err={quote_plus('Enter a product name.')}#shop",
+            status_code=303,
+        )
+    if price_value < 0:
+        return RedirectResponse(
+            f"/admin?shop_err={quote_plus('Enter a valid non-negative price.')}#shop",
+            status_code=303,
+        )
+    if quantity_value < 0:
+        return RedirectResponse(
+            f"/admin?shop_err={quote_plus('Enter a quantity of zero or more.')}#shop",
+            status_code=303,
+        )
+
+    await _create_shop_product(
+        name=name_value,
+        description=description_value,
+        price=price_value,
+        quantity=quantity_value,
+        published=str(published or "0") == "1",
+    )
+
+    return RedirectResponse(
+        f"/admin?shop_msg={quote_plus('Product created successfully.')}#shop",
+        status_code=303,
+    )
+
+
+@app.post("/admin/shop/publish")
+async def admin_shop_toggle_product(
+    request: Request,
+    product_id: str = Form(""),
+    published: str = Form("0"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    target_status = str(published or "0") == "1"
+    updated = await _set_shop_publication(product_id, target_status)
+    if not updated:
+        return RedirectResponse(
+            f"/admin?shop_err={quote_plus('Unable to update product status.')}#shop",
+            status_code=303,
+        )
+
+    message = "Product published." if target_status else "Product hidden from shop."
+    return RedirectResponse(
+        f"/admin?shop_msg={quote_plus(message)}#shop",
+        status_code=303,
+    )
 
 
 @app.post("/admin/referrals/reject")
