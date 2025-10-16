@@ -20,7 +20,7 @@ import requests
 import pandas as pd
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Query, Request
+from fastapi import FastAPI, Form, Query, Request, UploadFile, File
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -38,6 +38,32 @@ AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 EXPLORER_API = "https://explorer.interchained.org/api/address"
 POOL_CACHE_KEY = "ambassador:pool_balance_cache"
 POOL_CACHE_TTL = 120  # cache for 2 minutes
+
+KYC_STATUS_PENDING = "pending"
+KYC_STATUS_VERIFIED = "verified"
+KYC_STATUS_REJECTED = "rejected"
+KYC_STATUS_NONE = "not_submitted"
+KYC_STATUS_LABELS = {
+    KYC_STATUS_PENDING: "Pending Review",
+    KYC_STATUS_VERIFIED: "Verified",
+    KYC_STATUS_REJECTED: "Rejected",
+    KYC_STATUS_NONE: "Not Submitted",
+}
+KYC_STATUS_BADGE_CLASSES = {
+    KYC_STATUS_PENDING: "bg-warning text-dark",
+    KYC_STATUS_VERIFIED: "bg-success",
+    KYC_STATUS_REJECTED: "bg-danger",
+    KYC_STATUS_NONE: "bg-secondary",
+}
+KYC_STATUS_ORDER = {
+    KYC_STATUS_PENDING: 0,
+    KYC_STATUS_REJECTED: 1,
+    KYC_STATUS_VERIFIED: 2,
+    KYC_STATUS_NONE: 3,
+}
+KYC_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024  # 5 MB safety limit
+KYC_TEMP_UPLOAD_ENDPOINT = "https://temp.sh/upload"
+KYC_DELETE_AFTER_SECONDS = 7 * 24 * 3600  # 7 days
 
 # Task definitions for the checklist panel
 TASK_LIST = [
@@ -144,6 +170,146 @@ cache: Dict[str, Any] = {
     "igp_to_itc": 0.0,
     "itc_to_igp": 0.0,
 }
+
+
+def _normalize_kyc_status(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in KYC_STATUS_ORDER:
+        return raw
+    return KYC_STATUS_NONE
+
+
+def _bool_flag(value: Any) -> str:
+    return "yes" if str(value or "").strip().lower() in {"1", "true", "yes", "on"} else "no"
+
+
+def _parse_birthdate(value: str) -> tuple[bool, str]:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return False, "Birthdate is required"
+    try:
+        dt = datetime.fromisoformat(cleaned)
+    except ValueError:
+        try:
+            dt = datetime.strptime(cleaned, "%Y-%m-%d")
+        except ValueError:
+            return False, "Birthdate must be in YYYY-MM-DD format"
+    if dt.date() > datetime.utcnow().date():
+        return False, "Birthdate cannot be in the future"
+    return True, dt.date().isoformat()
+
+
+async def _upload_temp_document(file: UploadFile | None) -> tuple[bool, str, str]:
+    if not file or not getattr(file, "filename", ""):
+        return True, "", ""
+    try:
+        content = await file.read()
+    except Exception as exc:
+        return False, "", f"Unable to read uploaded document: {exc}"
+    if not content:
+        return False, "", "Uploaded document was empty"
+    if len(content) > KYC_DOCUMENT_MAX_BYTES:
+        return (
+            False,
+            "",
+            "Document is too large. Maximum size is 5 MB.",
+        )
+    headers = {"X-Delete-After": str(KYC_DELETE_AFTER_SECONDS)}
+    payload = {
+        "file": (
+            file.filename,
+            content,
+            file.content_type or "application/octet-stream",
+        )
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                KYC_TEMP_UPLOAD_ENDPOINT, files=payload, headers=headers
+            )
+    except Exception as exc:
+        return False, "", f"Upload failed: {exc}"
+    if response.status_code != 200:
+        return False, "", f"Upload failed ({response.status_code})"
+    url = response.text.strip()
+    if not url.startswith("http"):
+        return False, "", "Unexpected response from upload service"
+    return True, url, ""
+
+
+async def _set_user_kyc_status(email: str, status: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+    normalized = _normalize_kyc_status(status)
+    await redis_client.hset(
+        f"user:{email_norm}",
+        mapping={
+            "kyc_status": normalized,
+        },
+    )
+
+
+async def _get_kyc_record(email: str) -> dict[str, Any]:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return {"status": KYC_STATUS_NONE}
+    key = f"kyc:{email_norm}"
+    data = await redis_client.hgetall(key)
+    if not data:
+        return {"status": KYC_STATUS_NONE}
+    data["status"] = _normalize_kyc_status(data.get("status"))
+    return data
+
+
+async def _build_profile_account_context(
+    request: Request, email: str
+) -> dict[str, Any]:
+    """Collect shared context for profile, wallet, and KYC pages."""
+
+    user_profile = await redis_client.hgetall(f"user:{email}")
+    wallet_value = str(user_profile.get("wallet", ""))
+
+    client_ip = _extract_client_ip(request)
+    client_geo = await _resolve_ip_location(client_ip)
+
+    kyc_record = await _get_kyc_record(email)
+    kyc_status = _normalize_kyc_status(kyc_record.get("status"))
+    await _set_user_kyc_status(email, kyc_status)
+
+    kyc_display = {**kyc_record}
+    kyc_display["status"] = kyc_status
+    kyc_display["submitted_at_display"] = _format_timestamp(
+        kyc_record.get("submitted_at", "")
+    )
+    kyc_display["updated_at_display"] = _format_timestamp(
+        kyc_record.get("updated_at", "")
+    )
+    kyc_display["reviewed_at_display"] = _format_timestamp(
+        kyc_record.get("reviewed_at", "")
+    )
+    kyc_display["document_uploaded_at_display"] = _format_timestamp(
+        kyc_record.get("document_uploaded_at", "")
+    )
+
+    show_kyc_toast = kyc_status != KYC_STATUS_VERIFIED
+
+    return {
+        "user_profile": user_profile,
+        "wallet": wallet_value,
+        "client_ip": client_ip,
+        "client_location": client_geo.get("label", "Unknown"),
+        "kyc": kyc_display,
+        "kyc_status": kyc_status,
+        "kyc_status_label": KYC_STATUS_LABELS.get(
+            kyc_status, "Not Submitted"
+        ),
+        "kyc_badge_class": KYC_STATUS_BADGE_CLASSES.get(
+            kyc_status, "bg-secondary"
+        ),
+        "show_kyc_toast": show_kyc_toast,
+        "today_iso": datetime.utcnow().date().isoformat(),
+    }
 
 ACTIVITY_ZSET_PREFIX = "activity:posts:"
 ACTIVITY_RESET_KEY = "activity:last_reset"
@@ -1436,6 +1602,11 @@ async def _all_wallets() -> list[dict[str, Any]]:
             f"user:{email}", mapping={"referral_count": referral_count}
         )
 
+        kyc_record = await _get_kyc_record(email)
+        kyc_status = kyc_record.get("status", KYC_STATUS_NONE)
+        await _set_user_kyc_status(email, kyc_status)
+        kyc_updated = _format_timestamp(kyc_record.get("updated_at", ""))
+
         wallets.append(
             {
                 "email": email,
@@ -1452,10 +1623,76 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "guardian": is_guardian,
                 "referral_count": referral_count,
                 "referrals": referrals,
+                "kyc_status": kyc_status,
+                "kyc_status_label": KYC_STATUS_LABELS.get(kyc_status, "Not Submitted"),
+                "kyc_badge_class": KYC_STATUS_BADGE_CLASSES.get(
+                    kyc_status, "bg-secondary"
+                ),
+                "kyc_updated_at": kyc_updated,
             }
         )
 
     return wallets
+
+
+async def _all_kyc_records() -> list[dict[str, Any]]:
+    keys = await redis_client.keys("kyc:*")
+    records: list[dict[str, Any]] = []
+    for key in keys:
+        email = key.split(":", 1)[1].strip().lower()
+        if not email:
+            continue
+        data = await redis_client.hgetall(key)
+        if not data:
+            continue
+        status = _normalize_kyc_status(data.get("status"))
+        user_data = await redis_client.hgetall(f"user:{email}")
+        record = {
+            "email": email,
+            "status": status,
+            "status_label": KYC_STATUS_LABELS.get(status, "Not Submitted"),
+            "badge_class": KYC_STATUS_BADGE_CLASSES.get(status, "bg-secondary"),
+            "full_name": data.get("full_name", ""),
+            "country": data.get("country", ""),
+            "birthdate": data.get("birthdate", ""),
+            "over_18": data.get("over_18", "no"),
+            "restricted_region": data.get("restricted_region", "no"),
+            "pep": data.get("pep", "no"),
+            "document_type": data.get("document_type", ""),
+            "document_number_last4": data.get("document_number_last4", ""),
+            "document_url": data.get("document_url", ""),
+            "document_uploaded_at": _format_timestamp(
+                data.get("document_uploaded_at", "")
+            ),
+            "address_line": data.get("address_line", ""),
+            "city": data.get("city", ""),
+            "region": data.get("region", ""),
+            "postal_code": data.get("postal_code", ""),
+            "additional_notes": data.get("additional_notes", ""),
+            "ip": data.get("ip", ""),
+            "geo_label": data.get("geo_label", ""),
+            "geo_country": data.get("geo_country", ""),
+            "geo_region": data.get("geo_region", ""),
+            "geo_city": data.get("geo_city", ""),
+            "submitted_at": _format_timestamp(data.get("submitted_at", "")),
+            "updated_at": _format_timestamp(data.get("updated_at", "")),
+            "reviewed_at": _format_timestamp(data.get("reviewed_at", "")),
+            "reviewed_by": data.get("reviewed_by", ""),
+            "rejection_reason": data.get("rejection_reason", ""),
+            "admin_notes": data.get("admin_notes", ""),
+            "profile_name": user_data.get("name", ""),
+            "profile_telegram": user_data.get("telegram", ""),
+        }
+        record["updated_at_raw"] = data.get("updated_at", "")
+        records.append(record)
+    records.sort(
+        key=lambda item: (
+            KYC_STATUS_ORDER.get(item.get("status"), 99),
+            item.get("updated_at_raw", ""),
+            item.get("email", ""),
+        )
+    )
+    return records
 
 
 async def _all_posts() -> dict[str, dict[str, Any]]:
@@ -2375,9 +2612,35 @@ async def wallet_form(request: Request) -> Any:
     email = await _current_email(request)
     if not email:
         return RedirectResponse("/login")
-    user = await redis_client.hgetall(f"user:{email}")
+    profile_ctx = await _build_profile_account_context(request, email)
+    kyc_status = profile_ctx["kyc_status"]
+    wallet_msg = request.query_params.get("wallet_msg", "")
+    wallet_error = request.query_params.get("wallet_err", "")
+    profile_msg = request.query_params.get("profile_msg", "")
+    profile_error = request.query_params.get("profile_err", "")
+    kyc_msg = request.query_params.get("kyc_msg", "")
+    kyc_error = request.query_params.get("kyc_err", "")
     return templates.TemplateResponse(
-        "wallet.html", {"request": request, "error": "", "wallet": user.get("wallet", "")}
+        "wallet.html",
+        {
+            "request": request,
+            "wallet_error": wallet_error,
+            "wallet_msg": wallet_msg,
+            "profile_msg": profile_msg,
+            "profile_error": profile_error,
+            "kyc_msg": kyc_msg,
+            "kyc_error": kyc_error,
+            "user_profile": profile_ctx["user_profile"],
+            "wallet": profile_ctx["wallet"],
+            "kyc_status": kyc_status,
+            "kyc_status_label": profile_ctx["kyc_status_label"],
+            "kyc_badge_class": profile_ctx["kyc_badge_class"],
+            "kyc": profile_ctx["kyc"],
+            "client_ip": profile_ctx["client_ip"],
+            "client_location": profile_ctx["client_location"],
+            "today_iso": profile_ctx["today_iso"],
+            "show_kyc_toast": profile_ctx["show_kyc_toast"],
+        },
     )
 
 
@@ -2387,7 +2650,142 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
     if not email:
         return RedirectResponse("/login")
     await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
-    return RedirectResponse("/", status_code=303)
+    msg = quote_plus("Wallet address updated")
+    return RedirectResponse(f"/wallet?wallet_msg={msg}#wallet", status_code=303)
+
+
+@app.post("/profile/meta")
+async def profile_meta_update(
+    request: Request,
+    name: str = Form(""),
+    telegram: str = Form(""),
+    twitter: str = Form(""),
+    discord: str = Form(""),
+    bio: str = Form(""),
+    language: str = Form(""),
+    timezone: str = Form(""),
+) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    name_clean = _safe_text(name).strip()
+    telegram_norm = _normalize_telegram(telegram)
+    twitter_norm = _normalize_handle(twitter)
+    discord_clean = _safe_text(discord).strip()
+    bio_clean = _safe_text(bio).strip()
+    if len(bio_clean) > 500:
+        bio_clean = bio_clean[:500]
+    language_clean = _safe_text(language).strip().lower()
+    timezone_clean = _safe_text(timezone).strip()
+    await redis_client.hset(
+        f"user:{email}",
+        mapping={
+            "name": name_clean,
+            "telegram": telegram_norm,
+            "twitter": twitter_norm,
+            "discord": discord_clean,
+            "bio": bio_clean,
+            "preferred_language": language_clean,
+            "preferred_timezone": timezone_clean,
+            "profile_updated_at": datetime.utcnow().isoformat(),
+        },
+    )
+    msg = quote_plus("Profile preferences updated")
+    return RedirectResponse(f"/wallet?profile_msg={msg}#profile", status_code=303)
+
+
+@app.post("/profile/kyc")
+async def profile_kyc_update(
+    request: Request,
+    full_name: str = Form(...),
+    country: str = Form(...),
+    birthday: str = Form(...),
+    over_18: str | None = Form(None),
+    restricted_region: str | None = Form(None),
+    pep: str | None = Form(None),
+    document_type: str = Form(""),
+    document_number_last4: str = Form(""),
+    address_line: str = Form(""),
+    city: str = Form(""),
+    region: str = Form(""),
+    postal_code: str = Form(""),
+    additional_notes: str = Form(""),
+    document: UploadFile | None = File(None),
+) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    name_clean = _safe_text(full_name).strip()
+    country_clean = _safe_text(country).strip()
+    notes_clean = _safe_text(additional_notes).strip()
+    if len(notes_clean) > 1000:
+        notes_clean = notes_clean[:1000]
+    if not name_clean:
+        err = quote_plus("Full name is required for KYC")
+        return RedirectResponse(f"/wallet?kyc_err={err}#kyc", status_code=303)
+    if not country_clean:
+        err = quote_plus("Country is required for KYC")
+        return RedirectResponse(f"/wallet?kyc_err={err}#kyc", status_code=303)
+
+    ok, birthdate_iso = _parse_birthdate(birthday)
+    if not ok:
+        err = quote_plus(birthdate_iso)
+        return RedirectResponse(f"/wallet?kyc_err={err}#kyc", status_code=303)
+
+    existing = await _get_kyc_record(email)
+    document_url = existing.get("document_url", "")
+    if document and getattr(document, "filename", ""):
+        success, uploaded_url, upload_error = await _upload_temp_document(document)
+        if not success:
+            err = quote_plus(upload_error or "Document upload failed")
+            return RedirectResponse(f"/wallet?kyc_err={err}#kyc", status_code=303)
+        document_url = uploaded_url
+        document_uploaded_at = datetime.utcnow().isoformat()
+    else:
+        document_uploaded_at = existing.get("document_uploaded_at", "")
+
+    ip = _extract_client_ip(request)
+    geo = await _resolve_ip_location(ip)
+    now_iso = datetime.utcnow().isoformat()
+    kyc_key = f"kyc:{email}"
+    mapping = {
+        "status": KYC_STATUS_PENDING,
+        "full_name": name_clean,
+        "country": country_clean,
+        "birthdate": birthdate_iso,
+        "over_18": _bool_flag(over_18),
+        "restricted_region": _bool_flag(restricted_region),
+        "pep": _bool_flag(pep),
+        "document_type": _safe_text(document_type).strip(),
+        "document_number_last4": _safe_text(document_number_last4).strip(),
+        "address_line": _safe_text(address_line).strip(),
+        "city": _safe_text(city).strip(),
+        "region": _safe_text(region).strip(),
+        "postal_code": _safe_text(postal_code).strip(),
+        "additional_notes": notes_clean,
+        "ip": ip,
+        "geo_country": geo.get("country", ""),
+        "geo_region": geo.get("region", ""),
+        "geo_city": geo.get("city", ""),
+        "geo_label": geo.get("label", ""),
+        "submitted_at": now_iso,
+        "updated_at": now_iso,
+        "reviewed_at": "",
+        "reviewed_by": "",
+        "rejection_reason": "",
+        "admin_notes": existing.get("admin_notes", ""),
+    }
+    if document_url:
+        mapping["document_url"] = document_url
+    if document_url and document_uploaded_at:
+        mapping["document_uploaded_at"] = document_uploaded_at
+
+    await redis_client.hset(kyc_key, mapping=mapping)
+    await _set_user_kyc_status(email, KYC_STATUS_PENDING)
+
+    msg = quote_plus("KYC details submitted for review")
+    return RedirectResponse(f"/wallet?kyc_msg={msg}#kyc", status_code=303)
 
 
 @app.get("/referrals")
@@ -2933,6 +3331,14 @@ async def admin_panel(request: Request) -> Any:
     stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
     stakes_message = request.query_params.get("stakes_msg", "")
     stakes_error = request.query_params.get("stakes_err", "")
+    kyc_records = await _all_kyc_records()
+    kyc_counts = {
+        "pending": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_PENDING),
+        "verified": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_VERIFIED),
+        "rejected": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_REJECTED),
+    }
+    kyc_message = request.query_params.get("kyc_msg", "")
+    kyc_error = request.query_params.get("kyc_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -2955,6 +3361,10 @@ async def admin_panel(request: Request) -> Any:
             "stakes_message": stakes_message,
             "stakes_error": stakes_error,
             "stake_duration_days": STAKE_DURATION_DAYS,
+            "kyc_records": kyc_records,
+            "kyc_counts": kyc_counts,
+            "kyc_message": kyc_message,
+            "kyc_error": kyc_error,
         },
     )
 
@@ -3529,6 +3939,72 @@ async def admin_post_reject_selected(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/kyc/verify")
+async def admin_kyc_verify(
+    request: Request,
+    email: str = Form(...),
+    notes: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return RedirectResponse("/admin?kyc_err=Missing+email", status_code=303)
+    key = f"kyc:{email_norm}"
+    if not await redis_client.exists(key):
+        err = quote_plus("No KYC submission found for this user")
+        return RedirectResponse(f"/admin?kyc_err={err}#kyc", status_code=303)
+    now_iso = datetime.utcnow().isoformat()
+    notes_clean = _safe_text(notes).strip()
+    await redis_client.hset(
+        key,
+        mapping={
+            "status": KYC_STATUS_VERIFIED,
+            "reviewed_at": now_iso,
+            "reviewed_by": "admin",
+            "rejection_reason": "",
+            "admin_notes": notes_clean,
+        },
+    )
+    await _set_user_kyc_status(email_norm, KYC_STATUS_VERIFIED)
+    msg = quote_plus("KYC verified")
+    return RedirectResponse(f"/admin?kyc_msg={msg}#kyc", status_code=303)
+
+
+@app.post("/admin/kyc/reject")
+async def admin_kyc_reject(
+    request: Request,
+    email: str = Form(...),
+    reason: str = Form(""),
+    notes: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return RedirectResponse("/admin?kyc_err=Missing+email", status_code=303)
+    key = f"kyc:{email_norm}"
+    if not await redis_client.exists(key):
+        err = quote_plus("No KYC submission found for this user")
+        return RedirectResponse(f"/admin?kyc_err={err}#kyc", status_code=303)
+    now_iso = datetime.utcnow().isoformat()
+    reason_clean = _safe_text(reason).strip()
+    notes_clean = _safe_text(notes).strip()
+    await redis_client.hset(
+        key,
+        mapping={
+            "status": KYC_STATUS_REJECTED,
+            "reviewed_at": now_iso,
+            "reviewed_by": "admin",
+            "rejection_reason": reason_clean,
+            "admin_notes": notes_clean,
+        },
+    )
+    await _set_user_kyc_status(email_norm, KYC_STATUS_REJECTED)
+    msg = quote_plus("KYC rejected")
+    return RedirectResponse(f"/admin?kyc_msg={msg}#kyc", status_code=303)
+
+
 @app.post("/admin/proposals/verify")
 async def admin_proposal_verify(
     request: Request,
@@ -3835,8 +4311,9 @@ async def index(request: Request) -> Any:
     if not email:
         return RedirectResponse("/login")
 
-    user = await redis_client.hgetall(f"user:{email}")
-    wallet = user.get("wallet") if user else ""
+    profile_ctx = await _build_profile_account_context(request, email)
+    wallet = profile_ctx["wallet"]
+
     data = await _get_cached_data()
     guardians = await _guardian_emails()
     columns = [c for c in data["columns"] if c != "email"]
@@ -3861,6 +4338,7 @@ async def index(request: Request) -> Any:
             "total_points": data["total_points"],
             "igp_to_itc": data["igp_to_itc"],
             "itc_to_igp": data["itc_to_igp"],
+            "show_kyc_toast": profile_ctx["show_kyc_toast"],
         },
     )
 

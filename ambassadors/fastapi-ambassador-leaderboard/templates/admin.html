@@ -28,6 +28,7 @@
         <div class="collapse navbar-collapse" id="adminNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="#wallets">Wallets</a></li>
+                <li class="nav-item"><a class="nav-link" href="#kyc">KYC</a></li>
                 <li class="nav-item"><a class="nav-link" href="#referrals">Referrals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
@@ -373,10 +374,14 @@
                                     {% else %}
                                     <span class="badge bg-secondary">Inactive</span>
                                     {% endif %}
+                                    <span class="badge {{ w.kyc_badge_class }}">KYC {{ w.kyc_status_label }}</span>
                                     {% if w.guardian %}
                                     <span class="badge bg-danger">Guardian</span>
                                     {% endif %}
                                 </div>
+                                {% if w.kyc_updated_at %}
+                                <div class="text-muted small">KYC updated {{ w.kyc_updated_at }}</div>
+                                {% endif %}
                             </div>
                             <input class="form-check-input mt-1" type="checkbox" name="emails" value="{{ w.email }}" form="pad-bulk-form">
                         </div>
@@ -438,6 +443,128 @@
         {% endfor %}
         {% if not wallets %}
         <p class="text-muted">No wallets</p>
+        {% endif %}
+    </div>
+    <div id="kyc" class="glass-card p-3 mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h5 mb-1">KYC Review</h1>
+                <p class="mb-0 text-muted small">Approve or decline identity submissions. Documents are stored off-site and referenced by URL only.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <span class="badge bg-warning text-dark">Pending {{ kyc_counts.pending }}</span>
+                <span class="badge bg-success">Verified {{ kyc_counts.verified }}</span>
+                <span class="badge bg-danger">Rejected {{ kyc_counts.rejected }}</span>
+            </div>
+        </div>
+        {% if kyc_error %}
+        <div class="alert alert-danger py-2 mt-3" role="alert">{{ kyc_error }}</div>
+        {% endif %}
+        {% if kyc_message %}
+        <div class="alert alert-success py-2 mt-3" role="alert">{{ kyc_message }}</div>
+        {% endif %}
+        {% if kyc_records %}
+        <div class="accordion" id="kycAccordion">
+            {% for record in kyc_records %}
+            <div class="accordion-item bg-transparent border border-light border-opacity-25 text-light">
+                <h2 class="accordion-header" id="kycHeading{{ loop.index }}">
+                    <button class="accordion-button collapsed bg-dark text-light" type="button" data-bs-toggle="collapse" data-bs-target="#kycCollapse{{ loop.index }}" aria-expanded="false" aria-controls="kycCollapse{{ loop.index }}">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <span class="fw-semibold">{{ record.full_name or 'Unnamed' }}</span>
+                            <span class="small text-muted">{{ record.email }}</span>
+                            <span class="badge {{ record.badge_class }}">KYC {{ record.status_label }}</span>
+                            {% if record.country %}
+                            <span class="badge bg-secondary">{{ record.country }}</span>
+                            {% endif %}
+                            {% if record.submitted_at %}
+                            <span class="small text-muted">Submitted {{ record.submitted_at }}</span>
+                            {% endif %}
+                        </div>
+                    </button>
+                </h2>
+                <div id="kycCollapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="kycHeading{{ loop.index }}" data-bs-parent="#kycAccordion">
+                    <div class="accordion-body bg-dark bg-opacity-50 text-light">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <p class="mb-1"><strong>Email:</strong> {{ record.email }}</p>
+                                <p class="mb-1"><strong>Telegram:</strong> {{ record.profile_telegram or '—' }}</p>
+                                <p class="mb-1"><strong>Geo Lookup:</strong> {{ record.geo_label or 'Unknown' }}</p>
+                                <p class="mb-1"><strong>IP:</strong> <code>{{ record.ip or 'n/a' }}</code></p>
+                            </div>
+                            <div class="col-md-4">
+                                <p class="mb-1"><strong>Birthdate:</strong> {{ record.birthdate or '—' }}</p>
+                                <p class="mb-1"><strong>Document:</strong> {{ record.document_type or '—' }} {% if record.document_number_last4 %}(ending {{ record.document_number_last4 }}){% endif %}</p>
+                                <p class="mb-1"><strong>Address:</strong> {{ record.address_line or '—' }}</p>
+                                <p class="mb-1"><strong>City/Region:</strong> {{ record.city or '—' }}{% if record.region %}, {{ record.region }}{% endif %}</p>
+                                <p class="mb-1"><strong>Postal:</strong> {{ record.postal_code or '—' }}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-2">
+                                    <span class="badge {% if record.over_18 == 'yes' %}bg-success{% else %}bg-danger{% endif %}">Over 18: {{ record.over_18|title }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <span class="badge {% if record.restricted_region == 'yes' %}bg-warning text-dark{% else %}bg-success{% endif %}">Restricted Region: {{ record.restricted_region|title }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <span class="badge {% if record.pep == 'yes' %}bg-danger{% else %}bg-success{% endif %}">PEP: {{ record.pep|title }}</span>
+                                </div>
+                                <p class="mb-1"><strong>Submitted:</strong> {{ record.submitted_at or '—' }}</p>
+                                <p class="mb-1"><strong>Updated:</strong> {{ record.updated_at or '—' }}</p>
+                                {% if record.reviewed_at %}
+                                <p class="mb-1"><strong>Reviewed:</strong> {{ record.reviewed_at }}{% if record.reviewed_by %} by {{ record.reviewed_by }}{% endif %}</p>
+                                {% endif %}
+                            </div>
+                            {% if record.document_url %}
+                            <div class="col-12">
+                                <p class="mb-1"><strong>Document URL:</strong> <a href="{{ record.document_url }}" target="_blank" class="link-light text-break">{{ record.document_url }}</a></p>
+                                {% if record.document_uploaded_at %}
+                                <p class="text-muted small mb-1">Uploaded {{ record.document_uploaded_at }}</p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% if record.additional_notes %}
+                            <div class="col-12">
+                                <p class="mb-1"><strong>User Notes:</strong></p>
+                                <p class="mb-0 text-muted">{{ record.additional_notes }}</p>
+                            </div>
+                            {% endif %}
+                            {% if record.rejection_reason %}
+                            <div class="col-12">
+                                <p class="mb-1 text-danger"><strong>Last Rejection Reason:</strong> {{ record.rejection_reason }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <form method="post" action="/admin/kyc/verify" class="row g-2 align-items-end mt-3">
+                            <input type="hidden" name="email" value="{{ record.email }}">
+                            <div class="col-md-9">
+                                <label for="kycNotesVerify{{ loop.index }}" class="form-label small text-uppercase">Approval Notes</label>
+                                <textarea id="kycNotesVerify{{ loop.index }}" name="notes" class="form-control" rows="2" placeholder="Optional comment for the record">{{ record.admin_notes }}</textarea>
+                            </div>
+                            <div class="col-md-3 d-flex gap-2">
+                                <button class="btn btn-success w-100" type="submit">Mark Verified</button>
+                            </div>
+                        </form>
+                        <form method="post" action="/admin/kyc/reject" class="row g-2 align-items-end mt-3">
+                            <input type="hidden" name="email" value="{{ record.email }}">
+                            <div class="col-md-4">
+                                <label for="kycReason{{ loop.index }}" class="form-label small text-uppercase">Reason</label>
+                                <input id="kycReason{{ loop.index }}" type="text" name="reason" value="{{ record.rejection_reason }}" class="form-control" placeholder="Reason" />
+                            </div>
+                            <div class="col-md-5">
+                                <label for="kycNotesReject{{ loop.index }}" class="form-label small text-uppercase">Reviewer Notes</label>
+                                <textarea id="kycNotesReject{{ loop.index }}" name="notes" class="form-control" rows="2" placeholder="Optional detail">{{ record.admin_notes }}</textarea>
+                            </div>
+                            <div class="col-md-3 d-flex gap-2">
+                                <button class="btn btn-outline-danger w-100" type="submit">Reject</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">No KYC submissions yet.</p>
         {% endif %}
     </div>
     <div id="posts" class="glass-card p-3">
