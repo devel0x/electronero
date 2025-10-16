@@ -34,6 +34,7 @@
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
                 <li class="nav-item"><a class="nav-link" href="#stakes">Stakes</a></li>
+                <li class="nav-item"><a class="nav-link" href="#shop">Shop</a></li>
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
@@ -803,6 +804,152 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="shop" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Ambassador Shop</h1>
+                <p class="small text-light mb-0">
+                    Create rewards, manage inventory, and toggle visibility without deleting historic records.
+                    Purchases automatically pad score balances by the item price and record in the transfer ledger.
+                </p>
+            </div>
+            <div class="text-lg-end">
+                <span class="badge bg-success me-2">{{ shop_products | selectattr('published') | list | length }} published</span>
+                <span class="badge bg-secondary">{{ shop_products | length }} total</span>
+            </div>
+        </div>
+        {% if shop_error %}
+        <div class="alert alert-danger mt-3 mb-0" role="alert">{{ shop_error }}</div>
+        {% endif %}
+        {% if shop_message %}
+        <div class="alert alert-success mt-3 mb-0" role="alert">{{ shop_message }}</div>
+        {% endif %}
+        <div class="row g-3 mt-3">
+            <div class="col-lg-4">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <h2 class="h6 text-uppercase text-secondary mb-2">New Product</h2>
+                    <form method="post" action="/admin/shop/products" class="d-grid gap-3">
+                        <div>
+                            <label for="shop-name" class="form-label small text-uppercase text-secondary">Name</label>
+                            <input id="shop-name" type="text" name="name" class="form-control" placeholder="Ambassador Hoodie" required>
+                        </div>
+                        <div>
+                            <label for="shop-description" class="form-label small text-uppercase text-secondary">Description</label>
+                            <textarea id="shop-description" name="description" rows="3" class="form-control" placeholder="Include sizing, delivery details, or claim instructions"></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label for="shop-price" class="form-label small text-uppercase text-secondary">Price (IGP)</label>
+                                <input id="shop-price" type="number" min="0" step="0.01" name="price" value="0" class="form-control" required>
+                            </div>
+                            <div class="col-6">
+                                <label for="shop-quantity" class="form-label small text-uppercase text-secondary">Quantity</label>
+                                <input id="shop-quantity" type="number" min="0" step="1" name="quantity" value="0" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="shop-published" name="published" value="1">
+                            <label class="form-check-label small text-uppercase text-secondary" for="shop-published">Publish immediately</label>
+                        </div>
+                        <button type="submit" class="btn btn-outline-light btn-sm">Create Product</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3 mb-3">
+                    <h2 class="h6 text-uppercase text-secondary mb-3">Catalog</h2>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-sm align-middle mb-0">
+                            <thead class="table-light text-dark">
+                                <tr>
+                                    <th scope="col">Item</th>
+                                    <th scope="col">Price</th>
+                                    <th scope="col">Quantity</th>
+                                    <th scope="col">Sold</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Created</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in shop_products %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ product.name }}</div>
+                                        <div class="small text-muted">{{ product.description or '—' }}</div>
+                                    </td>
+                                    <td>{{ product.price_display }} IGP</td>
+                                    <td>{{ product.quantity }}</td>
+                                    <td>{{ product.sold }}</td>
+                                    <td>
+                                        {% if product.published %}
+                                        <span class="badge bg-success">Published</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Hidden</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small">
+                                        <div>{{ product.created_at_display or '—' }}</div>
+                                        {% if product.updated_at_display %}
+                                        <div class="text-muted">Updated {{ product.updated_at_display }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <form method="post" action="/admin/shop/publish" class="d-inline">
+                                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                                            <input type="hidden" name="published" value="{{ 0 if product.published else 1 }}">
+                                            <button type="submit" class="btn btn-sm {% if product.published %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                                                {% if product.published %}Hide{% else %}Publish{% endif %}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">No products created yet.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="bg-dark bg-opacity-50 border border-light rounded p-3">
+                    <h2 class="h6 text-uppercase text-secondary mb-3">Recent Purchases</h2>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-sm align-middle mb-0">
+                            <thead class="table-light text-dark">
+                                <tr>
+                                    <th scope="col">When</th>
+                                    <th scope="col">Buyer</th>
+                                    <th scope="col">Item</th>
+                                    <th scope="col">Price</th>
+                                    <th scope="col">Balance After</th>
+                                    <th scope="col">Remaining</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for purchase in shop_purchases %}
+                                <tr>
+                                    <td class="small">{{ purchase.timestamp_display or purchase.timestamp }}</td>
+                                    <td class="small">{{ purchase.buyer }}</td>
+                                    <td>{{ purchase.product_name }}</td>
+                                    <td>{{ purchase.price_display }} IGP</td>
+                                    <td>{{ purchase.balance_after_display }} IGP</td>
+                                    <td>{{ purchase.remaining }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No purchases recorded yet.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
