@@ -32,6 +32,7 @@
                 <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
                 <li class="nav-item"><a class="nav-link" href="#proposals">Proposals</a></li>
                 <li class="nav-item"><a class="nav-link" href="#tasks">Tasks</a></li>
+                <li class="nav-item"><a class="nav-link" href="#stakes">Stakes</a></li>
                 <li class="nav-item"><a class="nav-link" href="#transfers">Transfers</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
@@ -596,6 +597,87 @@
         {% if not tasks %}
         <p class="text-muted">No task applications</p>
         {% endif %}
+    </div>
+    <div id="stakes" class="glass-card p-3 mt-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Staking Overview</h1>
+                <p class="small text-light mb-0">
+                    Active IGP stakes reserved for the weekly payout cycle. Stakes lock ambassadors for {{ stake_duration_days }} days unless manually released.
+                </p>
+            </div>
+            <div class="text-lg-end">
+                <div class="display-6 fw-bold text-warning">{{ '%.2f'|format(stakes_total or 0) }}</div>
+                <div class="small text-uppercase text-secondary">Total IGP Staked</div>
+                <div class="small text-muted">{{ stakes|length }} active</div>
+            </div>
+        </div>
+        {% if stakes_error %}
+        <div class="alert alert-danger mt-3 mb-0" role="alert">{{ stakes_error }}</div>
+        {% endif %}
+        {% if stakes_message %}
+        <div class="alert alert-success mt-3 mb-0" role="alert">{{ stakes_message }}</div>
+        {% endif %}
+        <div class="row g-3 mt-3">
+            <div class="col-lg-4">
+                <form method="post" action="/admin/stakes/unstake" class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                    <h2 class="h6 text-uppercase text-secondary mb-2">Manual Unstake</h2>
+                    <p class="small text-light">Provide one email per line (or comma separated) to release their reserved balance before payouts.</p>
+                    <div class="mb-3">
+                        <label for="stakes-emails" class="form-label small text-uppercase text-secondary">Emails</label>
+                        <textarea id="stakes-emails" name="emails" rows="5" class="form-control" placeholder="alice@example.com&#10;bob@example.com" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="stakes-ghost" class="form-label small text-uppercase text-secondary">Ghost Key</label>
+                        <input id="stakes-ghost" type="password" class="form-control" name="ghost" placeholder="••••••" required />
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Ghost key required. No automatic unstake is run.</small>
+                        <button type="submit" class="btn btn-outline-light btn-sm">Unstake Selected</button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-lg-8">
+                <div class="table-responsive h-100">
+                    <table class="table table-dark table-striped table-sm align-middle mb-0">
+                        <thead class="table-light text-dark">
+                            <tr>
+                                <th scope="col">Ambassador</th>
+                                <th scope="col" class="text-end">Amount (IGP)</th>
+                                <th scope="col">Week Of</th>
+                                <th scope="col">Stake Ends</th>
+                                <th scope="col">Payout Window</th>
+                                <th scope="col">Time Remaining</th>
+                                <th scope="col" class="text-end">Available</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stake in stakes %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ stake.email }}</div>
+                                    <div class="small text-muted">{{ stake.telegram or '—' }}</div>
+                                </td>
+                                <td class="text-end fw-semibold">{{ stake.amount_display }}</td>
+                                <td>{{ stake.week_start_display or '—' }}</td>
+                                <td>{{ stake.ends_at_display or stake.week_end_display or '—' }}</td>
+                                <td>{{ stake.payout_window_display or '—' }}</td>
+                                <td>{{ stake.time_remaining_label }}</td>
+                                <td class="text-end">
+                                    <div class="fw-semibold text-success">{{ '%.2f'|format(stake.available_points or 0) }}</div>
+                                    <div class="small text-muted">{{ '%.2f'|format(stake.points or 0) }} total</div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">No active stakes recorded.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="transfers" class="glass-card p-3 mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
