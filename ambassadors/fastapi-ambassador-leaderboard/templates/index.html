@@ -67,6 +67,299 @@
           -webkit-backdrop-filter: blur(8px);
           box-shadow: 0 20px 50px rgba(0,0,0,.35);
         }
+        .gamefi-panel{
+          position:relative;
+          overflow:hidden;
+          background:linear-gradient(135deg, rgba(31,19,53,0.75), rgba(12,12,26,0.85));
+          border:1px solid rgba(255,209,102,0.2);
+        }
+        .gamefi-panel::before,
+        .gamefi-panel::after{
+          content:"";
+          position:absolute;
+          inset:0;
+          border-radius:inherit;
+          pointer-events:none;
+        }
+        .gamefi-panel::before{
+          background:radial-gradient(circle at 20% 20%, rgba(255,59,78,0.25), transparent 60%),
+                     radial-gradient(circle at 80% 80%, rgba(74,163,255,0.2), transparent 55%);
+          mix-blend-mode:screen;
+        }
+        .gamefi-panel::after{
+          border:1px solid rgba(255,255,255,0.08);
+          box-shadow:inset 0 0 35px rgba(0,0,0,0.55);
+        }
+        .gamefi-header{
+          position:relative;
+          z-index:1;
+          display:flex;
+          flex-wrap:wrap;
+          justify-content:space-between;
+          align-items:center;
+          gap:1rem;
+        }
+        .gamefi-chip{
+          width:68px; height:68px;
+          border-radius:50%;
+          display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(circle, #ffd166 40%, #ffae34 70%, rgba(255,209,102,0.2) 90%);
+          color:#1b1730;
+          font-weight:700;
+          letter-spacing:1px;
+          position:relative;
+          box-shadow:0 0 25px rgba(255,209,102,0.45), inset 0 0 12px rgba(0,0,0,0.35);
+        }
+        .gamefi-chip::after{
+          content:"IGP";
+        }
+        .gamefi-grid{
+          position:relative;
+          z-index:1;
+        }
+        .game-tile{
+          position:relative;
+          width:100%;
+          padding:1rem 1.1rem;
+          border-radius:0.9rem;
+          background:rgba(8,8,20,0.75);
+          border:1px solid rgba(255,255,255,0.08);
+          color:#f5f5f5;
+          text-align:left;
+          display:flex;
+          flex-direction:column;
+          gap:0.35rem;
+          transition:all .3s ease;
+          cursor:pointer;
+          box-shadow:0 18px 30px rgba(0,0,0,0.35);
+        }
+        .game-tile:not(.active){
+          opacity:0.8;
+        }
+        .game-tile .tile-title{
+          font-weight:600;
+          letter-spacing:0.5px;
+        }
+        .game-tile .tile-meta{
+          font-size:0.8rem;
+          text-transform:uppercase;
+          letter-spacing:1.6px;
+          color:rgba(255,255,255,0.6);
+        }
+        .game-tile .tile-cover{
+          position:absolute;
+          inset:0;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          border-radius:inherit;
+          background:linear-gradient(135deg, rgba(255,59,78,0.4), rgba(74,163,255,0.4));
+          color:#0d0d19;
+          font-weight:700;
+          letter-spacing:1px;
+          text-transform:uppercase;
+          backdrop-filter:blur(6px);
+          transition:all .35s ease;
+          box-shadow:inset 0 0 35px rgba(0,0,0,0.45);
+        }
+        .game-tile.revealed .tile-cover{
+          opacity:0;
+          transform:scale(0.85);
+          pointer-events:none;
+        }
+        .game-tile.active{
+          border-color:rgba(255,209,102,0.75);
+          box-shadow:0 25px 45px rgba(255,209,102,0.25);
+          transform:translateY(-3px);
+        }
+        .game-tile .tile-icon{
+          font-size:1.8rem;
+        }
+        .gamefi-stage{
+          position:relative;
+          z-index:1;
+          padding:1.5rem;
+          border-radius:1rem;
+          background:rgba(8,8,18,0.75);
+          border:1px solid rgba(255,255,255,0.06);
+          box-shadow:inset 0 0 25px rgba(0,0,0,0.35);
+        }
+        .game-content{
+          display:none;
+        }
+        .game-content.show{
+          display:block;
+          animation:fadeInUp .5s ease;
+        }
+        @keyframes fadeInUp{
+          from{opacity:0; transform:translateY(10px);}
+          to{opacity:1; transform:translateY(0);}
+        }
+        .igp-wheel-layout{
+          display:grid;
+          grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+          gap:1.5rem;
+          align-items:center;
+        }
+        .igp-wheel-stage{
+          position:relative;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+        .wheel-pointer{
+          position:absolute;
+          top:-18px;
+          width:0; height:0;
+          border-left:16px solid transparent;
+          border-right:16px solid transparent;
+          border-bottom:24px solid #ffd166;
+          filter:drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+          z-index:3;
+        }
+        .igp-wheel{
+          --rotation:0deg;
+          position:relative;
+          width:min(280px, 65vw);
+          aspect-ratio:1 / 1;
+          border-radius:50%;
+          background:conic-gradient(from -90deg,
+            #ffd166 0deg 45deg,
+            #4aa3ff 45deg 90deg,
+            #ff3b4e 90deg 135deg,
+            #32ffb3 135deg 180deg,
+            #be4bff 180deg 225deg,
+            #ff6f61 225deg 270deg,
+            #21d4fd 270deg 315deg,
+            #ff3b81 315deg 360deg
+          );
+          border:8px solid rgba(255,255,255,0.15);
+          box-shadow:0 25px 50px rgba(0,0,0,0.45), inset 0 0 35px rgba(0,0,0,0.35);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          transition:transform 3.2s cubic-bezier(.22,.61,.36,1);
+          transform:rotate(var(--rotation));
+        }
+        .igp-wheel::after{
+          content:"";
+          position:absolute;
+          inset:12%;
+          border-radius:50%;
+          border:2px dashed rgba(255,255,255,0.25);
+          box-shadow:inset 0 0 12px rgba(0,0,0,0.45);
+        }
+        .wheel-center{
+          position:relative;
+          z-index:2;
+          width:42%;
+          aspect-ratio:1/1;
+          border-radius:50%;
+          background:radial-gradient(circle at 30% 30%, #ffd166 0%, #f4a537 60%, #8f4d16 100%);
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          gap:0.35rem;
+          color:#220a16;
+          font-weight:700;
+          letter-spacing:1px;
+          text-transform:uppercase;
+          box-shadow:0 0 18px rgba(255,209,102,0.55);
+        }
+        .wheel-spin-btn{
+          font-size:0.75rem;
+          font-weight:700;
+          letter-spacing:1.2px;
+          border-radius:999px;
+          box-shadow:0 0 15px rgba(255,209,102,0.45);
+        }
+        .wheel-spin-btn:disabled{
+          opacity:0.65;
+          cursor:wait;
+          box-shadow:none;
+        }
+        .wheel-ledger{
+          background:rgba(14,14,28,0.75);
+          border-radius:1rem;
+          border:1px solid rgba(255,255,255,0.08);
+          padding:1.25rem;
+          box-shadow:inset 0 0 30px rgba(0,0,0,0.35);
+        }
+        .ledger-stat{
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          font-size:0.9rem;
+          padding:0.35rem 0;
+          border-bottom:1px dashed rgba(255,255,255,0.08);
+        }
+        .ledger-stat:last-of-type{
+          border-bottom:none;
+          margin-bottom:0.5rem;
+        }
+        .ledger-value{
+          font-weight:600;
+          color:#ffd166;
+        }
+        .wheel-result{
+          font-size:0.95rem;
+          font-weight:600;
+          margin-bottom:0.75rem;
+          color:#fffbe6;
+        }
+        .wheel-history li{
+          font-size:0.8rem;
+          padding:0.35rem 0;
+          border-bottom:1px solid rgba(255,255,255,0.05);
+          display:flex;
+          justify-content:space-between;
+          gap:1rem;
+          color:rgba(255,255,255,0.75);
+        }
+        .wheel-history li:last-child{
+          border-bottom:none;
+        }
+        .coming-soon-card{
+          position:relative;
+          overflow:hidden;
+          padding:1.5rem;
+          border-radius:1rem;
+          background:linear-gradient(145deg, rgba(18,18,40,0.9), rgba(34,14,46,0.85));
+          border:1px solid rgba(255,255,255,0.08);
+          box-shadow:0 18px 32px rgba(0,0,0,0.45);
+        }
+        .glow-ring{
+          position:absolute;
+          inset:-40% -40% auto;
+          height:60%;
+          background:radial-gradient(circle, rgba(255,59,129,0.45), transparent 65%);
+          mix-blend-mode:screen;
+          pointer-events:none;
+        }
+        .coming-soon-body{
+          position:relative;
+          z-index:1;
+        }
+        @media (max-width: 991.98px){
+          .igp-wheel-layout{
+            grid-template-columns: 1fr;
+          }
+          .wheel-pointer{
+            top: -12px;
+          }
+          .wheel-ledger{
+            padding:1rem;
+          }
+        }
+        @media (max-width: 575.98px){
+          .gamefi-stage{
+            padding:1rem;
+          }
+          .igp-wheel{
+            width:78vw;
+          }
+        }
         .hero-card{
           position:relative;
           overflow:hidden;
@@ -226,6 +519,52 @@
         <div class="hero-meta">
           <div>Total Ambassador Points: <span id="total-points">{{ '{:,.2f}'.format(total_points) }}</span> IGP</div>
           <div>Reward Pool Balance: <span id="hero-pool-balance">{{ '%.8f'|format(pool_balance) }}</span> ITC</div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="glass-card p-4 mb-4 gamefi-panel">
+    <div class="gamefi-header">
+      <div>
+        <div class="text-uppercase small text-muted fw-semibold">GameFi Arcade</div>
+        <h2 class="h4 mb-1 text-warning">Spin up the IGP Wheel of Fortune</h2>
+        <p class="mb-0 small text-muted">Earn, gamble, and unlock fresh crypto-casino experiences tailored for Interchained ambassadors.</p>
+      </div>
+      <div class="gamefi-chip" aria-hidden="true"></div>
+    </div>
+    <div class="row g-4 mt-2 gamefi-grid">
+      <div class="col-12 col-lg-4">
+        <div class="d-flex flex-column gap-3" role="tablist" aria-label="GameFi arcade selection">
+          <button type="button" id="tab-wheel-of-fortune" class="game-tile active revealed" data-game="wheel-of-fortune" role="tab" aria-selected="true" aria-controls="game-wheel-of-fortune">
+            <span class="tile-icon" aria-hidden="true">🎡</span>
+            <span class="tile-title">Wheel of Fortune</span>
+            <span class="tile-meta">Live • IGP Enabled</span>
+          </button>
+          <button type="button" id="tab-mystery-box" class="game-tile" data-game="mystery-box" role="tab" aria-selected="false" aria-controls="game-mystery-box">
+            <span class="tile-icon" aria-hidden="true">🪐</span>
+            <span class="tile-title">Mystery Drop Pods</span>
+            <span class="tile-meta">Locked • Reveal to preview</span>
+            <span class="tile-cover">Tap to Reveal</span>
+          </button>
+          <button type="button" id="tab-high-roller" class="game-tile" data-game="high-roller" role="tab" aria-selected="false" aria-controls="game-high-roller">
+            <span class="tile-icon" aria-hidden="true">🎰</span>
+            <span class="tile-title">High Roller Matrix</span>
+            <span class="tile-meta">Vaulted • Invite Only</span>
+            <span class="tile-cover">Hidden Game</span>
+          </button>
+        </div>
+      </div>
+      <div class="col-12 col-lg-8">
+        <div class="gamefi-stage">
+          <div class="game-content show" data-game="wheel-of-fortune" id="game-wheel-of-fortune" role="tabpanel" aria-labelledby="tab-wheel-of-fortune">
+            {% include "partials/game_wheel_of_fortune.html" %}
+          </div>
+          <div class="game-content" data-game="mystery-box" id="game-mystery-box" role="tabpanel" aria-labelledby="tab-mystery-box" aria-hidden="true">
+            {% include "partials/game_mystery_box.html" %}
+          </div>
+          <div class="game-content" data-game="high-roller" id="game-high-roller" role="tabpanel" aria-labelledby="tab-high-roller" aria-hidden="true">
+            {% include "partials/game_high_roller.html" %}
+          </div>
         </div>
       </div>
     </div>
@@ -460,6 +799,258 @@ async function refreshData(force=false){
 }
 document.getElementById('refresh-btn').addEventListener('click', () => refreshData(true));
 setInterval(() => refreshData(true), autoRefresh);
+
+const wheelInitialState = {{ wheel_state | tojson | safe }};
+window.wheelInitialState = wheelInitialState;
+
+/* ===== GameFi Panel ===== */
+(() => {
+  const panel = document.querySelector('.gamefi-panel');
+  if (!panel) return;
+
+  const tiles = panel.querySelectorAll('.game-tile');
+  const contents = panel.querySelectorAll('.game-content');
+
+  const showGame = (game, trigger) => {
+    if (!game) return;
+    contents.forEach((content) => {
+      const match = content.dataset.game === game;
+      content.classList.toggle('show', match);
+      if (match) {
+        content.removeAttribute('aria-hidden');
+      } else {
+        content.setAttribute('aria-hidden', 'true');
+      }
+    });
+    tiles.forEach((tile) => {
+      const active = tile === trigger;
+      tile.classList.toggle('active', active);
+      tile.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) {
+        tile.classList.add('revealed');
+      }
+    });
+  };
+
+  tiles.forEach((tile) => {
+    tile.addEventListener('click', () => {
+      const game = tile.dataset.game;
+      showGame(game, tile);
+    });
+  });
+
+  const initialTile = panel.querySelector('.game-tile.active') || tiles[0];
+  if (initialTile) {
+    showGame(initialTile.dataset.game, initialTile);
+  }
+
+  const wheelEl = panel.querySelector('[data-game-wheel]');
+  const spinButton = panel.querySelector('[data-action="spin-wheel"]');
+  if (!wheelEl || !spinButton) {
+    return;
+  }
+
+  const wheelState = window.wheelInitialState || {};
+  const entryFeeEl = panel.querySelector('[data-wheel-entry-fee]');
+  const bankrollEl = panel.querySelector('[data-wheel-bankroll]');
+  const poolEl = panel.querySelector('[data-wheel-pool]');
+  const resultEl = panel.querySelector('[data-wheel-result]');
+  const historyEl = panel.querySelector('[data-wheel-history]');
+
+  const defaultSegments = [
+    { label: '+2x IGP', type: 'multiplier', multiplier: 2, tone: 'win', index: 0 },
+    { label: '+500 IGP', type: 'fixed', amount: 500, tone: 'win', index: 1 },
+    { label: 'Try Again', type: 'retry', tone: 'neutral', index: 2 },
+    { label: '+1000 IGP', type: 'fixed', amount: 1000, tone: 'win', index: 3 },
+    { label: 'Lose Spin', type: 'lose', tone: 'lose', index: 4 },
+    { label: '+250 IGP', type: 'fixed', amount: 250, tone: 'win', index: 5 },
+    { label: '+3x IGP', type: 'multiplier', multiplier: 3, tone: 'win', index: 6 },
+    { label: 'Bonus Spin', type: 'bonus', tone: 'neutral', index: 7 },
+  ];
+
+  const buildSegments = (segments) => {
+    if (!Array.isArray(segments) || !segments.length) {
+      return [...defaultSegments];
+    }
+    return segments
+      .map((seg, idx) => ({
+        label: seg.label || `Slice ${idx + 1}`,
+        type: seg.type || 'fixed',
+        tone: seg.tone || 'neutral',
+        multiplier: seg.multiplier,
+        amount: seg.amount,
+        index: typeof seg.index === 'number' ? seg.index : idx,
+      }))
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  };
+
+  let wheelSegments = buildSegments(wheelState.segments);
+  if (!wheelSegments.length) {
+    wheelSegments = [...defaultSegments];
+  }
+
+  let entryFee = Number(
+    spinButton.dataset.entryFee ?? wheelState.entry_fee ?? defaultSegments[0]?.entry_fee ?? 0
+  );
+  let bankroll = Number(
+    bankrollEl?.dataset.value ?? wheelState.scorepad_balance ?? 0
+  );
+  let pool = Number(poolEl?.dataset.value ?? wheelState.pool_balance ?? 0);
+  let rotation = 0;
+  const spinDuration = 3200;
+
+  const setResultTone = (tone) => {
+    if (!resultEl) return;
+    resultEl.classList.remove('text-success', 'text-danger', 'text-warning');
+    if (tone === 'win') {
+      resultEl.classList.add('text-success');
+    } else if (tone === 'lose') {
+      resultEl.classList.add('text-danger');
+    } else if (tone === 'neutral') {
+      resultEl.classList.add('text-warning');
+    }
+  };
+
+  const updateLedger = () => {
+    spinButton.dataset.entryFee = String(entryFee);
+    if (entryFeeEl) {
+      entryFeeEl.textContent = formatNumber(entryFee, 0, true);
+    }
+    if (bankrollEl) {
+      bankrollEl.dataset.value = String(bankroll);
+      bankrollEl.textContent = formatNumber(bankroll, 0, true);
+    }
+    if (poolEl) {
+      poolEl.dataset.value = String(pool);
+      poolEl.textContent = formatNumber(pool, 0, true);
+    }
+  };
+
+  const renderHistory = (entries = []) => {
+    if (!historyEl) return;
+    historyEl.innerHTML = '';
+    entries.slice(0, 6).forEach((entry) => {
+      const li = document.createElement('li');
+      const time = document.createElement('span');
+      time.textContent = entry.timestamp_display || new Date(entry.timestamp || Date.now()).toLocaleTimeString();
+      const text = document.createElement('span');
+      text.textContent = entry.message || '';
+      if (entry.tone === 'win') {
+        text.classList.add('text-success');
+      } else if (entry.tone === 'lose') {
+        text.classList.add('text-danger');
+      } else {
+        text.classList.add('text-warning');
+      }
+      li.appendChild(time);
+      li.appendChild(text);
+      historyEl.appendChild(li);
+    });
+  };
+
+  const applyState = (state) => {
+    if (!state) return;
+    if (typeof state.entry_fee === 'number') {
+      entryFee = state.entry_fee;
+    }
+    if (typeof state.scorepad_balance === 'number') {
+      bankroll = state.scorepad_balance;
+    }
+    if (typeof state.pool_balance === 'number') {
+      pool = state.pool_balance;
+    }
+    updateLedger();
+    if (Array.isArray(state.history)) {
+      renderHistory(state.history);
+    }
+    if (resultEl) {
+      const tone = state.status_tone || 'neutral';
+      setResultTone(tone);
+      resultEl.textContent = state.status_message || 'Ready to spin. Good luck!';
+    }
+  };
+
+  applyState(wheelState);
+
+  const animateToSegment = (targetIndex) => {
+    if (!wheelSegments.length) return;
+    const size = 360 / wheelSegments.length;
+    const normalizedIndex = ((targetIndex % wheelSegments.length) + wheelSegments.length) % wheelSegments.length;
+    const steps = (wheelSegments.length - normalizedIndex) % wheelSegments.length;
+    const minAngle = steps * size - size / 2 + 2;
+    const maxAngle = (steps + 1) * size - size / 2 - 2;
+    const span = Math.max(maxAngle - minAngle, 4);
+    const offset = minAngle + Math.random() * span;
+    const spins = 4 + Math.floor(Math.random() * 3);
+    rotation += spins * 360 + offset;
+    wheelEl.style.setProperty('--rotation', `${rotation}deg`);
+  };
+
+  spinButton.addEventListener('click', async () => {
+    if (spinButton.disabled) return;
+    if (bankroll < entryFee - 1e-6) {
+      if (resultEl) {
+        setResultTone('lose');
+        resultEl.textContent = 'Insufficient IGP on your score pad. Complete tasks or claims to reload.';
+      }
+      return;
+    }
+
+    spinButton.disabled = true;
+    setResultTone('neutral');
+    if (resultEl) {
+      resultEl.textContent = 'Locking your bet...';
+    }
+
+    try {
+      const resp = await fetch('/api/gamefi/wheel/spin', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        const detail = data.detail || data.message || 'Unable to spin right now. Please try again.';
+        const tone = data.error === 'insufficient_funds' ? 'lose' : 'neutral';
+        if (typeof data.scorepad_balance === 'number') {
+          bankroll = data.scorepad_balance;
+          updateLedger();
+        }
+        if (resultEl) {
+          setResultTone(tone);
+          resultEl.textContent = detail;
+        }
+        spinButton.disabled = false;
+        return;
+      }
+
+      entryFee = Number(data.entry_fee ?? entryFee);
+      bankroll = Number(data.scorepad_balance ?? bankroll);
+      pool = Number(data.pool_balance ?? pool);
+      updateLedger();
+
+      if (Array.isArray(data.history)) {
+        renderHistory(data.history);
+      }
+
+      if (resultEl) {
+        resultEl.textContent = 'Spinning...';
+      }
+
+      animateToSegment(Number(data.segment_index ?? 0));
+
+      setTimeout(() => {
+        setResultTone(data.tone || 'neutral');
+        if (resultEl) {
+          resultEl.textContent = data.message || 'Spin complete.';
+        }
+        spinButton.disabled = false;
+      }, spinDuration);
+    } catch (error) {
+      if (resultEl) {
+        setResultTone('lose');
+        resultEl.textContent = 'Network issue — try again in a moment.';
+      }
+      spinButton.disabled = false;
+    }
+  });
+})();
 
 /* ===== GSAP bloom + motion ===== */
 (() => {
