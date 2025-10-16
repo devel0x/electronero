@@ -370,6 +370,36 @@ P2P_HISTORY_LIMIT = int(os.getenv("P2P_HISTORY_LIMIT", "300"))
 P2P_USER_HISTORY_PREFIX = "p2p:history:user:"
 P2P_USER_HISTORY_LIMIT = int(os.getenv("P2P_USER_HISTORY_LIMIT", "100"))
 
+OTC_CURRENCY_INDEX_KEY = "otc:currencies:index"
+OTC_CURRENCY_SEQ_KEY = "otc:currencies:seq"
+OTC_ORDER_INDEX_KEY = "otc:orders:index"
+OTC_ORDER_PENDING_INDEX_KEY = "otc:orders:pending"
+OTC_ORDER_CURRENCY_PREFIX = "otc:orders:currency:"
+OTC_ORDER_USER_PREFIX = "otc:orders:user:"
+OTC_ORDER_SEQ_KEY = "otc:orders:seq"
+OTC_DEFAULT_CURRENCIES = [
+    {"code": "ITC", "label": "ITC"},
+    {"code": "USDX", "label": "USDx"},
+]
+OTC_ORDER_STATUS_PENDING = "pending"
+OTC_ORDER_STATUS_VERIFIED = "verified"
+OTC_ORDER_STATUS_REJECTED = "rejected"
+OTC_ORDER_SIDES = {"bid", "ask"}
+OTC_STATUS_LABELS = {
+    OTC_ORDER_STATUS_PENDING: "Pending",
+    OTC_ORDER_STATUS_VERIFIED: "Verified",
+    OTC_ORDER_STATUS_REJECTED: "Rejected",
+}
+OTC_STATUS_BADGE_CLASSES = {
+    OTC_ORDER_STATUS_PENDING: "bg-warning text-dark",
+    OTC_ORDER_STATUS_VERIFIED: "bg-success",
+    OTC_ORDER_STATUS_REJECTED: "bg-danger",
+}
+OTC_SIDE_LABELS = {
+    "bid": "Bid · Buy",
+    "ask": "Ask · Sell",
+}
+
 
 def _monday_start(dt: datetime | None = None) -> datetime:
     dt = dt or datetime.utcnow()
@@ -1296,6 +1326,276 @@ async def _p2p_delete_prize(prize_id: str) -> None:
     pipe.delete(_p2p_prize_key(pid))
     pipe.zrem(P2P_PRIZE_INDEX_KEY, pid)
     await pipe.execute()
+
+
+def _normalize_currency_code(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", str(value or ""))
+    return cleaned.upper()
+
+
+def _otc_currency_key(code: str) -> str:
+    return f"otc:currency:{code}"
+
+
+def _otc_order_key(order_id: str) -> str:
+    return f"otc:order:{order_id}"
+
+
+def _otc_parse_bool(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _otc_parse_float(value: Any) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        cleaned = str(value).replace(",", "").strip()
+        return float(cleaned or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _otc_format_decimal(value: float, digits: int = 4, grouping: bool = False) -> str:
+    fmt = f"{{:,.{digits}f}}" if grouping else f"{{:.{digits}f}}"
+    try:
+        text = fmt.format(float(value))
+    except Exception:
+        text = fmt.format(0.0)
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+async def _ensure_otc_default_currencies() -> None:
+    for entry in OTC_DEFAULT_CURRENCIES:
+        code = _normalize_currency_code(entry.get("code", ""))
+        if not code:
+            continue
+        label = _safe_text(entry.get("label", code)) or code
+        key = _otc_currency_key(code)
+        exists = await redis_client.exists(key)
+        now_iso = datetime.utcnow().isoformat()
+        if not exists:
+            seq = await redis_client.incr(OTC_CURRENCY_SEQ_KEY)
+            mapping = {
+                "code": code,
+                "label": label,
+                "active": "1",
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            pipe = redis_client.pipeline()
+            pipe.hset(key, mapping=mapping)
+            pipe.zadd(OTC_CURRENCY_INDEX_KEY, {code: seq})
+            await pipe.execute()
+        else:
+            stored = await redis_client.hgetall(key)
+            updates: dict[str, Any] = {}
+            if not stored.get("label"):
+                updates["label"] = label
+            if not _otc_parse_bool(stored.get("active", "1")):
+                updates["active"] = "1"
+                updates["updated_at"] = now_iso
+            if updates:
+                await redis_client.hset(key, mapping=updates)
+
+
+async def _otc_currency(code: str) -> dict[str, Any] | None:
+    code_norm = _normalize_currency_code(code)
+    if not code_norm:
+        return None
+    data = await redis_client.hgetall(_otc_currency_key(code_norm))
+    if not data:
+        return None
+    active = _otc_parse_bool(data.get("active", "1"))
+    return {
+        "code": code_norm,
+        "label": _safe_text(data.get("label", code_norm)) or code_norm,
+        "active": active,
+        "created_at": data.get("created_at", ""),
+        "updated_at": data.get("updated_at", ""),
+    }
+
+
+async def _otc_currencies(include_inactive: bool = False) -> list[dict[str, Any]]:
+    await _ensure_otc_default_currencies()
+    codes = await redis_client.zrange(OTC_CURRENCY_INDEX_KEY, 0, -1)
+    currencies: list[dict[str, Any]] = []
+    for code in codes:
+        entry = await _otc_currency(code)
+        if not entry:
+            continue
+        if not include_inactive and not entry.get("active"):
+            continue
+        currencies.append(entry)
+    return currencies
+
+
+async def _otc_currency_codes(include_inactive: bool = False) -> set[str]:
+    currencies = await _otc_currencies(include_inactive=include_inactive)
+    return {entry["code"] for entry in currencies}
+
+
+async def _otc_add_or_update_currency(
+    code: str, label: str, active: bool = True
+) -> tuple[bool, str]:
+    code_norm = _normalize_currency_code(code)
+    if not code_norm:
+        return False, "Currency code must include at least one letter or number."
+    label_clean = _safe_text(label).strip() or code_norm
+    key = _otc_currency_key(code_norm)
+    exists = await redis_client.exists(key)
+    now_iso = datetime.utcnow().isoformat()
+    mapping: dict[str, Any] = {
+        "code": code_norm,
+        "label": label_clean,
+        "active": "1" if active else "0",
+        "updated_at": now_iso,
+    }
+    if not exists:
+        mapping["created_at"] = now_iso
+    pipe = redis_client.pipeline()
+    pipe.hset(key, mapping=mapping)
+    if not exists:
+        seq = await redis_client.incr(OTC_CURRENCY_SEQ_KEY)
+        pipe.zadd(OTC_CURRENCY_INDEX_KEY, {code_norm: seq})
+    await pipe.execute()
+    message = "Currency added" if not exists else "Currency updated"
+    return True, message
+
+
+async def _otc_set_currency_active(code: str, active: bool) -> bool:
+    code_norm = _normalize_currency_code(code)
+    if not code_norm:
+        return False
+    key = _otc_currency_key(code_norm)
+    exists = await redis_client.exists(key)
+    if not exists:
+        return False
+    now_iso = datetime.utcnow().isoformat()
+    await redis_client.hset(
+        key,
+        mapping={"active": "1" if active else "0", "updated_at": now_iso},
+    )
+    return True
+
+
+def _otc_order_view(data: dict[str, Any]) -> dict[str, Any]:
+    amount = _otc_parse_float(data.get("amount"))
+    price = _otc_parse_float(data.get("price"))
+    total = _otc_parse_float(data.get("total"))
+    created_ts = _otc_parse_float(data.get("created_ts"))
+    status = str(data.get("status", OTC_ORDER_STATUS_PENDING)).strip().lower() or OTC_ORDER_STATUS_PENDING
+    side = str(data.get("side", "bid")).strip().lower()
+    view = {
+        "id": data.get("id", ""),
+        "status": status,
+        "side": side,
+        "currency": data.get("currency", ""),
+        "currency_label": data.get("currency_label") or data.get("currency", ""),
+        "amount": amount,
+        "price": price,
+        "total": total,
+        "created_at": data.get("created_at", ""),
+        "updated_at": data.get("updated_at", ""),
+        "created_ts": created_ts,
+        "scorepad_before": _otc_parse_float(data.get("scorepad_before")),
+        "scorepad_after": _otc_parse_float(data.get("scorepad_after")),
+        "transaction_hash": _safe_text(data.get("transaction_hash", "")),
+        "wallet_destination": _safe_text(data.get("wallet_destination", "")),
+        "rejection_reason": _safe_text(data.get("rejection_reason", "")),
+        "ambassador_email": data.get("ambassador_email", ""),
+        "ambassador_email_display": data.get("ambassador_email_display", data.get("ambassador_email", "")),
+        "ambassador_name": _safe_text(data.get("ambassador_name", "")),
+        "ambassador_telegram": _safe_text(data.get("ambassador_telegram", "")),
+        "ambassador_wallet": _safe_text(data.get("ambassador_wallet", "")),
+    }
+    view["amount_display"] = _otc_format_decimal(amount, 6)
+    view["price_display"] = _otc_format_decimal(price, 6)
+    view["total_display"] = _otc_format_decimal(total, 6, grouping=True)
+    view["scorepad_before_display"] = _otc_format_decimal(view["scorepad_before"], 4, grouping=True)
+    view["scorepad_after_display"] = _otc_format_decimal(view["scorepad_after"], 4, grouping=True)
+    view["status_label"] = OTC_STATUS_LABELS.get(status, status.title())
+    view["status_badge"] = OTC_STATUS_BADGE_CLASSES.get(status, "bg-secondary")
+    view["side_label"] = OTC_SIDE_LABELS.get(side, side.title())
+    view["side_badge"] = "bg-success" if side == "bid" else "bg-danger"
+    view["created_at_display"] = _format_timestamp(view["created_at"])
+    view["updated_at_display"] = _format_timestamp(view["updated_at"])
+    ambassador_label = view["ambassador_telegram"] or view["ambassador_name"] or view["ambassador_email_display"]
+    view["ambassador_label"] = ambassador_label
+    return view
+
+
+async def _otc_order(order_id: str) -> dict[str, Any] | None:
+    oid = str(order_id or "").strip()
+    if not oid:
+        return None
+    data = await redis_client.hgetall(_otc_order_key(oid))
+    if not data:
+        return None
+    return _otc_order_view(data)
+
+
+async def _otc_orders(
+    status: str | None = None,
+    currency: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    end_index = -1
+    if limit is not None and limit > 0:
+        end_index = limit - 1
+    ids = await redis_client.zrevrange(OTC_ORDER_INDEX_KEY, 0, end_index)
+    orders: list[dict[str, Any]] = []
+    status_norm = str(status or "").strip().lower()
+    currency_norm = _normalize_currency_code(currency or "") if currency else ""
+    for oid in ids:
+        order = await _otc_order(oid)
+        if not order:
+            continue
+        if status_norm and order.get("status") != status_norm:
+            continue
+        if currency_norm and _normalize_currency_code(order.get("currency", "")) != currency_norm:
+            continue
+        orders.append(order)
+    return orders
+
+
+async def _otc_order_book(currencies: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    book: dict[str, dict[str, Any]] = {}
+    for currency in currencies:
+        code = currency.get("code", "")
+        if not code:
+            continue
+        orders = await _otc_orders(status=OTC_ORDER_STATUS_PENDING, currency=code)
+        bids = sorted(
+            (order for order in orders if order.get("side") == "bid"),
+            key=lambda order: (-order.get("price", 0.0), order.get("created_ts", 0.0)),
+        )
+        asks = sorted(
+            (order for order in orders if order.get("side") == "ask"),
+            key=lambda order: (order.get("price", 0.0), order.get("created_ts", 0.0)),
+        )
+        book[code] = {"currency": currency, "bids": bids, "asks": asks}
+    return book
+
+
+async def _otc_user_orders(email: str, limit: int = 100) -> list[dict[str, Any]]:
+    email_norm = _normalize_email(email)
+    if not email_norm:
+        return []
+    if limit <= 0:
+        return []
+    ids = await redis_client.zrevrange(
+        f"{OTC_ORDER_USER_PREFIX}{email_norm}", 0, limit - 1
+    )
+    orders: list[dict[str, Any]] = []
+    for oid in ids:
+        order = await _otc_order(oid)
+        if order:
+            orders.append(order)
+    return orders
 
 
 async def _record_transfer(
@@ -3194,6 +3494,256 @@ async def transfers_submit(
     return RedirectResponse(f"/transfers?success={quote_plus(success_message)}", status_code=303)
 
 
+@app.get("/otc")
+async def otc_page(
+    request: Request,
+    currency: str | None = None,
+    success: str | None = None,
+    error: str | None = None,
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    email_norm = _normalize_email(email)
+    profile = await _ambassador_entry_by_email(email_norm)
+    user_profile = await redis_client.hgetall(f"user:{email_norm}")
+    currencies = await _otc_currencies()
+    currency_codes = [entry.get("code") for entry in currencies if entry.get("code")]
+
+    currency_param = currency or request.query_params.get("currency", "")
+    selected_currency = (
+        _normalize_currency_code(currency_param)
+        if currency_param
+        else (currency_codes[0] if currency_codes else "")
+    )
+    if currency_codes and selected_currency not in currency_codes:
+        selected_currency = currency_codes[0]
+
+    data = await _get_cached_data()
+    order_book = await _otc_order_book(currencies)
+    user_orders = await _otc_user_orders(email_norm, limit=150)
+    pending_locked = sum(
+        order.get("total", 0.0)
+        for order in user_orders
+        if order.get("status") == OTC_ORDER_STATUS_PENDING
+    )
+    scorepad_balance = await _scorepad_balance(email_norm)
+    profile_points = 0.0
+    if profile:
+        try:
+            profile_points = float(profile.get("points", 0.0) or 0.0)
+        except Exception:
+            profile_points = 0.0
+
+    success_msg = (
+        success
+        if success is not None
+        else request.query_params.get("success", "")
+    )
+    error_msg = (
+        error
+        if error is not None
+        else request.query_params.get("error", "")
+    )
+
+    currency_labels = {entry["code"]: entry.get("label", entry["code"]) for entry in currencies if entry.get("code")}
+    selected_currency_label = currency_labels.get(selected_currency, selected_currency)
+    pending_count = sum(1 for order in user_orders if order.get("status") == OTC_ORDER_STATUS_PENDING)
+
+    return templates.TemplateResponse(
+        "otc.html",
+        {
+            "request": request,
+            "currencies": currencies,
+            "currency_codes": currency_codes,
+            "currency_labels": currency_labels,
+            "selected_currency": selected_currency,
+            "selected_currency_label": selected_currency_label,
+            "order_book": order_book,
+            "user_orders": user_orders,
+            "scorepad_balance": scorepad_balance,
+            "scorepad_balance_display": _otc_format_decimal(scorepad_balance, 4, grouping=True),
+            "pending_locked": pending_locked,
+            "pending_locked_display": _otc_format_decimal(pending_locked, 4, grouping=True),
+            "pending_order_count": pending_count,
+            "profile": profile,
+            "profile_points": profile_points,
+            "user_profile": user_profile,
+            "wallet": user_profile.get("wallet", ""),
+            "success": success_msg,
+            "error": error_msg,
+            "igp_to_itc": data.get("igp_to_itc", 0.0),
+            "itc_to_igp": data.get("itc_to_igp", 0.0),
+            "status_labels": OTC_STATUS_LABELS,
+            "status_badges": OTC_STATUS_BADGE_CLASSES,
+            "side_labels": OTC_SIDE_LABELS,
+        },
+    )
+
+
+@app.post("/otc/orders")
+async def otc_submit(
+    request: Request,
+    currency: str = Form(...),
+    side: str = Form(...),
+    amount: str = Form(...),
+    price: str = Form(...),
+) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    email_norm = _normalize_email(email)
+    currencies = await _otc_currencies()
+    active_codes = await _otc_currency_codes()
+    currency_code = _normalize_currency_code(currency)
+    if not currency_code or currency_code not in active_codes:
+        return await otc_page(
+            request,
+            error="Selected currency is not approved for OTC orders.",
+            currency=currency_code,
+        )
+
+    side_norm = str(side or "").strip().lower()
+    if side_norm not in OTC_ORDER_SIDES:
+        return await otc_page(
+            request,
+            error="Choose Bid (buy) or Ask (sell) to place an order.",
+            currency=currency_code,
+        )
+
+    amount_value = _otc_parse_float(amount)
+    if amount_value <= 0:
+        return await otc_page(
+            request,
+            error="Enter a positive amount for your order.",
+            currency=currency_code,
+        )
+
+    price_value = _otc_parse_float(price)
+    if price_value <= 0:
+        return await otc_page(
+            request,
+            error="Enter a positive price in IGP.",
+            currency=currency_code,
+        )
+
+    total_cost = amount_value * price_value
+    if total_cost <= 0:
+        return await otc_page(
+            request,
+            error="Order total must be greater than zero.",
+            currency=currency_code,
+        )
+
+    scorepad_before = await _scorepad_balance(email_norm)
+    if total_cost > scorepad_before + 1e-9:
+        return await otc_page(
+            request,
+            error=(
+                "Insufficient IGP available. You need "
+                f"{_otc_format_decimal(total_cost, 4, grouping=True)} IGP but have "
+                f"{_otc_format_decimal(scorepad_before, 4, grouping=True)} IGP."
+            ),
+            currency=currency_code,
+        )
+
+    profile = await _ambassador_entry_by_email(email_norm)
+    user_profile = await redis_client.hgetall(f"user:{email_norm}")
+    currency_entry = next((entry for entry in currencies if entry.get("code") == currency_code), None)
+    currency_label = (
+        currency_entry.get("label")
+        if currency_entry and currency_entry.get("label")
+        else currency_code
+    )
+    ambassador_email_display = _safe_text(
+        (profile or {}).get("email_display") or email
+    )
+    ambassador_name = _safe_text(
+        user_profile.get("name") or (profile or {}).get("name") or ""
+    )
+    ambassador_telegram = _safe_text(
+        user_profile.get("telegram") or (profile or {}).get("telegram") or ""
+    )
+    ambassador_wallet = _safe_text(user_profile.get("wallet", ""))
+
+    now = datetime.utcnow()
+    order_id = str(await redis_client.incr(OTC_ORDER_SEQ_KEY))
+    order_key = _otc_order_key(order_id)
+    timestamp = now.timestamp()
+    mapping: dict[str, Any] = {
+        "id": order_id,
+        "status": OTC_ORDER_STATUS_PENDING,
+        "side": side_norm,
+        "currency": currency_code,
+        "currency_label": currency_label,
+        "amount": f"{amount_value:.8f}",
+        "price": f"{price_value:.8f}",
+        "total": f"{total_cost:.8f}",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "created_ts": f"{timestamp:.6f}",
+        "scorepad_before": f"{scorepad_before:.8f}",
+        "scorepad_after": f"{max(scorepad_before - total_cost, 0.0):.8f}",
+        "transaction_hash": "",
+        "wallet_destination": "",
+        "rejection_reason": "",
+        "ambassador_email": email_norm,
+        "ambassador_email_display": ambassador_email_display,
+        "ambassador_name": ambassador_name,
+        "ambassador_telegram": ambassador_telegram,
+        "ambassador_wallet": ambassador_wallet,
+        "created_by": email_norm,
+    }
+
+    pipe = redis_client.pipeline()
+    pipe.hincrbyfloat("score_pad", email_norm, -total_cost)
+    pipe.hset(order_key, mapping=mapping)
+    pipe.zadd(OTC_ORDER_INDEX_KEY, {order_id: timestamp})
+    pipe.zadd(OTC_ORDER_PENDING_INDEX_KEY, {order_id: timestamp})
+    pipe.zadd(f"{OTC_ORDER_CURRENCY_PREFIX}{currency_code}", {order_id: timestamp})
+    pipe.zadd(f"{OTC_ORDER_USER_PREFIX}{email_norm}", {order_id: timestamp})
+    results = await pipe.execute()
+
+    new_balance_raw = results[0] if results else scorepad_before - total_cost
+    try:
+        new_balance = float(new_balance_raw or 0.0)
+    except Exception:
+        new_balance = scorepad_before - total_cost
+
+    if new_balance < -1e-6:
+        revert = redis_client.pipeline()
+        revert.hincrbyfloat("score_pad", email_norm, total_cost)
+        revert.delete(order_key)
+        revert.zrem(OTC_ORDER_INDEX_KEY, order_id)
+        revert.zrem(OTC_ORDER_PENDING_INDEX_KEY, order_id)
+        revert.zrem(f"{OTC_ORDER_CURRENCY_PREFIX}{currency_code}", order_id)
+        revert.zrem(f"{OTC_ORDER_USER_PREFIX}{email_norm}", order_id)
+        await revert.execute()
+        return await otc_page(
+            request,
+            error="Your balance changed while placing the order. Please try again.",
+            currency=currency_code,
+        )
+
+    await redis_client.hset(
+        order_key,
+        mapping={"scorepad_after": f"{max(new_balance, 0.0):.8f}"},
+    )
+
+    action_label = "buy" if side_norm == "bid" else "sell"
+    success_message = (
+        f"Placed {action_label} order for {_otc_format_decimal(amount_value, 6)} "
+        f"{currency_label} @ {_otc_format_decimal(price_value, 6)} IGP"
+        f" • total {_otc_format_decimal(total_cost, 6)} IGP"
+    )
+    return RedirectResponse(
+        f"/otc?success={quote_plus(success_message)}&currency={currency_code}",
+        status_code=303,
+    )
+
+
 @app.get("/p2p")
 async def p2p_store(
     request: Request,
@@ -3673,6 +4223,7 @@ async def admin_panel(request: Request) -> Any:
 
     await _ensure_existing_ambassadors_pending()
 
+    cached_data = await _get_cached_data()
     wallets = await _all_wallets()
     wallets_active = sorted(
         [w for w in wallets if w.get("active")], key=lambda w: w.get("email", "")
@@ -3704,6 +4255,12 @@ async def admin_panel(request: Request) -> Any:
     p2p_history = await _p2p_recent_history(limit=100)
     p2p_message = request.query_params.get("p2p_msg", "")
     p2p_error = request.query_params.get("p2p_err", "")
+    otc_currencies = await _otc_currencies(include_inactive=True)
+    otc_pending_orders = await _otc_orders(status=OTC_ORDER_STATUS_PENDING)
+    otc_recent_orders = await _otc_orders(limit=200)
+    otc_pending_value = sum(order.get("total", 0.0) for order in otc_pending_orders)
+    otc_message = request.query_params.get("otc_msg", "")
+    otc_error = request.query_params.get("otc_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -3734,6 +4291,18 @@ async def admin_panel(request: Request) -> Any:
             "p2p_history": p2p_history,
             "p2p_message": p2p_message,
             "p2p_error": p2p_error,
+            "otc_currencies": otc_currencies,
+            "otc_pending_orders": otc_pending_orders,
+            "otc_recent_orders": otc_recent_orders,
+            "otc_pending_value": otc_pending_value,
+            "otc_pending_value_display": _otc_format_decimal(otc_pending_value, 6, grouping=True),
+            "otc_message": otc_message,
+            "otc_error": otc_error,
+            "otc_status_labels": OTC_STATUS_LABELS,
+            "otc_status_badges": OTC_STATUS_BADGE_CLASSES,
+            "otc_side_labels": OTC_SIDE_LABELS,
+            "otc_igp_to_itc": cached_data.get("igp_to_itc", 0.0),
+            "otc_itc_to_igp": cached_data.get("itc_to_igp", 0.0),
         },
     )
 
@@ -3875,6 +4444,159 @@ async def admin_p2p_delete(
 
     message = quote_plus("Prize removed from the P2P shop.")
     return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+
+
+@app.post("/admin/otc/currencies")
+async def admin_otc_currency_add(
+    request: Request,
+    code: str = Form(...),
+    label: str = Form(""),
+    active: str = Form("1"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    success, message = await _otc_add_or_update_currency(
+        code,
+        label,
+        active=_otc_parse_bool(active),
+    )
+    target = "otc_msg" if success else "otc_err"
+    payload = quote_plus(message)
+    return RedirectResponse(f"/admin?{target}={payload}#otc", status_code=303)
+
+
+@app.post("/admin/otc/currencies/toggle")
+async def admin_otc_currency_toggle(
+    request: Request,
+    code: str = Form(...),
+    state: str = Form("1"),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    code_norm = _normalize_currency_code(code)
+    if not code_norm:
+        message = quote_plus("Invalid currency code provided.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+
+    desired_active = _otc_parse_bool(state)
+    success = await _otc_set_currency_active(code_norm, desired_active)
+    if not success:
+        message = quote_plus("Currency could not be updated.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+
+    status_text = "enabled" if desired_active else "disabled"
+    message = quote_plus(f"Currency {code_norm} {status_text}.")
+    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+
+
+@app.post("/admin/otc/orders/verify")
+async def admin_otc_verify(
+    request: Request,
+    order_id: str = Form(...),
+    wallet_destination: str = Form(...),
+    transaction_hash: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    order = await _otc_order(order_id)
+    if not order:
+        message = quote_plus("Order not found.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+    if order.get("status") != OTC_ORDER_STATUS_PENDING:
+        message = quote_plus("Order is already processed.")
+        return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+
+    destination_clean = _safe_text(wallet_destination).strip()
+    if not destination_clean:
+        message = quote_plus("Wallet destination is required to verify an order.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+
+    transaction_clean = _safe_text(transaction_hash).strip()
+    now_iso = datetime.utcnow().isoformat()
+    currency_code = _normalize_currency_code(order.get("currency", ""))
+    updates: dict[str, Any] = {
+        "status": OTC_ORDER_STATUS_VERIFIED,
+        "wallet_destination": destination_clean,
+        "transaction_hash": transaction_clean,
+        "updated_at": now_iso,
+        "verified_at": now_iso,
+        "reviewed_by": "admin",
+    }
+
+    pipe = redis_client.pipeline()
+    pipe.hset(_otc_order_key(order_id), mapping=updates)
+    pipe.zrem(OTC_ORDER_PENDING_INDEX_KEY, order_id)
+    if currency_code:
+        pipe.zrem(f"{OTC_ORDER_CURRENCY_PREFIX}{currency_code}", order_id)
+    await pipe.execute()
+
+    message = quote_plus("Order verified and closed.")
+    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+
+
+@app.post("/admin/otc/orders/reject")
+async def admin_otc_reject(
+    request: Request,
+    order_id: str = Form(...),
+    reason: str = Form(""),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    order = await _otc_order(order_id)
+    if not order:
+        message = quote_plus("Order not found.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+    if order.get("status") != OTC_ORDER_STATUS_PENDING:
+        message = quote_plus("Order is already processed.")
+        return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+
+    ambassador_email = order.get("ambassador_email")
+    if not ambassador_email:
+        message = quote_plus("Order is missing ambassador contact information.")
+        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+
+    total_cost = order.get("total", 0.0)
+    reason_clean = _safe_text(reason).strip() or "Rejected by admin"
+    now_iso = datetime.utcnow().isoformat()
+    order_key = _otc_order_key(order_id)
+    currency_code = _normalize_currency_code(order.get("currency", ""))
+
+    pipe = redis_client.pipeline()
+    pipe.hincrbyfloat("score_pad", ambassador_email, total_cost)
+    pipe.hset(
+        order_key,
+        mapping={
+            "status": OTC_ORDER_STATUS_REJECTED,
+            "rejection_reason": reason_clean,
+            "updated_at": now_iso,
+            "rejected_at": now_iso,
+            "reviewed_by": "admin",
+        },
+    )
+    pipe.zrem(OTC_ORDER_PENDING_INDEX_KEY, order_id)
+    if currency_code:
+        pipe.zrem(f"{OTC_ORDER_CURRENCY_PREFIX}{currency_code}", order_id)
+    results = await pipe.execute()
+
+    try:
+        refunded_balance = float(results[0] or 0.0)
+    except Exception:
+        refunded_balance = 0.0
+    await redis_client.hset(
+        order_key,
+        mapping={
+            "scorepad_after": f"{max(refunded_balance, 0.0):.8f}",
+            "wallet_destination": "",
+            "transaction_hash": "",
+        },
+    )
+
+    message = quote_plus("Order rejected and IGP refunded.")
+    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
 
 
 async def _approve_pending_applicant(email: str) -> bool:
