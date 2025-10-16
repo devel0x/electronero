@@ -1,0 +1,67 @@
+{% set wheel = wheel_state or {} %}
+{% set entry_fee = wheel.entry_fee or 0 %}
+{% set scorepad_balance = wheel.scorepad_balance or 0 %}
+{% set pool_balance = wheel.pool_balance or 0 %}
+{% set status_message = wheel.status_message or 'Ready to spin. Good luck!' %}
+{% set status_tone = wheel.status_tone or 'neutral' %}
+{% set history = wheel.history or [] %}
+{% set tone_class = 'text-success' if status_tone == 'win' else 'text-danger' if status_tone == 'lose' else 'text-warning' %}
+<div class="game-room" aria-live="polite">
+  <div class="game-header mb-3">
+    <h3 class="h5 text-uppercase fw-bold mb-1 text-warning">IGP Wheel of Fortune</h3>
+    <p class="mb-0 small text-muted">Stake a little, spin the neon wheel, and let the Interchained luck decide your haul. Admins tune the entry fee, reward odds, and the pooled IGP anytime.</p>
+  </div>
+  <div class="igp-wheel-layout">
+    <div class="igp-wheel-stage">
+      <div class="wheel-pointer" aria-hidden="true"></div>
+      <div class="igp-wheel" data-game-wheel>
+        <div class="wheel-center">
+          <span class="wheel-center-label">IGP</span>
+          <button type="button" class="btn btn-warning btn-sm wheel-spin-btn" data-action="spin-wheel" data-entry-fee="{{ entry_fee }}">Spin Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="wheel-ledger">
+      <div class="ledger-stat">Entry Fee <span class="ledger-value" data-wheel-entry-fee>{{ '{:,.0f}'.format(entry_fee) }}</span> IGP</div>
+      <div class="ledger-stat">Your Score Pad <span class="ledger-value" data-wheel-bankroll data-value="{{ scorepad_balance }}">{{ '{:,.0f}'.format(scorepad_balance) }}</span> IGP</div>
+      <div class="ledger-stat">Game Pool <span class="ledger-value" data-wheel-pool data-value="{{ pool_balance }}">{{ '{:,.0f}'.format(pool_balance) }}</span> IGP</div>
+      <p class="small text-info mb-2">Admins can freeze spins, alter the pool size, and rebalance reward slices directly from the control panel.</p>
+      <div class="wheel-result {{ tone_class if status_tone != 'neutral' else '' }}" data-wheel-result>{{ status_message }}</div>
+      <ul class="wheel-history list-unstyled mb-0" data-wheel-history>
+        {% for item in history %}
+        <li>
+          <span>{{ item.timestamp_display or '--:--:--' }}</span>
+          <span class="{% if item.tone == 'win' %}text-success{% elif item.tone == 'lose' %}text-danger{% else %}text-warning{% endif %}">{{ item.message }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <hr class="my-4 border-light border-opacity-25" />
+  <div class="row g-3">
+    <div class="col-12 col-md-6">
+      <div class="p-3 rounded-3 bg-dark bg-opacity-25 border border-light border-opacity-10">
+        <h4 class="h6 text-uppercase text-warning">Reward Slices</h4>
+        <ul class="small mb-0 lh-lg">
+          <li><span class="text-success">+2x IGP</span> — double your stake on the spot.</li>
+          <li><span class="text-success">+500 IGP</span> &amp; <span class="text-success">+1000 IGP</span> — straight bonus drops.</li>
+          <li><span class="text-success">+3x IGP</span> — high-voltage jackpot with tighter odds.</li>
+          <li><span class="text-warning">Bonus Spin</span> — keep your bankroll &amp; spin again on the house.</li>
+          <li><span class="text-warning">Try Again</span> — entry fee returns, momentum keeps rolling.</li>
+          <li><span class="text-danger">Lose Spin</span> — the house banks the fee.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="p-3 rounded-3 bg-dark bg-opacity-25 border border-light border-opacity-10">
+        <h4 class="h6 text-uppercase text-warning">House Controls</h4>
+        <ul class="small mb-0 lh-lg">
+          <li>Flip the <strong>entry fee</strong> or lock the table during maintenance.</li>
+          <li>Rebalance <strong>slice odds</strong> and payouts to match the current pool.</li>
+          <li>Top-up or drain the <strong>IGP pool</strong> to keep the rewards sustainable.</li>
+          <li>Track live analytics for spins, RTP, and leaderboard deltas.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

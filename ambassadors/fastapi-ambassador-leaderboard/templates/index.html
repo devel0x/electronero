@@ -178,6 +178,7 @@
       <span class="badge text-bg-success">Pool <span id="pool-balance">{{ '%.8f'|format(pool_balance) }}</span></span>
       <span class="badge text-bg-info">TTL {{ ttl }}s</span>
       <a href="/wallet" class="badge text-bg-warning text-dark">Wallet {{ wallet if wallet else '—' }}</a>
+      <a href="/gamefi" class="btn btn-sm btn-warning text-dark">GameFi</a>
       <a href="/staking" class="btn btn-sm btn-outline-light">Staking</a>
       <a href="/transfers" class="btn btn-sm btn-outline-light">Transfers</a>
       <a href="/p2p" class="btn btn-sm btn-outline-light">P2P Shop</a>
@@ -230,7 +231,17 @@
       </div>
     </div>
   </section>
-  <div class="glass-card p-3">
+  <section class="glass-card p-4 mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+      <div>
+        <h2 class="h4 mb-1">GameFi Arcade</h2>
+        <p class="mb-0 text-muted small">Spin the IGP Wheel of Fortune, preview upcoming casino modes, and track your score pad from the dedicated GameFi hub.</p>
+      </div>
+      <a href="/gamefi" class="btn btn-warning text-dark">Enter GameFi</a>
+    </div>
+  </section>
+
+<div class="glass-card p-3">
     <h1 class="h3 mb-3">{{ project_name }}</h1>
     <div class="d-flex flex-wrap gap-2 mb-3">
       <input id="search" type="text" class="form-control flex-grow-1" placeholder="Search...">
@@ -460,6 +471,7 @@ async function refreshData(force=false){
 }
 document.getElementById('refresh-btn').addEventListener('click', () => refreshData(true));
 setInterval(() => refreshData(true), autoRefresh);
+
 
 /* ===== GSAP bloom + motion ===== */
 (() => {
