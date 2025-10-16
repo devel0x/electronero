@@ -125,12 +125,17 @@ PENDING_VERIFICATION_MIGRATION_SENTINEL = (
     MIGRATIONS_DIR / "pending_all_v1.complete"
 )
 
+# Legacy in-memory cache kept for reference. Redis is the primary cache, but
+# retain the structure for forward compatibility when new metrics are added.
 cache: Dict[str, Any] = {
     "columns": [],
     "rows": [],
     "cached_at": None,
     "source": "",
     "pool_balance": 0.0,
+    "total_points": 0.0,
+    "igp_to_itc": 0.0,
+    "itc_to_igp": 0.0,
 }
 
 ACTIVITY_ZSET_PREFIX = "activity:posts:"
@@ -381,6 +386,8 @@ async def _load_csv() -> Dict[str, Any]:
 
     pool_balance = round(_get_pool_balance(), 8)
     total_points = float(df.loc[non_guardian_mask, "points"].sum())
+    igp_to_itc = pool_balance / total_points if total_points else 0.0
+    itc_to_igp = total_points / pool_balance if pool_balance else 0.0
     df["pending_reward"] = 0.0
     if total_points > 0:
         df.loc[non_guardian_mask, "pending_reward"] = (
@@ -411,6 +418,9 @@ async def _load_csv() -> Dict[str, Any]:
         "cached_at": datetime.utcnow().isoformat(),
         "source": source,
         "pool_balance": pool_balance,
+        "total_points": round(total_points, 8),
+        "igp_to_itc": round(igp_to_itc, 8),
+        "itc_to_igp": round(itc_to_igp, 8),
     }
     await redis_client.set(CACHE_KEY, json.dumps(data), ex=CACHE_TTL_SECONDS)
     return data
@@ -641,6 +651,8 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
         data = await _load_csv()
     else:
         data = json.loads(raw)
+        if any(k not in data for k in ("total_points", "igp_to_itc", "itc_to_igp")):
+            data = await _load_csv()
     return data
 
 
@@ -3277,6 +3289,9 @@ async def index(request: Request) -> Any:
             "project_name": "Interchained × Elara – Ambassadors",
             "pool_balance": data["pool_balance"],
             "wallet": wallet,
+            "total_points": data["total_points"],
+            "igp_to_itc": data["igp_to_itc"],
+            "itc_to_igp": data["itc_to_igp"],
         },
     )
 
@@ -3305,6 +3320,9 @@ async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSO
             "cached_at": data["cached_at"],
             "ttl": CACHE_TTL_SECONDS,
             "pool_balance": data["pool_balance"],
+            "total_points": data["total_points"],
+            "igp_to_itc": data["igp_to_itc"],
+            "itc_to_igp": data["itc_to_igp"],
         }
     )
 
