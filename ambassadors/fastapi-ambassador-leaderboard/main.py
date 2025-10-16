@@ -36,6 +36,8 @@ CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 EXPLORER_API = "https://explorer.interchained.org/api/address"
+POOL_BALANCE_CACHE_KEY = "ambassador:pool_balance"
+POOL_BALANCE_CACHE_TTL = 120  # 2 minutes
 
 # Task definitions for the checklist panel
 TASK_LIST = [
@@ -588,36 +590,53 @@ def _daemon_ready() -> bool:
 #         print(f"[pool_balance] getreceivedbyaddress error: {e}")
 #     return 250.0
 
-def _get_pool_balance() -> float:
+async def _get_pool_balance() -> float:
     addr = AMBASSADOR_POOL_ADDRESS
     if not addr:
-        return 250.0
+        return 500.0
 
+    # ✅ 1. Try to read cached value first
     try:
-        # Call explorer API
-        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=10)
+        cached = await redis_client.get(POOL_BALANCE_CACHE_KEY)
+        if cached is not None:
+            return float(cached)
+    except Exception as e:
+        print(f"[pool_balance] Redis cache read failed: {e}")
+
+    # ✅ 2. Fallback to API if cache is empty/expired
+    try:
+        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=30)
         r.raise_for_status()
         data = r.json()
 
-        # Parse balance from balanceSat (in satoshis)
+        # Safely parse the balance from API
         balance_sat = data.get("txHistory", {}).get("balanceSat", 0)
-        base_amount = balance_sat / 1e8  # convert to ITC
+        base_amount = balance_sat / 1e8  # satoshis → ITC
 
-        # Apply ops deduction and reserve logic
-        ops_amount = base_amount * 0.90        # 90% allocation logic
-        operations_reserve = 6030              # fixed reserve
+        # Apply ops + reserve math
+        ops_amount = base_amount * 0.90
+        operations_reserve = 6030
         true_amount = base_amount - ops_amount - operations_reserve
 
-        # Return half the remaining amount as pool distribution
-        return max(true_amount / 2, 0.0)
+        result = max(true_amount / 2, 0.0)
 
+        # ✅ 3. Cache the result in Redis for 2 minutes
+        try:
+            await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
+        except Exception as e:
+            print(f"[pool_balance] Redis cache write failed: {e}")
+
+        return result
+
+    except requests.Timeout:
+        print("[pool_balance] Explorer API timeout (30s)")
     except requests.RequestException as e:
         print(f"[pool_balance] Explorer API error: {e}")
     except Exception as e:
         print(f"[pool_balance] Unexpected error: {e}")
 
-    # fallback default
-    return 250.0
+    # ✅ 4. Last-resort fallback
+    return 500.0
 
 
 async def _load_csv() -> Dict[str, Any]:
