@@ -1,0 +1,62 @@
+<div class="table-responsive">
+  <table class="table table-dark table-striped align-middle mb-0">
+    <thead class="table-light text-dark">
+      <tr>
+        <th scope="col" style="width:2.5rem;">
+          <input class="form-check-input" type="checkbox" id="referral-select-all">
+        </th>
+        <th scope="col">Email &amp; Wallet</th>
+        <th scope="col">Contact</th>
+        <th scope="col">Referrer</th>
+        <th scope="col">Joined</th>
+        <th scope="col">Status</th>
+        <th scope="col" class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in pending_list %}
+      <tr>
+        <td>
+          <input class="form-check-input referral-select" type="checkbox" name="emails" value="{{ item.email }}" form="referral-bulk-form">
+        </td>
+        <td>
+          <div class="fw-semibold">{{ item.email }}</div>
+          <div class="small text-muted">{{ item.wallet or 'No wallet submitted' }}</div>
+        </td>
+        <td>
+          {% if item.telegram %}
+            {% set handle = item.telegram.lstrip('@') %}
+            <div><a href="https://t.me/{{ handle }}" target="_blank">{{ item.telegram }}</a></div>
+          {% else %}
+            <div class="text-muted">Telegram: —</div>
+          {% endif %}
+          {% if item.twitter %}
+            <div class="small text-muted">X: {{ item.twitter }}</div>
+          {% endif %}
+          {% if item.discord %}
+            <div class="small text-muted">Discord: {{ item.discord }}</div>
+          {% endif %}
+          <div class="small {{ 'text-success' if item.email_opt_in else 'text-muted' }}">
+            {% if item.email_opt_in %}Email opt-in{% else %}No email opt-in{% endif %}
+          </div>
+        </td>
+        <td>{{ item.referred_by_label or '—' }}</td>
+        <td>{{ item.joined_at_display or '—' }}</td>
+        <td>
+          <span class="badge bg-warning text-dark">Pending</span>
+        </td>
+        <td class="text-end">
+          <form method="post" action="/admin/referrals/approve" class="d-inline">
+            <input type="hidden" name="email" value="{{ item.email }}">
+            <button type="submit" class="btn btn-sm btn-success">Approve</button>
+          </form>
+          <form method="post" action="/admin/referrals/reject" class="d-inline ms-2">
+            <input type="hidden" name="email" value="{{ item.email }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
