@@ -74,6 +74,7 @@
     </span>
     <div class="d-flex flex-wrap gap-2">
       <a href="/" class="btn btn-sm btn-outline-light">Leaderboard</a>
+      <a href="/staking" class="btn btn-sm btn-outline-light">Staking</a>
       <a href="/transfers" class="btn btn-sm btn-light text-dark">Transfers</a>
       <a href="/referrals" class="btn btn-sm btn-outline-light">Referrals</a>
       <a href="/wallet" class="btn btn-sm btn-outline-light">Wallet</a>
@@ -91,12 +92,16 @@
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-3 gap-3">
       <div>
         <h1 class="h4 mb-1">Ambassador Transfers</h1>
-        <p class="mb-0 text-light small">Move a portion of your earned points to another ambassador. Transfers instantly adjust scorepads and are recorded for transparency.</p>
+        <p class="mb-0 text-light small">Move a portion of your earned points to another ambassador. Transfers instantly adjust scorepads and are recorded for transparency. Staked balances remain reserved and cannot be transferred.</p>
       </div>
-      <div class="d-flex gap-3">
+      <div class="d-flex flex-wrap gap-3">
         <div class="stat-card text-center">
           <h2>Available Points</h2>
           <div class="value">{{ '%.2f'|format(available_points or 0) }}</div>
+        </div>
+        <div class="stat-card text-center">
+          <h2>Staked</h2>
+          <div class="value text-info">{{ '%.2f'|format(staked_amount or 0) }}</div>
         </div>
         <div class="stat-card text-center">
           <h2>Total Sent</h2>
