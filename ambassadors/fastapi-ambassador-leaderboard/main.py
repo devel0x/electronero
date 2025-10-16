@@ -115,12 +115,17 @@ def _load_registrations() -> set[str]:
 
 REGISTERED_EMAILS = _load_registrations()
 
+# Legacy in-memory cache kept for reference. Redis is the primary cache, but
+# retain the structure for forward compatibility when new metrics are added.
 cache: Dict[str, Any] = {
     "columns": [],
     "rows": [],
     "cached_at": None,
     "source": "",
     "pool_balance": 0.0,
+    "total_points": 0.0,
+    "igp_to_itc": 0.0,
+    "itc_to_igp": 0.0,
 }
 
 ACTIVITY_ZSET_PREFIX = "activity:posts:"
@@ -371,6 +376,8 @@ async def _load_csv() -> Dict[str, Any]:
 
     pool_balance = round(_get_pool_balance(), 8)
     total_points = float(df.loc[non_guardian_mask, "points"].sum())
+    igp_to_itc = pool_balance / total_points if total_points else 0.0
+    itc_to_igp = total_points / pool_balance if pool_balance else 0.0
     df["pending_reward"] = 0.0
     if total_points > 0:
         df.loc[non_guardian_mask, "pending_reward"] = (
@@ -401,6 +408,9 @@ async def _load_csv() -> Dict[str, Any]:
         "cached_at": datetime.utcnow().isoformat(),
         "source": source,
         "pool_balance": pool_balance,
+        "total_points": round(total_points, 8),
+        "igp_to_itc": round(igp_to_itc, 8),
+        "itc_to_igp": round(itc_to_igp, 8),
     }
     await redis_client.set(CACHE_KEY, json.dumps(data), ex=CACHE_TTL_SECONDS)
     return data
@@ -631,6 +641,8 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
         data = await _load_csv()
     else:
         data = json.loads(raw)
+        if any(k not in data for k in ("total_points", "igp_to_itc", "itc_to_igp")):
+            data = await _load_csv()
     return data
 
 
@@ -2513,7 +2525,7 @@ async def index(request: Request) -> Any:
     wallet = user.get("wallet") if user else ""
     data = await _get_cached_data()
     guardians = await _guardian_emails()
-    columns = [c for c in data["columns"] if c != "email"]
+    columns = [c for c in data.get("columns", []) if c != "email"]
     filtered_rows = [
         row
         for row in data["rows"]
@@ -2526,12 +2538,15 @@ async def index(request: Request) -> Any:
             "request": request,
             "columns": columns,
             "rows": rows,
-            "source": data["source"],
+            "source": data.get("source", ""),
             "ttl": CACHE_TTL_SECONDS,
-            "last_updated": data["cached_at"],
+            "last_updated": data.get("cached_at"),
             "project_name": "Interchained × Elara – Ambassadors",
-            "pool_balance": data["pool_balance"],
+            "pool_balance": data.get("pool_balance", 0.0),
             "wallet": wallet,
+            "total_points": data.get("total_points", 0.0),
+            "igp_to_itc": data.get("igp_to_itc", 0.0),
+            "itc_to_igp": data.get("itc_to_igp", 0.0),
         },
     )
 
@@ -2554,12 +2569,15 @@ async def api_leaderboard(request: Request, refresh: bool = Query(False)) -> JSO
     return JSONResponse(
         {
             "ok": True,
-            "columns": data["columns"],
+            "columns": data.get("columns", []),
             "rows": filtered_rows,
-            "source": data["source"],
-            "cached_at": data["cached_at"],
+            "source": data.get("source", ""),
+            "cached_at": data.get("cached_at"),
             "ttl": CACHE_TTL_SECONDS,
-            "pool_balance": data["pool_balance"],
+            "pool_balance": data.get("pool_balance", 0.0),
+            "total_points": data.get("total_points", 0.0),
+            "igp_to_itc": data.get("igp_to_itc", 0.0),
+            "itc_to_igp": data.get("itc_to_igp", 0.0),
         }
     )
 
