@@ -121,10 +121,10 @@ REGISTERED_EMAILS = _load_registrations()
 REFERRAL_CODE_KEY_PREFIX = "referral:code:"
 REFERRALS_HASH_PREFIX = "referrals:"
 REFERRAL_CODE_LENGTH = 8
-PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v1"
+PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v2"
 MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
 PENDING_VERIFICATION_MIGRATION_SENTINEL = (
-    MIGRATIONS_DIR / "pending_all_v1.complete"
+    MIGRATIONS_DIR / "pending_all_v2.complete"
 )
 
 # Legacy in-memory cache kept for reference. Redis is the primary cache, but
