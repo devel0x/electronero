@@ -336,19 +336,18 @@ async def _stake_balances(
     if profile_data is None:
         profile_data = await _ambassador_entry_by_email(email_norm)
     pad_balance = await _scorepad_balance(email_norm)
-    net_points = 0.0
+    total_points = 0.0
     if profile_data and profile_data.get("guardian"):
-        net_points = max(pad_balance, 0.0)
+        total_points = max(pad_balance, 0.0)
     elif profile_data:
         try:
-            net_points = float(profile_data.get("points", 0.0) or 0.0)
+            total_points = float(profile_data.get("points", 0.0) or 0.0)
         except Exception:
-            net_points = 0.0
+            total_points = 0.0
     else:
-        net_points = max(pad_balance, 0.0)
+        total_points = max(pad_balance, 0.0)
     staked = await _staked_amount(email_norm)
-    total_points = max(net_points + staked, 0.0)
-    available = max(net_points, 0.0)
+    available = max(total_points - staked, 0.0)
     return {
         "total": total_points,
         "available": available,
@@ -400,9 +399,16 @@ async def _create_stake(
     pipe.hset(_stake_key(email_norm), mapping=mapping)
     pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
     if amount:
-        pipe.hincrbyfloat("score_pad", email_norm, -amount)
+    # Deduct from leaderboard score pad (current branch logic)
+    pipe.hincrbyfloat("score_pad", email_norm, -amount)
+    
+    # Update reserved stake (incoming #548 logic)
     pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
+    
+    # Execute all Redis operations in a single pipeline
     await pipe.execute()
+    
+    # Refresh CSV cache / leaderboard (current branch)
     try:
         await _load_csv()
     except Exception as exc:
