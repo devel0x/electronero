@@ -102,6 +102,50 @@ def _sanitize_obj(o: Any):
         return [_sanitize_obj(v) for v in o]
     return o
 
+
+def _wants_json(request: Request) -> bool:
+    accept = request.headers.get("accept", "").lower()
+    if "application/json" in accept:
+        return True
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return True
+    return False
+
+
+def _json_success(
+    request: Request, payload: dict[str, Any] | None = None, *, status_code: int = 200
+):
+    if payload is None:
+        payload = {}
+    body = {"ok": True}
+    body.update(payload)
+    return JSONResponse(_sanitize_obj(body), status_code=status_code)
+
+
+def _json_error(
+    request: Request,
+    message: str,
+    *,
+    status_code: int = 400,
+    extra: dict[str, Any] | None = None,
+):
+    payload = {"ok": False, "error": message}
+    if extra:
+        payload.update(extra)
+    return JSONResponse(_sanitize_obj(payload), status_code=status_code)
+
+
+def _complete_response(
+    request: Request,
+    *,
+    success_payload: dict[str, Any] | None = None,
+    redirect: str = "/admin",
+    status_code: int = 303,
+):
+    if _wants_json(request):
+        return _json_success(request, success_payload)
+    return RedirectResponse(redirect, status_code=status_code)
+
 def _load_registrations() -> set[str]:
     try:
         df = pd.read_csv(REGISTRATIONS_CSV)
@@ -1801,10 +1845,10 @@ async def admin_panel(request: Request) -> Any:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
-    # Pagination params
-    page = int(request.query_params.get("page", 1))
-    limit = int(request.query_params.get("limit", 20))
+    return FileResponse(BASE_DIR / "static" / "admin" / "index.html")
 
+
+async def _admin_dashboard_snapshot(page: int = 1, limit: int = 20) -> dict[str, Any]:
     wallets = await _all_wallets()
     wallets_active = sorted(
         [w for w in wallets if w.get("active")], key=lambda w: w.get("email", "")
@@ -1819,38 +1863,50 @@ async def admin_panel(request: Request) -> Any:
     analytics = await _analytics_dashboard(page=page, limit=limit)
     maintenance_enabled = await _maintenance_enabled()
     transfers = await _all_transfer_history()
-    return templates.TemplateResponse(
-        "admin.html",
-        {
-            "request": request,
-            "wallets": wallets,
-            "wallets_active": wallets_active,
-            "wallets_inactive": wallets_inactive,
-            "posts": posts,
-            "tasks": tasks,
-            "recoveries": recoveries,
-            "task_labels": TASK_LABELS,
-            "proposals": proposals,
-            "analytics": analytics,
-            "maintenance_enabled": maintenance_enabled,
-            "transfers": transfers,
-            "verified_search_limit": VERIFIED_SEARCH_LIMIT,
-        },
-    )
+    return {
+        "wallets": wallets,
+        "wallets_active": wallets_active,
+        "wallets_inactive": wallets_inactive,
+        "posts": posts,
+        "tasks": tasks,
+        "recoveries": recoveries,
+        "task_labels": TASK_LABELS,
+        "proposals": proposals,
+        "analytics": analytics,
+        "maintenance_enabled": maintenance_enabled,
+        "transfers": transfers,
+        "verified_search_limit": VERIFIED_SEARCH_LIMIT,
+        "page": page,
+        "limit": limit,
+    }
+
+
+@app.get("/api/admin/dashboard")
+async def api_admin_dashboard(
+    request: Request, page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=200)
+) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    snapshot = await _admin_dashboard_snapshot(page=page, limit=limit)
+    return JSONResponse({"ok": True, "data": _sanitize_obj(snapshot)})
 
 
 @app.post("/admin/maintenance")
 async def admin_maintenance_toggle(
     request: Request, enabled: str = Form(...)
 ) -> RedirectResponse:
-    
+
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login", status_code=303)
 
     is_enabled = str(enabled).strip().lower() in {"1", "true", "yes", "on"}
     await _set_maintenance(is_enabled)
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(
+        request, success_payload={"maintenance_enabled": is_enabled}
+    )
     # Require Ghost key (same pattern as scorepad/posts/tasks forms)
     # if not ghost or ghost != os.getenv("ADMIN_GHOST_KEY"):
     #     raise HTTPException(status_code=403, detail="Invalid ghost key")
@@ -1861,9 +1917,13 @@ async def admin_recovery_reset(
     request: Request, email: str = Form(...), ghost: str = Form("")
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
     email_norm = email.strip().lower()
     key = f"recovery:{email_norm}"
@@ -1879,16 +1939,20 @@ async def admin_recovery_reset(
                 f"user:{email_norm}", mapping={"password": _hash_password(code)}
             )
             await redis_client.delete(key)
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/activity/reset")
 async def admin_activity_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     await redis_client.set(ACTIVITY_RESET_KEY, _monday_start(datetime.utcnow()).isoformat())
@@ -1905,33 +1969,41 @@ async def admin_activity_reset(request: Request, ghost: str = Form("")) -> Redir
     if pipe.command_stack:
         await pipe.execute()
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/transfers/reset")
 async def admin_transfers_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     await _zero_transfer_history()
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/transfers/delete")
 async def admin_transfers_delete(request: Request, ghost: str = Form("")) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     await _delete_transfer_history()
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.get("/api/admin/wallets")
@@ -2100,6 +2172,8 @@ async def admin_post_verify(
     verify_all: str | None = Form(None),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     def _clean_url(v) -> str:
@@ -2162,7 +2236,7 @@ async def admin_post_verify(
                 f"user:{eml}", mapping={"verified": 1, "activity": "active"}
             )
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/posts/reject")
@@ -2170,6 +2244,8 @@ async def admin_post_reject(
     request: Request, email: str = Form(...), url: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     email_key = email.strip().lower()
     url_clean = str(url).strip()
@@ -2177,7 +2253,7 @@ async def admin_post_reject(
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
     await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     await redis_client.zrem(f"{ACTIVITY_ZSET_PREFIX}{email_key}", url_clean)
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/posts/reject-selected")
@@ -2188,6 +2264,8 @@ async def admin_post_reject_selected(
     url: str | None = Form(None),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     items = list(selected)
@@ -2212,7 +2290,7 @@ async def admin_post_reject_selected(
     if pipe.command_stack:
         await pipe.execute()
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/proposals/verify")
@@ -2222,13 +2300,15 @@ async def admin_proposal_verify(
     funding_wallet: str = Form("")
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     mapping = {"status": "active"}
     fw = funding_wallet.strip()
     if fw:
         mapping["funding_wallet"] = fw
     await redis_client.hset(f"proposal:{proposal_id.strip()}", mapping=mapping)
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/proposals/reject")
@@ -2236,9 +2316,11 @@ async def admin_proposal_reject(
     request: Request, proposal_id: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     await redis_client.hset(f"proposal:{proposal_id.strip()}", "status", "rejected")
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/telegram/update")
@@ -2246,11 +2328,13 @@ async def admin_telegram_update(
     request: Request, email: str = Form(...), telegram: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     await redis_client.hset(
         f"user:{email}", "telegram", _normalize_telegram(telegram)
     )
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/email/update")
@@ -2260,11 +2344,15 @@ async def admin_email_update(
     new_email: str = Form(...),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     old_norm = str(current_email or "").strip().lower()
     new_norm = str(new_email or "").strip().lower()
     if not old_norm or not new_norm or old_norm == new_norm:
+        if _wants_json(request):
+            return _json_error(request, "invalid_request", status_code=400)
         return RedirectResponse("/admin", status_code=303)
 
     await _move_key(f"user:{old_norm}", f"user:{new_norm}")
@@ -2288,7 +2376,7 @@ async def admin_email_update(
     REGISTERED_EMAILS.discard(old_norm)
     REGISTERED_EMAILS.add(new_norm)
     
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
     
 
 @app.post("/admin/scorepad")
@@ -2296,6 +2384,8 @@ async def admin_scorepad(
     request: Request, email: str = Form(...), pad: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     email_key = email.strip().lower()
     try:
@@ -2305,7 +2395,7 @@ async def admin_scorepad(
     await redis_client.hset("score_pad", email_key, pad_val)
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/guardians/toggle")
@@ -2316,16 +2406,24 @@ async def admin_guardian_toggle(
     ghost: str = Form(""),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     email_norm = str(email or "").strip().lower()
     if not email_norm:
+        if _wants_json(request):
+            return _json_error(request, "invalid_request", status_code=400)
         return RedirectResponse("/admin", status_code=303)
     if email_norm not in REGISTERED_EMAILS:
+        if _wants_json(request):
+            return _json_error(request, "not_registered", status_code=400)
         return RedirectResponse("/admin", status_code=303)
 
     enable_flag = str(enable).strip().lower() in {"1", "true", "yes", "on"}
@@ -2336,7 +2434,9 @@ async def admin_guardian_toggle(
     except Exception as exc:
         print(f"[guardian] failed to refresh leaderboard cache: {exc}")
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(
+        request, success_payload={"guardian_enabled": enable_flag}
+    )
 
 
 @app.post("/admin/scorepad/boost")
@@ -2344,10 +2444,14 @@ async def admin_scorepad_boost(
     request: Request, ghost: str = Form("")
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     wallets = await _all_wallets()
@@ -2362,7 +2466,7 @@ async def admin_scorepad_boost(
         await pipe.execute()
         await _load_csv()
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/scorepad/slash")
@@ -2370,10 +2474,14 @@ async def admin_scorepad_slash(
     request: Request, ghost: str = Form("")
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
 
     wallets = await _all_wallets()
@@ -2388,7 +2496,7 @@ async def admin_scorepad_slash(
         await pipe.execute()
         await _load_csv()
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/scorepad/reset")
@@ -2399,9 +2507,13 @@ async def admin_scorepad_reset(
     ghost: str = Form(""),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
+        if _wants_json(request):
+            return _json_error(request, "forbidden", status_code=403)
         return RedirectResponse("/admin", status_code=303)
     if reset_all:
         await redis_client.delete("score_pad")
@@ -2413,7 +2525,7 @@ async def admin_scorepad_reset(
             await pipe.execute()
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/tasks/bulk")
@@ -2423,6 +2535,8 @@ async def admin_task_bulk(
     selected: list[str] = Form([]),
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
 
     action_name = (action or "").strip().lower()
@@ -2472,7 +2586,7 @@ async def admin_task_bulk(
                 for email_key in touched:
                     await redis_client.hset(f"user:{email_key}", "verified", 1)
 
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/tasks/verify")
@@ -2480,10 +2594,12 @@ async def admin_task_verify(
     request: Request, email: str = Form(...), task_id: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     await redis_client.hset(f"tasks:{email}", task_id, "verified")
     await redis_client.hset(f"user:{email}", "verified", 1)
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.post("/admin/tasks/destroy")
@@ -2491,9 +2607,11 @@ async def admin_task_destroy(
     request: Request, email: str = Form(...), task_id: str = Form(...)
 ) -> RedirectResponse:
     if not await _current_admin(request):
+        if _wants_json(request):
+            return _json_error(request, "unauthorized", status_code=401)
         return RedirectResponse("/admin/login")
     await redis_client.hdel(f"tasks:{email}", task_id)
-    return RedirectResponse("/admin", status_code=303)
+    return _complete_response(request)
 
 
 @app.get("/api/admin/tasks")
