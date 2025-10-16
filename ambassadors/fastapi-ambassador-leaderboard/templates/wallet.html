@@ -9,6 +9,16 @@
 <body class="p-4">
   <div class="container" style="max-width:400px;">
     <h1 class="h4 mb-3 text-center">Edit Wallet</h1>
+    <div class="text-center mb-3">
+      <span class="badge {{ kyc_badge_class }}">KYC {{ kyc_status_label }}</span>
+    </div>
+    {% if kyc_status == 'rejected' %}
+    <div class="alert alert-warning py-2" role="alert">Your previous KYC submission was rejected. Please update your profile and resubmit your documents before requesting changes.</div>
+    {% elif kyc_status == 'pending' %}
+    <div class="alert alert-info py-2" role="alert">KYC verification is pending review. Wallet updates remain available.</div>
+    {% elif kyc_status == 'not_submitted' %}
+    <div class="alert alert-secondary py-2" role="alert">No KYC submission detected. Visit the dashboard to provide your identity details.</div>
+    {% endif %}
     {% if error %}
     <div class="alert alert-danger py-2" role="alert">{{ error }}</div>
     {% endif %}
