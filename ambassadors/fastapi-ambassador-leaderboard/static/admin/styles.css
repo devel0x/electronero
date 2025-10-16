@@ -1,0 +1,123 @@
+:root {
+  color-scheme: dark;
+}
+
+.admin-app-body {
+  background: radial-gradient(circle at top, rgba(37, 105, 194, 0.25), transparent 55%),
+    linear-gradient(135deg, #0f172a, #111827 55%, #0b1120);
+  color: #f8fafc;
+  min-height: 100vh;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.admin-app-body a {
+  color: inherit;
+}
+
+.admin-navbar {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+}
+
+.admin-card {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.6);
+}
+
+.section-title {
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.badge-ghost {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.table-dark td,
+.table-dark th {
+  vertical-align: middle;
+}
+
+.table-nowrap {
+  white-space: nowrap;
+}
+
+.wallet-card {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 0.75rem;
+}
+
+.wallet-card.active {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.wallet-card.inactive {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.wallet-card h5 {
+  font-weight: 600;
+}
+
+.scroll-shadow {
+  position: relative;
+  overflow: auto;
+}
+
+.scroll-shadow::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1.5rem;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.95), transparent);
+  pointer-events: none;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.status-pill {
+  border-radius: 9999px;
+  padding: 0.15rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.status-pill.active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #bbf7d0;
+}
+
+.status-pill.inactive {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.status-pill.guardian {
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+}
+
+.section-divider {
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  margin: 3rem 0;
+}
+
+@media (max-width: 768px) {
+  .section-actions {
+    flex-direction: column;
+  }
+}
