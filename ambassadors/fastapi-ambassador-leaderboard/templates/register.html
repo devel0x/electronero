@@ -96,13 +96,31 @@
               <input id="password" type="password" name="password" class="form-control" placeholder="Password" autocomplete="new-password" minlength="8" required />
             </div>
             <div class="mb-3">
-                <input type="text" name="telegram" class="form-control" placeholder="Telegram Username" required>
+              <label for="telegram" class="form-label small">Telegram Username</label>
+              <input id="telegram" type="text" name="telegram" class="form-control" placeholder="@username" value="{{ telegram or '' }}" required>
+            </div>
+            <div class="mb-3">
+              <label for="twitter" class="form-label small">Twitter / X Handle</label>
+              <input id="twitter" type="text" name="twitter" class="form-control" placeholder="@handle" value="{{ twitter or '' }}">
+            </div>
+            <div class="mb-3">
+              <label for="discord" class="form-label small">Discord</label>
+              <input id="discord" type="text" name="discord" class="form-control" placeholder="username" value="{{ discord or '' }}">
             </div>
             <div class="mb-3">
               <label for="wallet" class="form-label small">Wallet Address</label>
               <input id="wallet" type="text" name="wallet" class="form-control" placeholder="itc1q..." value="{{ wallet or '' }}"
                      pattern="^itc1[ac-hj-np-z02-9]{11,87}$" title="Enter a valid ITC bech32 address (starts with itc1)" required />
               <div class="form-text text-secondary">Paste your ITC (bech32) address — starts with <code>itc1</code>.</div>
+            </div>
+            <div class="mb-3">
+              <label for="referral_code" class="form-label small">Referral Code (optional)</label>
+              <input id="referral_code" type="text" name="referral_code" class="form-control" placeholder="Enter referral code" value="{{ referral or '' }}">
+              <div class="form-text text-secondary">If someone invited you, paste their code or follow their referral link.</div>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" value="1" id="email_opt_in" name="email_opt_in" {% if email_opt_in %}checked{% endif %}>
+              <label class="form-check-label small" for="email_opt_in">I agree to receive ambassador program updates by email.</label>
             </div>
 
             <button type="submit" class="btn btn-primary w-100">Register</button>
