@@ -9,6 +9,7 @@ import hashlib
 import subprocess
 import csv
 import io
+import string
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -114,6 +115,15 @@ def _load_registrations() -> set[str]:
 
 
 REGISTERED_EMAILS = _load_registrations()
+
+REFERRAL_CODE_KEY_PREFIX = "referral:code:"
+REFERRALS_HASH_PREFIX = "referrals:"
+REFERRAL_CODE_LENGTH = 8
+PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v1"
+MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
+PENDING_VERIFICATION_MIGRATION_SENTINEL = (
+    MIGRATIONS_DIR / "pending_all_v1.complete"
+)
 
 cache: Dict[str, Any] = {
     "columns": [],
@@ -1060,6 +1070,12 @@ async def _all_wallets() -> list[dict[str, Any]]:
         else:
             await redis_client.hdel(f"user:{email}", GUARDIAN_USER_FIELD)
 
+        referrals = await _referral_entries(email)
+        referral_count = sum(1 for entry in referrals if entry.get("status") != "rejected")
+        await redis_client.hset(
+            f"user:{email}", mapping={"referral_count": referral_count}
+        )
+
         wallets.append(
             {
                 "email": email,
@@ -1074,6 +1090,8 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "active": is_active,
                 "activity": activity_label,
                 "guardian": is_guardian,
+                "referral_count": referral_count,
+                "referrals": referrals,
             }
         )
 
@@ -1231,6 +1249,11 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
+@app.on_event("startup")
+async def _bootstrap_pending_review() -> None:
+    await _ensure_existing_ambassadors_pending()
+
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -1256,12 +1279,460 @@ async def analytics_middleware(request: Request, call_next):
     return response
 
 
-def _normalize_telegram(handle: str) -> str:
-    h = handle.strip()
+def _normalize_handle(handle: str, *, lower: bool = True) -> str:
+    h = str(handle or "").strip()
     if not h:
         return ""
-    h = h.lstrip("@").lower()
-    return f"@{h}"
+    h = h.lstrip("@")
+    if lower:
+        h = h.lower()
+    return f"@{h}" if h else ""
+
+
+def _normalize_telegram(handle: str) -> str:
+    return _normalize_handle(handle, lower=True)
+
+
+def _generate_referral_code_value() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(REFERRAL_CODE_LENGTH))
+
+
+async def _lookup_referrer(code: str) -> str | None:
+    code_norm = str(code or "").strip().upper()
+    if not code_norm:
+        return None
+    owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{code_norm}")
+    if owner:
+        return str(owner).strip().lower()
+    return None
+
+
+async def _ensure_referral_code(email: str) -> str:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return ""
+    key = f"user:{email_norm}"
+    data = await redis_client.hgetall(key)
+    existing = str(data.get("referral_code", "")).strip().upper()
+    if existing:
+        owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{existing}")
+        if owner and str(owner).strip().lower() == email_norm:
+            if existing != data.get("referral_code", ""):
+                await redis_client.hset(key, mapping={"referral_code": existing})
+            return existing
+        if not owner:
+            pipe = redis_client.pipeline()
+            pipe.set(f"{REFERRAL_CODE_KEY_PREFIX}{existing}", email_norm)
+            pipe.hset(key, mapping={"referral_code": existing})
+            await pipe.execute()
+            return existing
+    # generate fresh code
+    while True:
+        code = _generate_referral_code_value()
+        owner = await redis_client.get(f"{REFERRAL_CODE_KEY_PREFIX}{code}")
+        if not owner:
+            break
+    pipe = redis_client.pipeline()
+    pipe.hset(key, mapping={"referral_code": code})
+    pipe.set(f"{REFERRAL_CODE_KEY_PREFIX}{code}", email_norm)
+    await pipe.execute()
+    return code
+
+
+async def _record_referral(referrer_email: str, referred_email: str, telegram: str, joined_at: str) -> None:
+    referrer_norm = str(referrer_email or "").strip().lower()
+    referred_norm = str(referred_email or "").strip().lower()
+    if not referrer_norm or not referred_norm:
+        return
+    payload = {
+        "email": referred_norm,
+        "telegram": str(telegram or ""),
+        "joined_at": joined_at,
+        "status": "pending",
+    }
+    key = f"{REFERRALS_HASH_PREFIX}{referrer_norm}"
+    await redis_client.hset(key, referred_norm, json.dumps(payload))
+    entries = await _referral_entries(referrer_norm)
+    count = sum(1 for entry in entries if entry.get("status") != "rejected")
+    await redis_client.hset(
+        f"user:{referrer_norm}", mapping={"referral_count": count}
+    )
+
+
+async def _referral_entries(email: str) -> list[dict[str, str]]:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return []
+    raw_entries = await redis_client.hgetall(f"{REFERRALS_HASH_PREFIX}{email_norm}")
+    entries: list[dict[str, str]] = []
+    for raw_email, raw_payload in raw_entries.items():
+        try:
+            data = json.loads(raw_payload)
+        except Exception:
+            data = {}
+        joined_at = str(data.get("joined_at", ""))
+        status = str(data.get("status", "pending")) or "pending"
+        entries.append(
+            {
+                "email": str(data.get("email", raw_email)),
+                "telegram": str(data.get("telegram", "")),
+                "joined_at": joined_at,
+                "joined_at_display": _format_timestamp(joined_at),
+                "status": status,
+                "approved_at": str(data.get("approved_at", "")),
+                "rejected_at": str(data.get("rejected_at", "")),
+            }
+        )
+    entries.sort(key=lambda item: item.get("joined_at", ""), reverse=True)
+    return entries
+
+
+async def _set_referral_status(
+    referrer_email: str, referred_email: str, status: str
+) -> None:
+    referrer_norm = str(referrer_email or "").strip().lower()
+    referred_norm = str(referred_email or "").strip().lower()
+    if not referrer_norm or not referred_norm:
+        return
+
+    key = f"{REFERRALS_HASH_PREFIX}{referrer_norm}"
+    raw_payload = await redis_client.hget(key, referred_norm)
+    try:
+        payload = json.loads(raw_payload) if raw_payload else {}
+    except Exception:
+        payload = {}
+
+    payload.update({
+        "email": referred_norm,
+        "status": status,
+    })
+    timestamp = datetime.utcnow().isoformat()
+    if status == "approved":
+        payload["approved_at"] = timestamp
+    elif status == "rejected":
+        payload["rejected_at"] = timestamp
+
+    await redis_client.hset(key, referred_norm, json.dumps(payload))
+    entries = await _referral_entries(referrer_norm)
+    count = sum(1 for entry in entries if entry.get("status") != "rejected")
+    await redis_client.hset(
+        f"user:{referrer_norm}", mapping={"referral_count": count}
+    )
+
+
+async def _remove_referral_entry(referrer_email: str, referred_email: str) -> None:
+    referrer_norm = str(referrer_email or "").strip().lower()
+    referred_norm = str(referred_email or "").strip().lower()
+    if not referrer_norm or not referred_norm:
+        return
+    key = f"{REFERRALS_HASH_PREFIX}{referrer_norm}"
+    await redis_client.hdel(key, referred_norm)
+    entries = await _referral_entries(referrer_norm)
+    count = sum(1 for entry in entries if entry.get("status") != "rejected")
+    await redis_client.hset(
+        f"user:{referrer_norm}", mapping={"referral_count": count}
+    )
+
+
+def _register_email_record(email: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+
+    REGISTERED_EMAILS.add(email_norm)
+
+    path = Path(REGISTRATIONS_CSV)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: set[str] = set()
+    exists = path.exists()
+    if exists:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                value = line.strip().lower()
+                if value:
+                    existing.add(value)
+
+    if email_norm in existing:
+        return
+
+    header_needed = not exists
+    if exists and not header_needed:
+        header_needed = path.stat().st_size == 0
+    mode = "a" if exists else "w"
+    with path.open(mode, encoding="utf-8") as fh:
+        if header_needed:
+            fh.write("ambassadors\n")
+        fh.write(f"{email_norm}\n")
+
+
+def _unregister_email_record(email: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+
+    REGISTERED_EMAILS.discard(email_norm)
+
+    path = Path(REGISTRATIONS_CSV)
+    if not path.exists():
+        return
+
+    with path.open("r", encoding="utf-8") as fh:
+        rows = [line.rstrip("\n") for line in fh]
+
+    if not rows:
+        return
+
+    header = rows[0] or "ambassadors"
+    remaining = [row for row in rows[1:] if row.strip().lower() != email_norm]
+
+    if len(remaining) == len(rows) - 1:
+        with path.open("w", encoding="utf-8") as fh:
+            fh.write(f"{header}\n")
+            for row in remaining:
+                value = row.strip()
+                if value:
+                    fh.write(f"{value}\n")
+
+
+async def _ensure_existing_ambassadors_pending() -> None:
+    """Mark all existing ambassadors as pending for a one-time review sweep."""
+
+    if await redis_client.get(PENDING_VERIFICATION_MIGRATION_KEY):
+        if not PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
+            try:
+                MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
+                PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(
+                    "redis", encoding="utf-8"
+                )
+            except Exception:
+                pass
+        return
+
+    if PENDING_VERIFICATION_MIGRATION_SENTINEL.exists():
+        await redis_client.set(
+            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat(), nx=True
+        )
+        return
+
+    try:
+        async for key in redis_client.scan_iter("user:*"):
+            await redis_client.hset(key, mapping={"verified": 0})
+            await redis_client.hdel(key, "verified_at")
+
+        async for key in redis_client.scan_iter(f"{REFERRALS_HASH_PREFIX}*"):
+            referrer = key.split(":", 1)[1].strip().lower()
+            raw_map = await redis_client.hgetall(key)
+            updates: dict[str, str] = {}
+            for referred_email, raw in raw_map.items():
+                try:
+                    payload = json.loads(raw)
+                except Exception:
+                    continue
+                status = str(payload.get("status", "")).strip().lower()
+                if status != "pending":
+                    payload["status"] = "pending"
+                    payload.pop("approved_at", None)
+                    payload.pop("rejected_at", None)
+                    updates[referred_email] = json.dumps(payload)
+            if updates:
+                await redis_client.hset(key, mapping=updates)
+            if referrer:
+                entries = await _referral_entries(referrer)
+                count = sum(1 for entry in entries if entry.get("status") != "rejected")
+                await redis_client.hset(
+                    f"user:{referrer}", mapping={"referral_count": count}
+                )
+
+        await redis_client.set(
+            PENDING_VERIFICATION_MIGRATION_KEY, datetime.utcnow().isoformat()
+        )
+        try:
+            MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
+            PENDING_VERIFICATION_MIGRATION_SENTINEL.write_text(
+                datetime.utcnow().isoformat(), encoding="utf-8"
+            )
+        except Exception:
+            print("[migration] failed to persist sentinel flag to disk")
+    except Exception as exc:
+        print(
+            f"[migration] failed to queue existing ambassadors for review: {exc}"
+        )
+
+
+async def _pending_referrals() -> list[dict[str, Any]]:
+    pending: list[dict[str, Any]] = []
+    async for key in redis_client.scan_iter("user:*"):
+        email = key.split(":", 1)[1].strip().lower()
+        data = await redis_client.hgetall(key)
+        if not data:
+            continue
+        if str(data.get("verified", "0")) == "1":
+            continue
+
+        referred_by = str(data.get("referred_by", "")).strip().lower()
+        created_at = str(data.get("created_at", ""))
+        joined_at = str(data.get("referred_at", "")) or created_at
+        status = "pending"
+        referral_payload: dict[str, Any] | None = None
+
+        if referred_by:
+            raw = await redis_client.hget(
+                f"{REFERRALS_HASH_PREFIX}{referred_by}", email
+            )
+            if raw:
+                try:
+                    referral_payload = json.loads(raw)
+                except Exception:
+                    referral_payload = None
+
+        if referral_payload:
+            joined_at = str(referral_payload.get("joined_at", joined_at)) or joined_at
+            status = str(referral_payload.get("status", status)) or status
+
+        ref_label = referred_by
+        if referred_by:
+            ref_profile = await redis_client.hgetall(f"user:{referred_by}")
+            tg = str(ref_profile.get("telegram", ""))
+            if tg:
+                ref_label = tg
+
+        pending.append(
+            {
+                "email": email,
+                "telegram": str(data.get("telegram", "")),
+                "wallet": str(data.get("wallet", "")),
+                "twitter": str(data.get("twitter", "")),
+                "discord": str(data.get("discord", "")),
+                "referred_by": referred_by,
+                "referred_by_label": ref_label,
+                "status": status or "pending",
+                "created_at": created_at,
+                "joined_at": joined_at,
+                "joined_at_display": _format_timestamp(joined_at),
+                "email_opt_in": str(data.get("email_opt_in", "0")) in {"1", "true", "yes"},
+            }
+        )
+
+    pending.sort(key=lambda item: item.get("joined_at", ""), reverse=True)
+    return pending
+
+
+def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+    tele_norm = _normalize_telegram(telegram)
+    username = tele_norm.lstrip("@") if tele_norm else ""
+    path = Path(CSV_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict[str, str]] = []
+    fieldnames = [
+        "name",
+        "telegram",
+        "points",
+        "tier",
+        "posts",
+        "engagements",
+        "referrals",
+        "email",
+    ]
+
+    if path.exists():
+        with path.open("r", newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames:
+                fieldnames = reader.fieldnames
+            for row in reader:
+                rows.append(dict(row))
+
+    found = False
+    for row in rows:
+        row_email = str(row.get("email", "")).strip().lower()
+        if row_email == email_norm:
+            if tele_norm:
+                row["telegram"] = tele_norm
+            if username:
+                row["name"] = username
+            if "tier" in row and not str(row.get("tier", "")).strip():
+                row["tier"] = "Ambassador"
+            for key in ("points", "posts", "engagements", "referrals"):
+                if key in row and not str(row.get(key, "")).strip():
+                    row[key] = "0"
+            found = True
+            break
+
+    if not found:
+        new_row = {key: "" for key in fieldnames}
+        new_row.update(
+            {
+                "name": username or (email_norm.split("@")[0] if "@" in email_norm else email_norm),
+                "telegram": tele_norm,
+                "points": "0",
+                "tier": "Ambassador",
+                "posts": "0",
+                "engagements": "0",
+                "referrals": "0",
+                "email": email_norm,
+            }
+        )
+        rows.append(new_row)
+
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
+def _remove_leaderboard_entry(email: str) -> bool:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return False
+
+    path = Path(CSV_PATH)
+    if not path.exists():
+        return False
+
+    removed = False
+    rows: list[dict[str, str]] = []
+    fieldnames: list[str] = []
+
+    with path.open("r", newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = list(reader.fieldnames or [])
+        for row in reader:
+            row_email = str(row.get("email", "")).strip().lower()
+            if row_email == email_norm:
+                removed = True
+                continue
+            rows.append(dict(row))
+
+    if not removed:
+        return False
+
+    if not fieldnames:
+        fieldnames = [
+            "name",
+            "telegram",
+            "points",
+            "tier",
+            "posts",
+            "engagements",
+            "referrals",
+            "email",
+        ]
+
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+    return True
+
 
 # serve /favicon.ico at the root
 @app.get("/favicon.ico", include_in_schema=False)
@@ -1280,15 +1751,26 @@ async def login(
     request: Request, email: str = Form(...), password: str = Form(...)
 ) -> Any:
     email_norm = email.strip().lower()
-    if email_norm not in REGISTERED_EMAILS:
+    stored = await redis_client.hgetall(f"user:{email_norm}")
+    if not stored and email_norm not in REGISTERED_EMAILS:
         return templates.TemplateResponse(
             "login.html", {"request": request, "error": "Email not registered", "msg": ""}
         )
-    stored = await redis_client.hgetall(f"user:{email_norm}")
     if not stored or stored.get("password") != _hash_password(password):
         return templates.TemplateResponse(
             "login.html", {"request": request, "error": "Invalid credentials", "msg": ""}
         )
+    if str(stored.get("verified", "0")) != "1":
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": "Your registration is pending admin approval.",
+                "msg": "",
+            },
+        )
+    if email_norm not in REGISTERED_EMAILS:
+        _register_email_record(email_norm)
     token = secrets.token_urlsafe(32)
     await redis_client.set(f"session:{token}", email_norm, ex=SESSION_TTL_SECONDS)
     response = RedirectResponse("/", status_code=303)
@@ -1342,8 +1824,20 @@ async def forgot_submit(request: Request, email: str = Form(...)) -> Any:
 
 @app.get("/register")
 async def register_form(request: Request) -> Any:
+    referral_code = request.query_params.get("ref", "").strip()
     return templates.TemplateResponse(
-        "register.html", {"request": request, "error": ""}
+        "register.html",
+        {
+            "request": request,
+            "error": "",
+            "email": request.query_params.get("email", ""),
+            "wallet": request.query_params.get("wallet", ""),
+            "telegram": request.query_params.get("telegram", ""),
+            "twitter": request.query_params.get("twitter", ""),
+            "discord": request.query_params.get("discord", ""),
+            "referral": referral_code,
+            "email_opt_in": False,
+        },
     )
 
 
@@ -1354,26 +1848,96 @@ async def register(
     password: str = Form(...),
     telegram: str = Form(...),
     wallet: str = Form(...),
+    twitter: str = Form(""),
+    discord: str = Form(""),
+    referral_code: str = Form(""),
+    email_opt_in: str = Form(""),
 ) -> Any:
     email_norm = email.strip().lower()
-    if email_norm not in REGISTERED_EMAILS:
+    telegram_norm = _normalize_telegram(telegram)
+    twitter_norm = _normalize_handle(twitter)
+    discord_clean = str(discord or "").strip()
+    opt_in = str(email_opt_in or "").strip().lower() in {"1", "true", "yes", "on"}
+    referral_input = str(referral_code or "").strip()
+
+    form_context = {
+        "request": request,
+        "error": "",
+        "email": email,
+        "wallet": wallet,
+        "telegram": telegram,
+        "twitter": twitter,
+        "discord": discord,
+        "referral": referral_input,
+        "email_opt_in": opt_in,
+    }
+    key = f"user:{email_norm}"
+    existing = await redis_client.hgetall(key)
+    has_created = "created_at" in existing
+    try:
+        existing_referral_count = int(existing.get("referral_count", 0))
+    except Exception:
+        existing_referral_count = 0
+
+    existing_referrer = str(existing.get("referred_by", "")).strip().lower()
+    referrer_email = existing_referrer
+    new_referral = None
+    if referral_input:
+        new_referral = await _lookup_referrer(referral_input)
+        if not new_referral:
+            return templates.TemplateResponse(
+                "register.html",
+                {**form_context, "error": "Referral code not recognized"},
+            )
+        if new_referral == email_norm:
+            return templates.TemplateResponse(
+                "register.html",
+                {**form_context, "error": "You cannot refer yourself"},
+            )
+    if not existing_referrer and new_referral:
+        referrer_email = new_referral
+
+    if email_norm not in REGISTERED_EMAILS and not referrer_email:
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "error": "Email not permitted"},
+            {**form_context, "error": "Email not permitted"},
         )
-    key = f"user:{email_norm}"
-    has_created = await redis_client.hexists(key, "created_at")
+
+    now_iso = datetime.utcnow().isoformat()
     await redis_client.hset(
         key,
         mapping={
             "password": _hash_password(password),
             "wallet": wallet.strip(),
-            "telegram": _normalize_telegram(telegram),
+            "telegram": telegram_norm,
+            "twitter": twitter_norm,
+            "discord": discord_clean,
+            "email_opt_in": 1 if opt_in else 0,
+            "referral_count": existing_referral_count,
             "verified": 0,
-            **({"created_at": datetime.utcnow().isoformat()} if not has_created else {}),
+            **({"created_at": now_iso} if not has_created else {}),
+            **(
+                {"referred_by": referrer_email, "referred_at": now_iso}
+                if referrer_email and not existing_referrer
+                else {}
+            ),
         },
     )
-    return RedirectResponse("/login?msg=Registered+successfully", status_code=303)
+    referral_code_value = await _ensure_referral_code(email_norm)
+    if referral_code_value:
+        await redis_client.hset(
+            key, mapping={"referral_code": referral_code_value}
+        )
+
+    if referrer_email and referrer_email != existing_referrer:
+        await _record_referral(
+            referrer_email, email_norm, telegram_norm, now_iso
+        )
+
+    return RedirectResponse(
+        "/login?msg=Registration+submitted+for+approval",
+        status_code=303,
+    )
 
 
 @app.get("/wallet")
@@ -1394,6 +1958,44 @@ async def wallet_update(request: Request, wallet: str = Form(...)) -> RedirectRe
         return RedirectResponse("/login")
     await redis_client.hset(f"user:{email}", mapping={"wallet": wallet.strip()})
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/referrals")
+async def referrals_dashboard(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    referral_code = await _ensure_referral_code(email)
+    register_url = str(request.url_for("register_form"))
+    referral_link = f"{register_url}?ref={referral_code}" if referral_code else register_url
+
+    entries = await _referral_entries(email)
+    referral_count = sum(1 for entry in entries if entry.get("status") != "rejected")
+    pending_count = sum(1 for entry in entries if entry.get("status") == "pending")
+    approved_count = sum(1 for entry in entries if entry.get("status") == "approved")
+
+    user_data = await redis_client.hgetall(f"user:{email}")
+    referred_by = str(user_data.get("referred_by", ""))
+    referred_by_label = referred_by
+    if referred_by:
+        ref_profile = await redis_client.hgetall(f"user:{referred_by}")
+        if ref_profile.get("telegram"):
+            referred_by_label = ref_profile.get("telegram")
+
+    return templates.TemplateResponse(
+        "referrals.html",
+        {
+            "request": request,
+            "referral_code": referral_code,
+            "referral_link": referral_link,
+            "referral_count": referral_count,
+            "referrals_pending": pending_count,
+            "referrals_approved": approved_count,
+            "referrals": entries,
+            "referred_by": referred_by_label,
+        },
+    )
 
 
 def _transfer_totals(history: list[dict[str, Any]]) -> dict[str, float]:
@@ -1793,6 +2395,8 @@ async def admin_panel(request: Request) -> Any:
     page = int(request.query_params.get("page", 1))
     limit = int(request.query_params.get("limit", 20))
 
+    await _ensure_existing_ambassadors_pending()
+
     wallets = await _all_wallets()
     wallets_active = sorted(
         [w for w in wallets if w.get("active")], key=lambda w: w.get("email", "")
@@ -1807,6 +2411,7 @@ async def admin_panel(request: Request) -> Any:
     analytics = await _analytics_dashboard(page=page, limit=limit)
     maintenance_enabled = await _maintenance_enabled()
     transfers = await _all_transfer_history()
+    pending_referrals = await _pending_referrals()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -1823,8 +2428,148 @@ async def admin_panel(request: Request) -> Any:
             "maintenance_enabled": maintenance_enabled,
             "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
+            "pending_referrals": pending_referrals,
         },
     )
+
+
+async def _approve_pending_applicant(email: str) -> bool:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return False
+
+    key = f"user:{email_norm}"
+    data = await redis_client.hgetall(key)
+    if not data:
+        return False
+
+    await redis_client.hset(
+        key,
+        mapping={
+            "verified": 1,
+            "verified_at": datetime.utcnow().isoformat(),
+        },
+    )
+
+    telegram = str(data.get("telegram", ""))
+    try:
+        _ensure_leaderboard_entry(email_norm, telegram)
+    except Exception as exc:
+        print(f"[admin] failed to update leaderboard for {email_norm}: {exc}")
+
+    _register_email_record(email_norm)
+
+    referrer = str(data.get("referred_by", "")).strip().lower()
+    if referrer:
+        await _set_referral_status(referrer, email_norm, "approved")
+
+    return True
+
+
+async def _reject_pending_applicant(email: str) -> bool:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return False
+
+    removed_from_leaderboard = _remove_leaderboard_entry(email_norm)
+
+    key = f"user:{email_norm}"
+    data = await redis_client.hgetall(key)
+    if data:
+        referrer = str(data.get("referred_by", "")).strip().lower()
+        if referrer:
+            await _set_referral_status(referrer, email_norm, "rejected")
+
+        referral_code = str(data.get("referral_code", "")).strip().upper()
+        if referral_code:
+            await redis_client.delete(f"{REFERRAL_CODE_KEY_PREFIX}{referral_code}")
+
+        await redis_client.delete(key)
+        await redis_client.delete(f"recovery:{email_norm}")
+        await redis_client.delete(f"posts:{email_norm}")
+        await redis_client.delete(f"posts_verified:{email_norm}")
+        await redis_client.delete(f"posts_rejected:{email_norm}")
+        await redis_client.delete(f"tasks:{email_norm}")
+        await redis_client.delete(f"transfers:{email_norm}")
+        await redis_client.delete(f"{ACTIVITY_ZSET_PREFIX}{email_norm}")
+
+    _unregister_email_record(email_norm)
+
+    return removed_from_leaderboard
+
+
+@app.post("/admin/referrals/approve")
+async def admin_referral_approve(
+    request: Request,
+    email: str = Form(""),
+    emails: list[str] | None = Form(None),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    targets: set[str] = set()
+
+    if email:
+        targets.add(str(email).strip().lower())
+
+    if emails:
+        for value in emails:
+            value_norm = str(value or "").strip().lower()
+            if value_norm:
+                targets.add(value_norm)
+
+    if not targets:
+        return RedirectResponse("/admin#referrals", status_code=303)
+
+    refresh_needed = False
+    for target in targets:
+        processed = await _approve_pending_applicant(target)
+        refresh_needed = refresh_needed or processed
+
+    if refresh_needed:
+        try:
+            await _get_cached_data(force_refresh=True)
+        except Exception as exc:
+            print(f"[admin] failed to refresh leaderboard cache: {exc}")
+
+    return RedirectResponse("/admin#referrals", status_code=303)
+
+
+@app.post("/admin/referrals/reject")
+async def admin_referral_reject(
+    request: Request,
+    email: str = Form(""),
+    emails: list[str] | None = Form(None),
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    targets: set[str] = set()
+
+    if email:
+        targets.add(str(email).strip().lower())
+
+    if emails:
+        for value in emails:
+            value_norm = str(value or "").strip().lower()
+            if value_norm:
+                targets.add(value_norm)
+
+    if not targets:
+        return RedirectResponse("/admin#referrals", status_code=303)
+
+    refresh_needed = False
+    for target in targets:
+        removed = await _reject_pending_applicant(target)
+        refresh_needed = refresh_needed or removed
+
+    if refresh_needed:
+        try:
+            await _get_cached_data(force_refresh=True)
+        except Exception as exc:
+            print(f"[admin] failed to refresh leaderboard cache: {exc}")
+
+    return RedirectResponse("/admin#referrals", status_code=303)
 
 
 @app.post("/admin/maintenance")
