@@ -1701,14 +1701,18 @@ async def _pending_referrals() -> list[dict[str, Any]]:
 
 def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
     email_norm = str(email or "").strip().lower()
-    if not email_norm:
+
+    # ✅ Safety: must be a valid email
+    if not email_norm or "@" not in email_norm:
+        print(f"[leaderboard] ⚠️ Skipping invalid email: {email}")
         return
+
     tele_norm = _normalize_telegram(telegram)
-    username = tele_norm.lstrip("@") if tele_norm else ""
+    username = tele_norm.lstrip("@") if tele_norm else email_norm.split("@")[0]
+
     path = Path(CSV_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    rows: list[dict[str, str]] = []
     fieldnames = [
         "name",
         "telegram",
@@ -1720,63 +1724,51 @@ def _ensure_leaderboard_entry(email: str, telegram: str) -> None:
         "email",
     ]
 
-    # ✅ SAFER READ: try utf-8 first, fallback to latin-1 to avoid decode crash
+    # ✅ Load & sanitize all rows
+    rows: list[dict[str, str]] = []
     if path.exists():
-        try:
-            with path.open("r", newline="", encoding="utf-8") as fh:
-                reader = csv.DictReader(fh)
-                if reader.fieldnames:
-                    fieldnames = reader.fieldnames
-                for row in reader:
-                    rows.append(dict(row))
-        except UnicodeDecodeError:
-            print("[leaderboard] ⚠️ Non-UTF-8 bytes detected — attempting fallback decode...")
-            with path.open("r", newline="", encoding="latin-1") as fh:
-                reader = csv.DictReader(fh)
-                if reader.fieldnames:
-                    fieldnames = reader.fieldnames
-                for row in reader:
-                    rows.append(dict(row))
+        with path.open("r", newline="", encoding="utf-8", errors="ignore") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames:
+                fieldnames = reader.fieldnames
+            for row in reader:
+                clean_row = {k: (row.get(k, "") or "").strip() for k in fieldnames}
+                rows.append(clean_row)
 
-    # ✅ Update existing row or create new one
-    found = False
+    # ✅ Deduplicate by email (last seen wins)
+    deduped: dict[str, dict[str, str]] = {}
     for row in rows:
-        row_email = str(row.get("email", "")).strip().lower()
-        if row_email == email_norm:
-            if tele_norm:
-                row["telegram"] = tele_norm
-            if username:
-                row["name"] = username
-            if "tier" in row and not str(row.get("tier", "")).strip():
-                row["tier"] = "Ambassador"
-            for key in ("points", "posts", "engagements", "referrals"):
-                if key in row and not str(row.get(key, "")).strip():
-                    row[key] = "0"
-            found = True
-            break
+        row_email = (row.get("email") or "").strip().lower()
+        if "@" not in row_email:
+            continue
+        deduped[row_email] = row  # last one wins
 
-    if not found:
-        new_row = {key: "" for key in fieldnames}
-        new_row.update(
-            {
-                "name": username or (email_norm.split("@")[0] if "@" in email_norm else email_norm),
-                "telegram": tele_norm,
-                "points": "0",
-                "tier": "Ambassador",
-                "posts": "0",
-                "engagements": "0",
-                "referrals": "0",
-                "email": email_norm,
-            }
-        )
-        rows.append(new_row)
+    # ✅ Update or create this entry
+    entry = deduped.get(email_norm, {key: "" for key in fieldnames})
+    entry.update({
+        "email": email_norm,
+        "telegram": tele_norm or entry.get("telegram", ""),
+        "name": username or entry.get("name", ""),
+    })
 
-    # ✅ Write back as clean UTF-8
+    # ✅ Defaults: tier and numeric columns
+    if not str(entry.get("tier", "")).strip():
+        entry["tier"] = "Ambassador"
+    for key in ("points", "posts", "engagements", "referrals"):
+        if not str(entry.get(key, "")).strip():
+            entry[key] = "0"
+
+    # ✅ Put back into deduped dict
+    deduped[email_norm] = entry
+
+    # ✅ Final dedupe sweep: sort by email & write clean CSV
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
-        for row in rows:
-            writer.writerow({key: row.get(key, "") for key in fieldnames})
+        for row in sorted(deduped.values(), key=lambda r: r["email"]):
+            writer.writerow({k: row.get(k, "") for k in fieldnames})
+
+    print(f"[leaderboard] ✅ Entry ensured and deduped for {email_norm}")
 
 
 def _remove_leaderboard_entry(email: str) -> bool:
