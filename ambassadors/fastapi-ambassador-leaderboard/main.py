@@ -274,6 +274,19 @@ async def _upload_temp_document(file: UploadFile | None) -> tuple[bool, str, str
         return False, "", "Unexpected response from upload service"
 
     return True, url, ""
+    
+
+async def _set_user_kyc_status(email: str, status: str) -> None:
+    email_norm = str(email or "").strip().lower()
+    if not email_norm:
+        return
+    normalized = _normalize_kyc_status(status)
+    await redis_client.hset(
+        f"user:{email_norm}",
+        mapping={
+            "kyc_status": normalized,
+        },
+    )
 
 
 async def _get_kyc_record(email: str) -> dict[str, Any]:
