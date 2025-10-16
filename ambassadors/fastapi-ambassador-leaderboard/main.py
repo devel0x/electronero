@@ -529,28 +529,42 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
         return False, "Invalid email provided."
     if amount <= 0:
         return False, "Stake amount must be positive."
+
+    # ✅ Check if already staked
     existing = await _get_stake(email_norm)
     if existing:
         return False, "An active stake already exists."
+
+    # ✅ Get balances and raw score_pad before staking
     balances = await _stake_balances(email_norm)
-    available = balances.get("available", 0.0)
+    total_points = balances.get("total", 0.0)
+    current_scorepad = await _scorepad_balance(email_norm)
+
+    # ✅ Hard guard: never allow staking more than total points
+    if amount > total_points + 1e-9:
+        return False, f"Stake amount exceeds your total balance ({total_points:.2f} IGP)."
+
+    # ✅ Critical guard: ensure score_pad covers this stake
+    if current_scorepad < amount - 1e-9:
+        return False, (
+            f"Insufficient unlocked balance. You currently have {current_scorepad:.2f} IGP available to stake."
+        )
+
+    # ✅ Safety cap
     if amount > MAX_STAKE:
         return False, f"Stake amount exceeds the maximum allowed of {MAX_STAKE} IGP."
-    if amount > available + 1e-9:
-        return False, "Insufficient points available to stake that amount."
+
+    # ---------- stake logic continues ----------
     now = datetime.utcnow()
     week_start = _monday_start(now)
     week_end = week_start + timedelta(days=7)
-    # ✅ Unstake eligibility is 7 days after staking
     ends_at = now + timedelta(days=STAKE_DURATION_DAYS)
-    
-    # ✅ Find the first Monday strictly *after* ends_at
-    payout_week_start = _monday_start(ends_at + timedelta(days=STAKE_DURATION_DAYS))  # jump ahead a week
+
+    payout_week_start = _monday_start(ends_at + timedelta(days=STAKE_DURATION_DAYS))
     if payout_week_start <= ends_at:
         payout_week_start += timedelta(days=STAKE_DURATION_DAYS)
-    
-    # ✅ Payout lasts 7 days starting from that Monday
     payout_week_end = payout_week_start + timedelta(days=STAKE_DURATION_DAYS)
+
     mapping: dict[str, Any] = {
         "email": email_norm,
         "amount": f"{amount:.8f}",
@@ -564,11 +578,13 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
         "ends_at": ends_at.isoformat(),
         "duration_days": str(STAKE_DURATION_DAYS),
     }
+
     profile_snapshot = await redis_client.hgetall(f"user:{email_norm}")
     if profile_snapshot.get("name"):
         mapping["display_name"] = profile_snapshot["name"]
     if profile_snapshot.get("telegram"):
         mapping["telegram_snapshot"] = profile_snapshot["telegram"]
+
     pipe = redis_client.pipeline()
     pipe.hset(_stake_key(email_norm), mapping=mapping)
     pipe.sadd(STAKE_ACTIVE_SET_KEY, email_norm)
@@ -576,6 +592,7 @@ async def _create_stake(email: str, amount: float, created_by: str = "user") -> 
         pipe.hincrbyfloat("score_pad", email_norm, -amount)
         pipe.hincrbyfloat(STAKE_RESERVE_HASH, email_norm, amount)
         await pipe.execute()
+
     try:
         await _load_csv()
     except Exception as exc:
