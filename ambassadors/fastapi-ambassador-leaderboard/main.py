@@ -2859,7 +2859,7 @@ async def admin_panel(request: Request) -> Any:
     recoveries = await _all_recoveries()
     analytics = await _analytics_dashboard(page=page, limit=limit)
     maintenance_enabled = await _maintenance_enabled()
-    transfers = await _all_transfer_history()
+    # transfers = await _all_transfer_history()
     pending_referrals = await _pending_referrals()
     stakes = await _all_active_stakes()
     stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
@@ -2879,7 +2879,7 @@ async def admin_panel(request: Request) -> Any:
             "proposals": proposals,
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
-            "transfers": transfers,
+            # "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
             "pending_referrals": pending_referrals,
             "stakes": stakes,
