@@ -1550,8 +1550,14 @@ async def _ensure_existing_ambassadors_pending() -> None:
                 skipped += 1
                 continue
 
-            # ✅ Only set verified=0 — no deletes at all
+            # ✅ Always mark as unverified
             await redis_client.hset(key, mapping={"verified": 0})
+
+            # 🆕 Backfill default referrer if missing
+            ref_by = await redis_client.hget(key, "referred_by")
+            if not ref_by:
+                await redis_client.hset(key, mapping={"referred_by": "interchained@gmail.com"})
+
             processed += 1
 
         # ✅ Process referrals safely
