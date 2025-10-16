@@ -232,6 +232,24 @@
         <div class="tab-content">
             <!-- ✅ Pending Table -->
             <div class="tab-pane fade show active" id="pending" role="tabpanel">
+                <div class="d-flex flex-wrap gap-2 justify-content-end mt-3">
+                  <button type="submit"
+                          class="btn btn-success btn-sm referral-bulk-action"
+                          form="referral-bulk-form"
+                          formaction="/admin/referrals/approve"
+                          disabled>
+                      ✅ Approve Selected
+                  </button>
+                
+                  <button type="submit"
+                          class="btn btn-outline-danger btn-sm referral-bulk-action"
+                          form="referral-bulk-form"
+                          formaction="/admin/referrals/reject"
+                          disabled>
+                      ❌ Reject Selected
+                  </button>
+                </div>
+
                 {% include "partials/referral_table.html" with context %}
             </div>
     
