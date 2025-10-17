@@ -225,19 +225,31 @@ async function createPeerConnection(peerId, name) {
   
   peer.pc = pc;
 
-
   pc.ontrack = (event) => {
     if (!peer.video) return;
     const [stream] = event.streams;
     if (stream) {
       peer.video.srcObject = stream;
   
-      // ✅ Force playback on mobile (Safari/iOS/Android)
-      peer.video
-        .play()
-        .catch(err => console.warn('Autoplay blocked on mobile, will resume after user gesture:', err));
+      // 🚨 Step 1: Start muted (Chrome iOS will block autoplay with audio)
+      peer.video.muted = true;
+  
+      // 🚀 Step 2: Try immediate playback
+      peer.video.play().then(() => {
+        console.log("🎥 Remote stream playback started");
+        // ✅ Optional: unmute after playback begins
+        setTimeout(() => (peer.video.muted = false), 1000);
+      }).catch(err => {
+        console.warn("⚠️ Autoplay blocked, waiting for user tap:", err);
+      });
+  
+      // ✋ Step 3: Fallback – retry after first user gesture (required on Chrome iOS)
+      document.addEventListener("click", () => {
+        peer.video.play().catch(() => {});
+      }, { once: true });
     }
   };
+
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
