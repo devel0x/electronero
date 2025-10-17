@@ -154,6 +154,7 @@ class NodeStatus(BaseModel):
     p2p_online: bool = False
     rpc_responding: bool = False
     fully_online: bool = False
+    is_online: bool
 
 
 class RewardSummary(BaseModel):

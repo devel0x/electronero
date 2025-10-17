@@ -26,7 +26,7 @@ from .services.organizations import create_organization, get_organization
 from .utils.ids import random_token
 from .utils.redis_client import get_redis
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 

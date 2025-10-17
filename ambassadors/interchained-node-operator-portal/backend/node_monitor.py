@@ -43,6 +43,7 @@ class NodeMonitor:
         redis = await get_redis()
         node_ids = await redis.smembers("node:index")
         now = datetime.utcnow()
+
         for node_id in node_ids:
             node = await redis.hgetall(f"node:{node_id}")
             if not node:
@@ -67,6 +68,7 @@ class NodeMonitor:
                     "rpc_responding": int(health.rpc_responding),
                     "p2p_online": int(health.p2p_online),
                     "fully_online": int(health.is_fully_online),
+                    "is_online": int(health.is_online), 
                 },
             )
             timeseries_entry = json.dumps(
@@ -77,5 +79,7 @@ class NodeMonitor:
                 }
             )
             await redis.zadd("metrics:uptime:global", {timeseries_entry: now.timestamp()})
+
+        # Trim old uptime data
         cutoff = (datetime.utcnow() - timedelta(days=14)).timestamp()
         await redis.zremrangebyscore("metrics:uptime:global", 0, cutoff)

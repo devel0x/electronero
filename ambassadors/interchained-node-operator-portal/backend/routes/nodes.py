@@ -136,6 +136,7 @@ async def _build_node_status(node_id: str) -> NodeStatus:
     if latency_raw is not None and latency_raw < 0:
         latency_raw = None
     tags = node.get("tags", "")
+    
     return NodeStatus(
         id=node_id,
         organization_id=node.get("organization_id", ""),
@@ -155,4 +156,6 @@ async def _build_node_status(node_id: str) -> NodeStatus:
         p2p_online=bool(int(stats.get("p2p_online", "0") or 0)),
         rpc_responding=bool(int(stats.get("rpc_responding", "0") or 0)),
         fully_online=bool(int(stats.get("fully_online", "0") or 0)),
+        # ✅ NEW: expose online status from Redis
+        is_online=bool(int(stats.get("is_online", 0))),
     )
