@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import ipaddress
 import mimetypes
@@ -12,6 +13,7 @@ import csv
 import io
 import string
 import random
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -20,8 +22,8 @@ import requests
 import pandas as pd
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Query, Request, UploadFile, File
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
+from fastapi import File, FastAPI, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
@@ -125,12 +127,23 @@ MAINTENANCE_FLAG_KEY = "app:maintenance_mode"
 # Remove/normalize invalid surrogate code points from Python strings.
 _SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
 
+_ROOM_SLUG_RE = re.compile(r"[^a-z0-9-]")
+
 def _safe_text(x: Any) -> str:
     s = str(x)
     if not _SURROGATE_RE.search(s):
         return s
     s = _SURROGATE_RE.sub("�", s)  # replacement char
     return s.encode("utf-8", "replace").decode("utf-8")
+
+
+def _normalize_room_id(room: str | None) -> str:
+    candidate = (room or "").strip().lower().replace(" ", "-")
+    candidate = _ROOM_SLUG_RE.sub("", candidate)
+    if not candidate:
+        return "ambassador-hub"
+    return candidate[:80]
+
 
 def _sanitize_obj(o: Any):
     if isinstance(o, str):
@@ -158,6 +171,71 @@ REFERRAL_CODE_KEY_PREFIX = "referral:code:"
 REFERRALS_HASH_PREFIX = "referrals:"
 REFERRAL_CODE_LENGTH = 8
 PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v2"
+
+
+@dataclass
+class MeetingParticipant:
+    websocket: WebSocket
+    peer_id: str
+    email: str
+    display_name: str
+
+    def public_payload(self) -> dict[str, str]:
+        return {"peer_id": self.peer_id, "display_name": self.display_name}
+
+
+class MeetingManager:
+    def __init__(self) -> None:
+        self._rooms: dict[str, dict[str, MeetingParticipant]] = {}
+        self._lock = asyncio.Lock()
+
+    async def join(self, room_id: str, participant: MeetingParticipant) -> list[dict[str, str]]:
+        async with self._lock:
+            room = self._rooms.setdefault(room_id, {})
+            existing = [p.public_payload() for p in room.values()]
+            room[participant.peer_id] = participant
+        return existing
+
+    async def leave(self, room_id: str, peer_id: str) -> None:
+        async with self._lock:
+            room = self._rooms.get(room_id)
+            if not room:
+                return
+            room.pop(peer_id, None)
+            if not room:
+                self._rooms.pop(room_id, None)
+
+    async def broadcast(
+        self, room_id: str, message: str, exclude: set[str] | None = None
+    ) -> None:
+        exclude = exclude or set()
+        async with self._lock:
+            room = dict(self._rooms.get(room_id, {}))
+        to_drop: list[str] = []
+        for peer_id, participant in room.items():
+            if peer_id in exclude:
+                continue
+            try:
+                await participant.websocket.send_text(message)
+            except Exception:
+                to_drop.append(peer_id)
+        for peer_id in to_drop:
+            await self.leave(room_id, peer_id)
+
+    async def send_to(self, room_id: str, peer_id: str, message: str) -> bool:
+        async with self._lock:
+            participant = (self._rooms.get(room_id) or {}).get(peer_id)
+        if not participant:
+            return False
+        try:
+            await participant.websocket.send_text(message)
+            return True
+        except Exception:
+            await self.leave(room_id, peer_id)
+            return False
+
+
+meeting_manager = MeetingManager()
 MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
 PENDING_VERIFICATION_MIGRATION_SENTINEL = (
     MIGRATIONS_DIR / "pending_all_v2.complete"
@@ -2074,6 +2152,13 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
 
 async def _current_email(request: Request) -> str | None:
     token = request.cookies.get("session")
+    if not token:
+        return None
+    return await redis_client.get(f"session:{token}")
+
+
+async def _current_email_from_websocket(websocket: WebSocket) -> str | None:
+    token = websocket.cookies.get("session")
     if not token:
         return None
     return await redis_client.get(f"session:{token}")
@@ -6117,6 +6202,156 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     tasks = await _all_tasks()
     return JSONResponse({"ok": True, "tasks": tasks})
+
+
+@app.get("/business/meetings")
+async def business_meetings(
+    request: Request, room: str = Query("ambassador-hub")
+) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    room_id = _normalize_room_id(room)
+    room_label = room.strip() or "Ambassador Hub"
+
+    profile = await redis_client.hgetall(f"user:{email}")
+    display_name = (
+        profile.get("name")
+        or profile.get("telegram")
+        or email.split("@")[0]
+        or "Ambassador"
+    )
+    display_name = _safe_text(display_name)
+
+    return templates.TemplateResponse(
+        "meeting.html",
+        {
+            "request": request,
+            "project_name": "Interchained × Elara – Ambassadors",
+            "room_id": room_id,
+            "room_label": room_label,
+            "display_name": display_name,
+        },
+    )
+
+
+@app.websocket("/ws/meetings/{room_path}")
+async def meeting_socket(websocket: WebSocket, room_path: str) -> None:
+    email = await _current_email_from_websocket(websocket)
+    if not email:
+        await websocket.close(code=4401)
+        return
+
+    await websocket.accept()
+
+    room_id = _normalize_room_id(room_path)
+    profile = await redis_client.hgetall(f"user:{email}")
+    display_name = (
+        profile.get("name")
+        or profile.get("telegram")
+        or email.split("@")[0]
+        or "Ambassador"
+    )
+    display_name = _safe_text(display_name)
+
+    peer_id = secrets.token_hex(8)
+    participant = MeetingParticipant(
+        websocket=websocket,
+        peer_id=peer_id,
+        email=email,
+        display_name=display_name,
+    )
+    joined = False
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = message.get("type")
+
+            if msg_type == "join" and not joined:
+                existing = await meeting_manager.join(room_id, participant)
+                joined = True
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "init",
+                            "peer_id": peer_id,
+                            "display_name": display_name,
+                            "participants": existing,
+                        }
+                    )
+                )
+                await meeting_manager.broadcast(
+                    room_id,
+                    json.dumps(
+                        {
+                            "type": "peer-joined",
+                            "peer": participant.public_payload(),
+                        }
+                    ),
+                    exclude={peer_id},
+                )
+            elif msg_type == "chat" and joined:
+                text = _safe_text(str(message.get("text", ""))).strip()
+                if not text:
+                    continue
+                payload = json.dumps(
+                    {
+                        "type": "chat",
+                        "peer_id": peer_id,
+                        "display_name": display_name,
+                        "text": text,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                await meeting_manager.broadcast(room_id, payload)
+            elif msg_type == "signal" and joined:
+                target = str(message.get("target") or "").strip()
+                data = message.get("data")
+                if not target or data is None:
+                    continue
+                delivered = await meeting_manager.send_to(
+                    room_id,
+                    target,
+                    json.dumps(
+                        {
+                            "type": "signal",
+                            "peer_id": peer_id,
+                            "data": data,
+                        }
+                    ),
+                )
+                if not delivered:
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "message": "peer_unavailable",
+                                "target": target,
+                            }
+                        )
+                    )
+            elif msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if joined:
+            await meeting_manager.leave(room_id, peer_id)
+            await meeting_manager.broadcast(
+                room_id,
+                json.dumps({"type": "peer-left", "peer_id": peer_id}),
+            )
 
 
 @app.get("/")
