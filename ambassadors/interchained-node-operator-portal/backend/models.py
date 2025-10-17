@@ -151,6 +151,9 @@ class NodeStatus(BaseModel):
     latency_ms: Optional[float] = None
     block_height: Optional[int] = None
     is_flagged: bool = False
+    p2p_online: bool = False
+    rpc_responding: bool = False
+    fully_online: bool = False
     is_online: bool
 
 
@@ -158,6 +161,7 @@ class RewardSummary(BaseModel):
     date: datetime
     rewards: dict[str, float]
     pool_balance: float
+    next_payout_at: datetime
 
 
 class RewardHistoryItem(BaseModel):
@@ -169,6 +173,14 @@ class RewardHistoryItem(BaseModel):
 class RewardHistory(BaseModel):
     organization_id: str
     history: list[RewardHistoryItem]
+
+
+class PoolBalance(BaseModel):
+    balance: float
+
+
+class PoolTopUpRequest(BaseModel):
+    amount: float = Field(gt=0, description="Amount to add to the reward pool")
 
 
 class AuditEvent(BaseModel):

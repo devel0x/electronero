@@ -153,6 +153,9 @@ async def _build_node_status(node_id: str) -> NodeStatus:
         latency_ms=latency_raw,
         block_height=int(stats.get("block_height", 0)) if stats.get("block_height") else None,
         is_flagged=bool(int(node.get("is_flagged", 0))),
+        p2p_online=bool(int(stats.get("p2p_online", "0") or 0)),
+        rpc_responding=bool(int(stats.get("rpc_responding", "0") or 0)),
+        fully_online=bool(int(stats.get("fully_online", "0") or 0)),
         # ✅ NEW: expose online status from Redis
         is_online=bool(int(stats.get("is_online", 0))),
     )

@@ -22,13 +22,19 @@ export default function NodeTable({ nodes }) {
         <tbody className="divide-y divide-slate-900/80 text-sm">
           {nodes.map((node) => {
             const uptime = (node.uptime_score || 0) * 100;
-            const status = node.is_flagged
-              ? 'Flagged'
-              : node.is_online
-              ? 'Online'
-              : uptime > 70
-              ? 'Degraded'
-              : 'Offline';
+            const status = (() => {
+              if (node.is_flagged) return 'Flagged';
+              if (node.p2p_online && !node.rpc_responding) return 'Seed Online';
+              if (node.p2p_online && node.rpc_responding) return 'Online';
+              if (uptime > 70) return 'Degraded';
+              if (uptime > 0) return 'Degraded';
+              return 'Offline';
+            })();
+            const interfaceLabel = node.p2p_online
+              ? node.rpc_responding
+                ? 'P2P + RPC'
+                : 'P2P only'
+              : 'No signal';
             return (
               <tr key={node.id} className="hover:bg-slate-900/50">
                 <td className="px-4 py-3">
@@ -47,6 +53,7 @@ export default function NodeTable({ nodes }) {
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={status} />
+                  <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-600">{interfaceLabel}</div>
                 </td>
               </tr>
             );

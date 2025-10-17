@@ -10,8 +10,17 @@ from fastapi.responses import StreamingResponse
 
 from .. import auth
 from ..dependencies import require_org_admin, require_super_admin
-from ..models import RewardHistory, RewardHistoryItem, RewardSummary, UserPublic, UserRole
-from ..rewards import distribute_daily_rewards
+from ..models import (
+    PoolBalance,
+    PoolTopUpRequest,
+    RewardHistory,
+    RewardHistoryItem,
+    RewardSummary,
+    UserPublic,
+    UserRole,
+)
+from ..rewards import distribute_daily_rewards, get_next_distribution_at
+from ..services.audit import record_audit_event
 from ..utils.redis_client import get_redis
 
 
@@ -26,11 +35,32 @@ router = APIRouter(prefix="/rewards", tags=["rewards"])
 
 @router.post("/run", response_model=RewardSummary)
 async def trigger_rewards(_: UserPublic = Depends(require_super_admin())) -> RewardSummary:
-    rewards = await distribute_daily_rewards()
     snapshot = datetime.utcnow()
+    rewards = await distribute_daily_rewards(snapshot)
     redis = await get_redis()
     pool_balance = float(await redis.get("pool:balance") or 0)
-    return RewardSummary(date=snapshot, rewards=rewards, pool_balance=pool_balance)
+    next_payout_at = get_next_distribution_at(now=snapshot)
+    return RewardSummary(
+        date=snapshot,
+        rewards=rewards,
+        pool_balance=pool_balance,
+        next_payout_at=next_payout_at,
+    )
+
+
+@router.post("/pool/top-up", response_model=PoolBalance)
+async def top_up_reward_pool(
+    payload: PoolTopUpRequest,
+    current_user: UserPublic = Depends(require_super_admin()),
+) -> PoolBalance:
+    redis = await get_redis()
+    new_balance = await redis.incrbyfloat("pool:balance", payload.amount)
+    await record_audit_event(
+        actor_email=current_user.email,
+        action="rewards.pool.top_up",
+        metadata={"amount": f"{payload.amount:.8f}", "balance": f"{new_balance:.8f}"},
+    )
+    return PoolBalance(balance=float(new_balance))
 
 
 @router.get("/today", response_model=RewardSummary)
@@ -46,7 +76,14 @@ async def rewards_today(current_user: UserPublic = Depends(auth.get_current_user
                 continue
         rewards_float[node_id] = float(amount)
     pool_balance = float(await redis.get("pool:balance") or 0)
-    return RewardSummary(date=datetime.utcnow(), rewards=rewards_float, pool_balance=pool_balance)
+    snapshot = datetime.utcnow()
+    next_payout_at = get_next_distribution_at(now=snapshot)
+    return RewardSummary(
+        date=snapshot,
+        rewards=rewards_float,
+        pool_balance=pool_balance,
+        next_payout_at=next_payout_at,
+    )
 
 
 @router.get("/history", response_model=RewardHistory)

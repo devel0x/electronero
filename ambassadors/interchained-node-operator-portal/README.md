@@ -19,7 +19,8 @@ for distributed infrastructure teams.
   organisation. Background monitors capture uptime, latency, and block height
   every 60 seconds.
 * **Reward distribution** – Daily payouts weight uptime scores with service plan
-  multipliers and persist organisation-level history plus lifetime accruals.
+  multipliers, taper shares for P2P-only seed nodes, and persist
+  organisation-level history plus lifetime accruals.
 * **Compliance exports** – Org and super admins can download CSV reward ledgers
   with wallet destinations, daily shares, and pending balances for payout ops.
 * **Analytics & billing** – API endpoints expose fleet metrics (MRR, plan

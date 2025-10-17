@@ -18,6 +18,29 @@ PLAN_MULTIPLIER = {
     ServicePlanTier.ENTERPRISE: 1.3,
 }
 
+P2P_ONLY_REWARD_FACTOR = 0.6
+DEFAULT_DISTRIBUTION_MINUTE = 5
+
+
+def get_next_distribution_at(
+    now: datetime | None = None,
+    run_at_hour: int | None = None,
+    run_at_minute: int | None = None,
+) -> datetime:
+    """Return the next scheduled reward distribution timestamp in UTC."""
+
+    current = now or datetime.utcnow()
+    settings = get_settings()
+    target = current.replace(
+        hour=run_at_hour if run_at_hour is not None else settings.reward_distribution_hour_utc,
+        minute=run_at_minute if run_at_minute is not None else DEFAULT_DISTRIBUTION_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if target <= current:
+        target = target + timedelta(days=1)
+    return target
+
 
 async def distribute_daily_rewards(date: datetime | None = None) -> dict[str, float]:
     redis = await get_redis()
@@ -39,6 +62,10 @@ async def distribute_daily_rewards(date: datetime | None = None) -> dict[str, fl
         node = await redis.hgetall(f"node:{node_id}")
         if not node:
             continue
+        rpc_responding = bool(int(stats.get("rpc_responding", "0") or 0))
+        p2p_online = bool(int(stats.get("p2p_online", "0") or 0))
+        if not p2p_online:
+            continue
         org_id = node.get("organization_id") or ""
         plan_value = await redis.hget(f"org:{org_id}", "plan") or ServicePlanTier.LAUNCH.value
         try:
@@ -46,7 +73,8 @@ async def distribute_daily_rewards(date: datetime | None = None) -> dict[str, fl
         except ValueError:
             plan_enum = ServicePlanTier.LAUNCH
         multiplier = PLAN_MULTIPLIER.get(plan_enum, 1.0)
-        weight = score * multiplier
+        interface_multiplier = 1.0 if rpc_responding else P2P_ONLY_REWARD_FACTOR
+        weight = score * multiplier * interface_multiplier
         active_nodes.append((node_id, weight, org_id))
 
     if not active_nodes:
@@ -92,7 +120,7 @@ async def distribute_daily_rewards(date: datetime | None = None) -> dict[str, fl
 class RewardDistributor:
     """Background job that triggers a distribution once every 24 hours."""
 
-    def __init__(self, run_at_hour: int | None = None, run_at_minute: int = 5) -> None:
+    def __init__(self, run_at_hour: int | None = None, run_at_minute: int = DEFAULT_DISTRIBUTION_MINUTE) -> None:
         settings = get_settings()
         self._run_at_hour = run_at_hour if run_at_hour is not None else settings.reward_distribution_hour_utc
         self._run_at_minute = run_at_minute
@@ -120,8 +148,5 @@ class RewardDistributor:
                 await distribute_daily_rewards()
 
     def _seconds_until_next_run(self) -> float:
-        now = datetime.utcnow()
-        next_run = now.replace(hour=self._run_at_hour, minute=self._run_at_minute, second=0, microsecond=0)
-        if next_run <= now:
-            next_run = next_run + timedelta(days=1)
-        return (next_run - now).total_seconds()
+        next_run = get_next_distribution_at(run_at_hour=self._run_at_hour, run_at_minute=self._run_at_minute)
+        return (next_run - datetime.utcnow()).total_seconds()

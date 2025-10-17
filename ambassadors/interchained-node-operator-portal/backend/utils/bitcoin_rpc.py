@@ -17,6 +17,8 @@ class NodeHealth:
     latency_ms: float
     block_height: Optional[int]
     rpc_responding: bool
+    p2p_online: bool = False
+    is_fully_online: bool = False
 
 
 async def _check_tcp_connectivity(host: str, port: int, timeout: float = 2.0) -> float:
@@ -53,8 +55,8 @@ async def _fetch_rpc_height(rpc_url: str, timeout: float = 2.0) -> tuple[bool, O
     return True, height if isinstance(height, int) else None
 
 
-async def check_node_health(p2p_address: str, rpc_url: str = "") -> NodeHealth:
-    """Check whether a node responds over P2P (required) and RPC (optional)."""
+async def check_node_health(p2p_address: str, rpc_url: str) -> NodeHealth:
+    """Check whether a node responds over P2P and RPC interfaces."""
 
     latency_ms = -1.0
     rpc_ok = False
@@ -70,18 +72,17 @@ async def check_node_health(p2p_address: str, rpc_url: str = "") -> NodeHealth:
         if host and port:
             latency_ms = await _check_tcp_connectivity(host, port)
 
-    # ✅ Optional RPC check (bonus telemetry only)
-    if rpc_url:
-        parsed = urlparse(rpc_url)
-        if parsed.scheme and parsed.netloc:
-            rpc_ok, block_height = await _fetch_rpc_height(rpc_url)
+    parsed = urlparse(rpc_url)
+    if parsed.scheme and parsed.netloc:
+        rpc_ok, block_height = await _fetch_rpc_height(rpc_url)
 
-    # ✅ Node is considered online if P2P responds — RPC no longer required
-    is_online = latency_ms >= 0
-
+    p2p_ok = latency_ms >= 0
+    is_online = p2p_ok
     return NodeHealth(
         is_online=is_online,
         latency_ms=latency_ms if latency_ms >= 0 else -1,
         block_height=block_height,
         rpc_responding=rpc_ok,
+        p2p_online=p2p_ok,
+        is_fully_online=p2p_ok and rpc_ok,
     )
