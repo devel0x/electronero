@@ -38,6 +38,7 @@ export const api = {
   rewardSummary: (token) => request('/rewards/today', { token }),
   rewardHistory: (token) => request('/rewards/history', { token }),
   topUpRewardPool: (token, amount) => request('/rewards/pool/top-up', { method: 'POST', body: { amount }, token }),
+  awardNodeRewards: (token, payload) => request('/rewards/award', { method: 'POST', body: payload, token }),
   exportRewardsCsv: async (token, params = {}) => {
     const search = new URLSearchParams();
     if (params.date) search.set('date', params.date);

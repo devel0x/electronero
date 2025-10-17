@@ -183,6 +183,22 @@ class PoolTopUpRequest(BaseModel):
     amount: float = Field(gt=0, description="Amount to add to the reward pool")
 
 
+class ManualRewardGrantRequest(BaseModel):
+    node_id: str = Field(description="Identifier of the node receiving the bonus share")
+    amount: float = Field(gt=0, description="Bonus amount to credit to the node ledger")
+    reason: Optional[str] = Field(default=None, max_length=240)
+
+
+class ManualRewardGrant(BaseModel):
+    node_id: str
+    organization_id: str
+    amount: float
+    pending_balance: float
+    lifetime_total: float
+    reason: Optional[str] = None
+    awarded_at: datetime
+
+
 class AuditEvent(BaseModel):
     id: str
     actor_email: EmailStr

@@ -11,6 +11,8 @@ from fastapi.responses import StreamingResponse
 from .. import auth
 from ..dependencies import require_org_admin, require_super_admin
 from ..models import (
+    ManualRewardGrant,
+    ManualRewardGrantRequest,
     PoolBalance,
     PoolTopUpRequest,
     RewardHistory,
@@ -61,6 +63,59 @@ async def top_up_reward_pool(
         metadata={"amount": f"{payload.amount:.8f}", "balance": f"{new_balance:.8f}"},
     )
     return PoolBalance(balance=float(new_balance))
+
+
+@router.post("/award", response_model=ManualRewardGrant)
+async def award_manual_reward(
+    payload: ManualRewardGrantRequest,
+    current_user: UserPublic = Depends(require_org_admin()),
+) -> ManualRewardGrant:
+    redis = await get_redis()
+    node_key = f"node:{payload.node_id}"
+    node = await redis.hgetall(node_key)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    organization_id = node.get("organization_id") or ""
+    if current_user.role != UserRole.SUPER_ADMIN and organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Node does not belong to your organization")
+
+    amount = payload.amount
+    ledger_key = f"{node_key}:rewards"
+    pending_total = float(await redis.hincrbyfloat(ledger_key, "pending", amount))
+    lifetime_total = float(await redis.hincrbyfloat(ledger_key, "lifetime", amount))
+    awarded_at = datetime.utcnow()
+    await redis.hset(
+        ledger_key,
+        mapping={
+            "last_rewarded_at": awarded_at.isoformat(),
+            "last_manual_award_amount": f"{amount:.8f}",
+            "last_manual_award_at": awarded_at.isoformat(),
+            "last_manual_award_reason": payload.reason or "",
+        },
+    )
+    await redis.lpush(
+        f"rewards:history:{organization_id}",
+        f"{awarded_at.date().isoformat()}:{amount}:{payload.node_id}",
+    )
+    await record_audit_event(
+        actor_email=current_user.email,
+        action="rewards.manual_award",
+        organization_id=organization_id or None,
+        target=payload.node_id,
+        metadata={
+            "amount": f"{amount:.8f}",
+            "reason": payload.reason or "",
+        },
+    )
+    return ManualRewardGrant(
+        node_id=payload.node_id,
+        organization_id=organization_id,
+        amount=amount,
+        pending_balance=pending_total,
+        lifetime_total=lifetime_total,
+        reason=payload.reason,
+        awarded_at=awarded_at,
+    )
 
 
 @router.get("/today", response_model=RewardSummary)

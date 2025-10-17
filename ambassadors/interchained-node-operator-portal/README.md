@@ -21,6 +21,9 @@ for distributed infrastructure teams.
 * **Reward distribution** – Daily payouts weight uptime scores with service plan
   multipliers, taper shares for P2P-only seed nodes, and persist
   organisation-level history plus lifetime accruals.
+* **Admin reward tooling** – Super admins can top up the pool directly from the
+  portal while org admins grant manual bonus points to individual nodes with
+  full audit trails.
 * **Compliance exports** – Org and super admins can download CSV reward ledgers
   with wallet destinations, daily shares, and pending balances for payout ops.
 * **Analytics & billing** – API endpoints expose fleet metrics (MRR, plan

@@ -18,6 +18,12 @@ export default function RewardsPage() {
   const [poolSuccess, setPoolSuccess] = useState('');
   const [poolLoading, setPoolLoading] = useState(false);
   const [countdown, setCountdown] = useState('');
+  const [awardNodeId, setAwardNodeId] = useState('');
+  const [awardAmount, setAwardAmount] = useState('');
+  const [awardReason, setAwardReason] = useState('');
+  const [awardError, setAwardError] = useState('');
+  const [awardSuccess, setAwardSuccess] = useState('');
+  const [awarding, setAwarding] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -45,6 +51,14 @@ export default function RewardsPage() {
     nodes.forEach((node) => map.set(node.id, node));
     return map;
   }, [nodes]);
+
+  useEffect(() => {
+    if (!awardNodeId && nodes.length > 0) {
+      setAwardNodeId(nodes[0].id);
+    }
+  }, [awardNodeId, nodes]);
+
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ORG_ADMIN';
 
   const graphData = useMemo(() => {
     const totals = history.reduce((acc, item) => {
@@ -105,6 +119,53 @@ export default function RewardsPage() {
       setPoolError('Unable to update reward pool. Please try again.');
     } finally {
       setPoolLoading(false);
+    }
+  };
+
+  const handleManualAward = async (event) => {
+    event.preventDefault();
+    if (!token) return;
+    if (!awardNodeId) {
+      setAwardError('Select a node to award points to.');
+      setAwardSuccess('');
+      return;
+    }
+    const amountValue = Number(awardAmount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setAwardError('Enter a positive amount to award.');
+      setAwardSuccess('');
+      return;
+    }
+
+    setAwardError('');
+    setAwardSuccess('');
+    setAwarding(true);
+    try {
+      const payload = {
+        node_id: awardNodeId,
+        amount: amountValue,
+      };
+      if (awardReason.trim()) {
+        payload.reason = awardReason.trim();
+      }
+      const response = await api.awardNodeRewards(token, payload);
+      setHistory((prev) => [
+        ...prev,
+        {
+          node_id: response.node_id,
+          amount: response.amount,
+          date: response.awarded_at,
+        },
+      ]);
+      const node = nodeIndex.get(response.node_id);
+      const nodeLabel = node?.name || response.node_id;
+      setAwardSuccess(`Awarded ${Number(response.amount).toFixed(4)} ITC to ${nodeLabel}.`);
+      setAwardAmount('');
+      setAwardReason('');
+    } catch (err) {
+      setAwardError('Unable to award points. Please try again.');
+    } finally {
+      setAwarding(false);
     }
   };
 
@@ -220,6 +281,72 @@ export default function RewardsPage() {
                 <div className="flex-1 text-sm">
                   {poolError && <p className="text-rose-300">{poolError}</p>}
                   {poolSuccess && <p className="text-emerald-300">{poolSuccess}</p>}
+                </div>
+              </form>
+            )}
+            {isAdmin && (
+              <form
+                onSubmit={handleManualAward}
+                className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3"
+              >
+                <div className="flex flex-col text-sm">
+                  <label htmlFor="awardNode" className="text-xs uppercase tracking-wide text-slate-500">
+                    Award bonus to node
+                  </label>
+                  <select
+                    id="awardNode"
+                    value={awardNodeId}
+                    onChange={(e) => setAwardNodeId(e.target.value)}
+                    className="mt-1 w-48 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-slate-100 focus:border-violet-400/60 focus:outline-none"
+                  >
+                    <option value="" disabled>
+                      Select node
+                    </option>
+                    {nodes.map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col text-sm">
+                  <label htmlFor="awardAmount" className="text-xs uppercase tracking-wide text-slate-500">
+                    Bonus amount
+                  </label>
+                  <input
+                    id="awardAmount"
+                    type="number"
+                    min="0"
+                    step="0.00000001"
+                    value={awardAmount}
+                    onChange={(e) => setAwardAmount(e.target.value)}
+                    placeholder="Amount in ITC"
+                    className="mt-1 w-36 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-slate-100 focus:border-violet-400/60 focus:outline-none"
+                  />
+                </div>
+                <div className="flex flex-col text-sm">
+                  <label htmlFor="awardReason" className="text-xs uppercase tracking-wide text-slate-500">
+                    Reason (optional)
+                  </label>
+                  <input
+                    id="awardReason"
+                    type="text"
+                    value={awardReason}
+                    onChange={(e) => setAwardReason(e.target.value)}
+                    placeholder="Campaign, promo…"
+                    className="mt-1 w-56 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-slate-100 focus:border-violet-400/60 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={awarding || nodes.length === 0}
+                  className="rounded-xl border border-violet-400/40 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200 shadow-inner shadow-violet-500/20 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {awarding ? 'Awarding…' : 'Grant Bonus'}
+                </button>
+                <div className="flex-1 text-sm">
+                  {awardError && <p className="text-rose-300">{awardError}</p>}
+                  {awardSuccess && <p className="text-emerald-300">{awardSuccess}</p>}
                 </div>
               </form>
             )}
