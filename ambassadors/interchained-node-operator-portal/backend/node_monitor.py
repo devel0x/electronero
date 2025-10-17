@@ -43,18 +43,41 @@ class NodeMonitor:
         redis = await get_redis()
         node_ids = await redis.smembers("node:index")
         now = datetime.utcnow()
+
         for node_id in node_ids:
             node = await redis.hgetall(f"node:{node_id}")
             if not node:
                 continue
-            health = await check_node_health(node.get("p2p_address", ""), node.get("rpc_url", ""))
+
+            # ✅ Always require and check P2P
+            p2p_addr = node.get("p2p_address")
+            if not p2p_addr:
+                continue  # skip nodes without P2P info
+
+            # Call check_node_health with only p2p first
+            health = await check_node_health(p2p_address=p2p_addr)
+
+            # Default RPC-related metrics to "not available"
+            rpc_responding = 0
+            block_height = 0
+
+            # ✅ Optional RPC check if URL exists
+            rpc_url = node.get("rpc_url")
+            if rpc_url:
+                rpc_health = await check_node_health(p2p_address=p2p_addr, rpc_url=rpc_url)
+                rpc_responding = int(rpc_health.rpc_responding)
+                block_height = rpc_health.block_height or 0
+
+            # Update uptime metrics
             stats_key = f"uptime:{node_id}"
             total_checks = await redis.hincrby(stats_key, "total_checks", 1)
             if health.is_online:
                 successful_checks = await redis.hincrby(stats_key, "successful_checks", 1)
             else:
                 successful_checks = int(await redis.hget(stats_key, "successful_checks") or 0)
+
             uptime_score = successful_checks / total_checks if total_checks else 0.0
+
             await redis.hset(
                 stats_key,
                 mapping={
@@ -63,10 +86,12 @@ class NodeMonitor:
                     "uptime_score": uptime_score,
                     "last_seen": now.isoformat(),
                     "latency_ms": health.latency_ms,
-                    "block_height": health.block_height or 0,
-                    "rpc_responding": int(health.rpc_responding),
+                    "block_height": block_height,       # ✅ Only non-zero if RPC responded
+                    "rpc_responding": rpc_responding,   # ✅ 0 if no RPC or it failed
                 },
             )
+
+            # Store time-series metric (P2P uptime only)
             timeseries_entry = json.dumps(
                 {
                     "timestamp": now.isoformat(),
@@ -75,5 +100,7 @@ class NodeMonitor:
                 }
             )
             await redis.zadd("metrics:uptime:global", {timeseries_entry: now.timestamp()})
+
+        # Trim old uptime data
         cutoff = (datetime.utcnow() - timedelta(days=14)).timestamp()
         await redis.zremrangebyscore("metrics:uptime:global", 0, cutoff)
