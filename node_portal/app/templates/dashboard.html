@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Operator Portal · Dashboard</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: radial-gradient(circle at 15% 20%, rgba(110,248,255,0.4), transparent 40%),
+                    radial-gradient(circle at 85% 20%, rgba(255,0,212,0.4), transparent 40%),
+                    #04020b;
+            --card: rgba(12, 10, 24, 0.65);
+            --border: rgba(110, 248, 255, 0.2);
+            --border-strong: rgba(255, 0, 212, 0.55);
+            --text: #f5fbff;
+            --muted: #94a3b8;
+            --accent: #6ef8ff;
+            --accent-strong: #ff00d4;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            font-family: "Inter", "Space Grotesk", sans-serif;
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 2.5rem clamp(1rem, 2vw + 1rem, 4rem);
+            gap: 2rem;
+        }
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        h1 {
+            font-size: clamp(1.8rem, 2vw + 1rem, 2.8rem);
+            margin: 0;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow: 0 0 24px rgba(110,248,255,0.5);
+        }
+        .pill {
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(110,248,255,0.15);
+            border: 1px solid var(--border);
+            font-size: 0.75rem;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 24px;
+            padding: 1.75rem;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(24px) saturate(140%);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(110,248,255,0.35), transparent 55%);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .card h2 {
+            margin: 0 0 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .card strong {
+            display: block;
+            font-size: clamp(1.5rem, 2vw + 0.5rem, 2.35rem);
+            color: var(--accent);
+            text-shadow: 0 0 24px rgba(110,248,255,0.45);
+        }
+        .neon-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(110,248,255,0.5), transparent);
+            margin: 2rem 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid rgba(110,248,255,0.1);
+            border-radius: 18px;
+            overflow: hidden;
+        }
+        thead {
+            background: rgba(110, 248, 255, 0.08);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+        th, td {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid rgba(110,248,255,0.05);
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.3rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+        }
+        .status-active {
+            background: rgba(110,248,255,0.2);
+            color: #03212b;
+            border: 1px solid rgba(110,248,255,0.45);
+        }
+        .status-inactive {
+            background: rgba(255,0,212,0.2);
+            color: #ffe6ff;
+            border: 1px solid rgba(255,0,212,0.45);
+        }
+        .logout {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: var(--muted);
+            border-radius: 999px;
+            padding: 0.6rem 1.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: border-color 0.2s ease, color 0.2s ease;
+        }
+        .logout:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .pool-form {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .pool-form input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(110,248,255,0.25);
+            background: rgba(0,0,0,0.25);
+            color: var(--text);
+        }
+        .pool-form button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(120deg, rgba(110,248,255,0.9), rgba(255,0,212,0.85));
+            color: #04121c;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .wallet {
+            font-family: "JetBrains Mono", "Fira Code", monospace;
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.85);
+        }
+        footer {
+            text-align: center;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.35);
+            margin-top: auto;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div>
+        <div class="pill">Operator: {{ user }}</div>
+        <h1>Node Rewards Control Deck</h1>
+    </div>
+    <form method="post" action="/logout">
+        <button class="logout" type="submit">Log Out</button>
+    </form>
+</header>
+<section class="cards">
+    <article class="card">
+        <h2>Daily Reward Pool</h2>
+        <strong>{{ '%.8f'|format(pool_amount) }} BTC</strong>
+        <form class="pool-form" method="post" action="/api/pool" onsubmit="return updatePool(event);">
+            <input type="number" name="amount" min="0" step="0.00000001" placeholder="Update pool amount">
+            <button type="submit">Set Pool</button>
+        </form>
+    </article>
+    <article class="card">
+        <h2>Active Nodes</h2>
+        <strong>{{ nodes|selectattr('status', 'equalto', 'active')|list|length }}</strong>
+        <div class="neon-divider"></div>
+        <h2>Total Uptime (hrs)</h2>
+        <strong>{{ '%.2f'|format(rewards|map(attribute='uptime_seconds')|sum / 3600 if rewards|length else 0) }}</strong>
+    </article>
+</section>
+<section class="card">
+    <h2>Node Health &amp; Rewards</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Node Address</th>
+            <th>P2P</th>
+            <th>RPC</th>
+            <th>Status</th>
+            <th>Last Block</th>
+            <th>Uptime (s)</th>
+            <th>Reward Weight</th>
+            <th>Payout (BTC)</th>
+            <th>Wallet</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for reward in rewards %}
+            {% set node = nodes|selectattr('email', 'equalto', reward.email)|first %}
+            <tr>
+                <td>{{ node.node_address if node else '—' }}</td>
+                <td>{{ node.p2p_port if node else '—' }}</td>
+                <td>{{ node.rpc_port if node else '—' }}</td>
+                <td>
+                    <span class="status status-{{ node.status if node else 'inactive' }}">{{ (node.status if node else 'inactive')|upper }}</span>
+                </td>
+                <td>{{ node.last_block_height if node and node.last_block_height else '—' }}</td>
+                <td>{{ '%.0f'|format(reward.uptime_seconds) }}</td>
+                <td>{{ '%.2f'|format(reward.weight * 100) }}%</td>
+                <td>{{ '%.8f'|format(reward.payout_amount) }}</td>
+                <td class="wallet">{{ reward.wallet_address }}</td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="9" style="text-align:center; padding: 2.5rem; color: var(--muted);">
+                    No nodes registered yet. Use the API to register your validators.
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+<footer>Interchained × Bitcoin · Glass Nebula Console</footer>
+<script>
+async function updatePool(event) {
+    event.preventDefault();
+    const form = event.target;
+    const amount = parseFloat(form.amount.value);
+    if (!amount) {
+        alert('Please enter a reward pool amount.');
+        return false;
+    }
+    const response = await fetch('/api/pool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount })
+    });
+    if (response.ok) {
+        location.reload();
+    } else {
+        const data = await response.json();
+        alert(data.detail || 'Unable to update pool.');
+    }
+    return false;
+}
+</script>
+</body>
+</html>
