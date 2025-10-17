@@ -151,6 +151,7 @@ class NodeStatus(BaseModel):
     latency_ms: Optional[float] = None
     block_height: Optional[int] = None
     is_flagged: bool = False
+    is_online: bool
 
 
 class RewardSummary(BaseModel):
