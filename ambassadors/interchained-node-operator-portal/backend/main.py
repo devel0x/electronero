@@ -19,10 +19,12 @@ from .utils.redis_client import close_redis
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     monitor = NodeMonitor()
     rewards_job = RewardDistributor()
+    print("[🚀] Starting NodeMonitor and RewardDistributor...")
     await asyncio.gather(monitor.start(), rewards_job.start())
     try:
         yield
     finally:
+        print("[🛑] Stopping background tasks...")
         await asyncio.gather(monitor.stop(), rewards_job.stop())
         await close_redis()
 
