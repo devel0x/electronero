@@ -1,0 +1,123 @@
+import { useEffect, useMemo, useState } from 'react';
+import AdminShell from '../components/layout/AdminShell';
+import RewardGraph from '../components/RewardGraph';
+import { useAuth } from '../context/AuthContext';
+import api from '../lib/api';
+
+export default function RewardsPage() {
+  const { token } = useAuth();
+  const [history, setHistory] = useState([]);
+  const [today, setToday] = useState({ rewards: {} });
+  const [nodes, setNodes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!token) return;
+    async function load() {
+      try {
+        const [historyRes, todayRes, nodesRes] = await Promise.all([
+          api.rewardHistory(token),
+          api.rewardSummary(token),
+          api.listNodes(token),
+        ]);
+        setHistory(historyRes.history || []);
+        setToday(todayRes);
+        setNodes(nodesRes || []);
+      } catch (err) {
+        setError('Unable to load reward data.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [token]);
+
+  const nodeIndex = useMemo(() => {
+    const map = new Map();
+    nodes.forEach((node) => map.set(node.id, node));
+    return map;
+  }, [nodes]);
+
+  const graphData = useMemo(() => {
+    const totals = history.reduce((acc, item) => {
+      const key = new Date(item.date).toLocaleDateString();
+      acc[key] = (acc[key] || 0) + Number(item.amount);
+      return acc;
+    }, {});
+    return Object.entries(totals).map(([date, amount]) => ({ date, amount }));
+  }, [history]);
+
+  const totalToday = useMemo(() => {
+    return Object.values(today.rewards || {}).reduce((sum, amount) => sum + Number(amount), 0);
+  }, [today]);
+
+  const lifetime = useMemo(() => {
+    return history.reduce((sum, entry) => sum + Number(entry.amount), 0);
+  }, [history]);
+
+  return (
+    <AdminShell title="Rewards & Incentives">
+      {loading ? (
+        <p className="text-slate-400">Aggregating distribution records…</p>
+      ) : error ? (
+        <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p>
+      ) : (
+        <div className="space-y-8">
+          <section className="rounded-2xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-lg shadow-black/30">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-100">Reward Velocity</h2>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily distributions</p>
+              </div>
+              <div className="text-right text-sm text-slate-400">
+                <div>Lifetime distributed</div>
+                <div className="text-lg font-semibold text-emerald-300">{lifetime.toFixed(4)} ITC</div>
+              </div>
+            </div>
+            <RewardGraph data={graphData} />
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-lg shadow-black/30">
+              <h2 className="text-lg font-semibold text-slate-100">Today&apos;s Allocations</h2>
+              <p className="mt-2 text-sm text-slate-400">Total pool distributed: {totalToday.toFixed(4)} ITC</p>
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                {Object.entries(today.rewards || {}).map(([nodeId, amount]) => {
+                  const node = nodeIndex.get(nodeId);
+                  return (
+                    <div key={nodeId} className="flex items-center justify-between rounded-xl border border-slate-900/60 bg-slate-900/40 px-4 py-3">
+                      <div>
+                        <div className="font-semibold text-slate-100">{node?.name || nodeId}</div>
+                        <div className="text-xs text-slate-500">{node?.wallet_address || 'Wallet not assigned'}</div>
+                      </div>
+                      <div className="text-emerald-300">{Number(amount).toFixed(4)} ITC</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-lg shadow-black/30">
+              <h2 className="text-lg font-semibold text-slate-100">Recent Payout Events</h2>
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                {history.slice(-10).reverse().map((entry) => {
+                  const node = nodeIndex.get(entry.node_id);
+                  return (
+                    <div key={`${entry.node_id}-${entry.date}`} className="rounded-xl border border-slate-900/60 bg-slate-900/30 px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-100">{node?.name || entry.node_id}</span>
+                        <span className="text-emerald-300">{Number(entry.amount).toFixed(4)} ITC</span>
+                      </div>
+                      <div className="text-xs text-slate-500">{new Date(entry.date).toLocaleString()}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </AdminShell>
+  );
+}

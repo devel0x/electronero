@@ -68,6 +68,7 @@ src/qt/interchained-qt.includes
 *.rej
 *.orig
 *.pyc
+__pycache__/
 *.o
 *.o-*
 *.a
