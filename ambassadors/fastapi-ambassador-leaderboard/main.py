@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import ipaddress
 import mimetypes
@@ -12,6 +13,7 @@ import csv
 import io
 import string
 import random
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -20,8 +22,8 @@ import requests
 import pandas as pd
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Query, Request, UploadFile, File
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
+from fastapi import File, FastAPI, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
@@ -125,12 +127,23 @@ MAINTENANCE_FLAG_KEY = "app:maintenance_mode"
 # Remove/normalize invalid surrogate code points from Python strings.
 _SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
 
+_ROOM_SLUG_RE = re.compile(r"[^a-z0-9-]")
+
 def _safe_text(x: Any) -> str:
     s = str(x)
     if not _SURROGATE_RE.search(s):
         return s
     s = _SURROGATE_RE.sub("�", s)  # replacement char
     return s.encode("utf-8", "replace").decode("utf-8")
+
+
+def _normalize_room_id(room: str | None) -> str:
+    candidate = (room or "").strip().lower().replace(" ", "-")
+    candidate = _ROOM_SLUG_RE.sub("", candidate)
+    if not candidate:
+        return "ambassador-hub"
+    return candidate[:80]
+
 
 def _sanitize_obj(o: Any):
     if isinstance(o, str):
@@ -154,10 +167,211 @@ def _load_registrations() -> set[str]:
 
 REGISTERED_EMAILS = _load_registrations()
 
+
+def _positive_int_from_env(name: str, default: int | None = None) -> int | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    if value <= 0:
+        return None
+    return value
+
+
+MEETING_MAX_ROOMS = _positive_int_from_env("MEETING_MAX_ROOMS", 25)
+MEETING_MAX_PARTICIPANTS = _positive_int_from_env("MEETING_MAX_PARTICIPANTS", 12)
+
 REFERRAL_CODE_KEY_PREFIX = "referral:code:"
 REFERRALS_HASH_PREFIX = "referrals:"
 REFERRAL_CODE_LENGTH = 8
 PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v2"
+
+
+@dataclass
+class MeetingParticipant:
+    websocket: WebSocket
+    peer_id: str
+    email: str
+    display_name: str
+    joined_at: datetime = field(default_factory=datetime.utcnow)
+
+    def public_payload(self) -> dict[str, str]:
+        return {"peer_id": self.peer_id, "display_name": self.display_name}
+
+    def admin_payload(self) -> dict[str, str]:
+        return {
+            "peer_id": self.peer_id,
+            "email": self.email,
+            "display_name": self.display_name,
+            "joined_at": self.joined_at.isoformat(timespec="seconds"),
+        }
+
+
+class MeetingCapacityError(Exception):
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
+
+class MeetingManager:
+    def __init__(
+        self,
+        *,
+        max_rooms: int | None = None,
+        max_participants_per_room: int | None = None,
+    ) -> None:
+        self._rooms: dict[str, dict[str, MeetingParticipant]] = {}
+        self._lock = asyncio.Lock()
+        self._max_rooms = max_rooms if max_rooms and max_rooms > 0 else None
+        self._max_participants_per_room = (
+            max_participants_per_room
+            if max_participants_per_room and max_participants_per_room > 0
+            else None
+        )
+
+    async def join(
+        self, room_id: str, participant: MeetingParticipant
+    ) -> list[dict[str, str]]:
+        async with self._lock:
+            room = self._rooms.get(room_id)
+            if room is None:
+                if self._max_rooms is not None and len(self._rooms) >= self._max_rooms:
+                    raise MeetingCapacityError(
+                        "max_rooms",
+                        "All meeting rooms are in use. Please try again shortly.",
+                    )
+                room = {}
+                self._rooms[room_id] = room
+            if (
+                self._max_participants_per_room is not None
+                and len(room) >= self._max_participants_per_room
+            ):
+                raise MeetingCapacityError(
+                    "max_participants",
+                    "This meeting is full. Please join another room or wait for a spot.",
+                )
+            participant.joined_at = datetime.utcnow()
+            existing = [p.public_payload() for p in room.values()]
+            room[participant.peer_id] = participant
+        return existing
+
+    async def leave(self, room_id: str, peer_id: str) -> None:
+        async with self._lock:
+            room = self._rooms.get(room_id)
+            if not room:
+                return
+            room.pop(peer_id, None)
+            if not room:
+                self._rooms.pop(room_id, None)
+
+    async def broadcast(
+        self, room_id: str, message: str, exclude: set[str] | None = None
+    ) -> None:
+        exclude = exclude or set()
+        async with self._lock:
+            room = dict(self._rooms.get(room_id, {}))
+        to_drop: list[str] = []
+        for peer_id, participant in room.items():
+            if peer_id in exclude:
+                continue
+            try:
+                await participant.websocket.send_text(message)
+            except Exception:
+                to_drop.append(peer_id)
+        for peer_id in to_drop:
+            await self.leave(room_id, peer_id)
+
+    async def send_to(self, room_id: str, peer_id: str, message: str) -> bool:
+        async with self._lock:
+            participant = (self._rooms.get(room_id) or {}).get(peer_id)
+        if not participant:
+            return False
+        try:
+            await participant.websocket.send_text(message)
+            return True
+        except Exception:
+            await self.leave(room_id, peer_id)
+            return False
+
+    async def snapshot(self) -> dict[str, Any]:
+        async with self._lock:
+            rooms: dict[str, list[dict[str, str]]] = {}
+            for room_id, participants in self._rooms.items():
+                rooms[room_id] = [p.admin_payload() for p in participants.values()]
+        stats = await self.stats()
+        return {"rooms": rooms, "stats": stats}
+
+    async def disconnect(
+        self, room_id: str, peer_id: str, *, reason: str | None = None
+    ) -> bool:
+        async with self._lock:
+            participant = (self._rooms.get(room_id) or {}).get(peer_id)
+        if not participant:
+            return False
+        notice = {
+            "type": "admin-disconnect",
+            "peer_id": peer_id,
+        }
+        if reason:
+            notice["message"] = _safe_text(reason)
+        try:
+            await participant.websocket.send_text(json.dumps(notice))
+        except Exception:
+            pass
+        try:
+            await participant.websocket.close(code=4401, reason=reason or "admin_remove")
+        except Exception:
+            pass
+        await self.leave(room_id, peer_id)
+        await self.broadcast(
+            room_id,
+            json.dumps({"type": "peer-left", "peer_id": peer_id}),
+        )
+        return True
+
+    async def close_room(self, room_id: str, *, reason: str | None = None) -> bool:
+        async with self._lock:
+            peer_ids = list((self._rooms.get(room_id) or {}).keys())
+        if not peer_ids:
+            return False
+        closed = False
+        for peer_id in peer_ids:
+            removed = await self.disconnect(room_id, peer_id, reason=reason)
+            closed = closed or removed
+        return closed
+
+    async def stats(self) -> dict[str, int | None]:
+        async with self._lock:
+            rooms = len(self._rooms)
+            participants = sum(len(room) for room in self._rooms.values())
+            largest = max((len(room) for room in self._rooms.values()), default=0)
+            max_rooms = self._max_rooms
+            max_participants = self._max_participants_per_room
+        estimated_capacity = None
+        if max_rooms and max_participants:
+            estimated_capacity = max_rooms * max_participants
+        available_rooms = None
+        if max_rooms is not None:
+            available_rooms = max(max_rooms - rooms, 0)
+        return {
+            "rooms_active": rooms,
+            "rooms_limit": max_rooms,
+            "rooms_available": available_rooms,
+            "participants_active": participants,
+            "participants_per_room_limit": max_participants,
+            "largest_room": largest,
+            "estimated_total_capacity": estimated_capacity,
+        }
+
+
+meeting_manager = MeetingManager(
+    max_rooms=MEETING_MAX_ROOMS,
+    max_participants_per_room=MEETING_MAX_PARTICIPANTS,
+)
 MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
 PENDING_VERIFICATION_MIGRATION_SENTINEL = (
     MIGRATIONS_DIR / "pending_all_v2.complete"
@@ -2074,6 +2288,13 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
 
 async def _current_email(request: Request) -> str | None:
     token = request.cookies.get("session")
+    if not token:
+        return None
+    return await redis_client.get(f"session:{token}")
+
+
+async def _current_email_from_websocket(websocket: WebSocket) -> str | None:
+    token = websocket.cookies.get("session")
     if not token:
         return None
     return await redis_client.get(f"session:{token}")
@@ -4625,6 +4846,9 @@ async def admin_panel(request: Request) -> Any:
     analytics = await _analytics_dashboard(page=page, limit=limit)
     gamefi_state = await _wheel_state(None, limit=15)
     maintenance_enabled = await _maintenance_enabled()
+    meeting_snapshot = await meeting_manager.snapshot()
+    meeting_message = request.query_params.get("meeting_msg", "")
+    meeting_error = request.query_params.get("meeting_err", "")
     # transfers = await _all_transfer_history()
     pending_referrals = await _pending_referrals()
     stakes = await _all_active_stakes()
@@ -4665,6 +4889,9 @@ async def admin_panel(request: Request) -> Any:
             "proposals": proposals,
             "analytics": analytics,
             "maintenance_enabled": maintenance_enabled,
+            "meeting_snapshot": meeting_snapshot,
+            "meeting_message": meeting_message,
+            "meeting_error": meeting_error,
             "gamefi_state": gamefi_state,
             "gamefi_message": gamefi_message,
             "gamefi_error": gamefi_error,
@@ -4698,6 +4925,61 @@ async def admin_panel(request: Request) -> Any:
             "otc_itc_to_igp": cached_data.get("itc_to_igp", 0.0),
         },
     )
+
+
+@app.post("/admin/meetings/kick")
+async def admin_meetings_kick(
+    request: Request,
+    room_id: str = Form(...),
+    peer_id: str = Form(...),
+    reason: str = Form("")
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    room_key = _normalize_room_id(room_id)
+    peer_key = str(peer_id or "").strip()
+    if not peer_key:
+        err = quote_plus("Select a participant to remove.")
+        return RedirectResponse(f"/admin?meeting_err={err}#meetings", status_code=303)
+
+    cleaned_reason = _safe_text(reason.strip())
+    message = cleaned_reason or "Removed by an administrator."
+    removed = await meeting_manager.disconnect(room_key, peer_key, reason=message)
+    if removed:
+        msg = quote_plus("Participant removed from the meeting.")
+        return RedirectResponse(f"/admin?meeting_msg={msg}#meetings", status_code=303)
+
+    err = quote_plus("Participant already left the meeting.")
+    return RedirectResponse(f"/admin?meeting_err={err}#meetings", status_code=303)
+
+
+@app.post("/admin/meetings/close")
+async def admin_meetings_close(
+    request: Request, room_id: str = Form(...), reason: str = Form("")
+) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    room_key = _normalize_room_id(room_id)
+    cleaned_reason = _safe_text(reason.strip())
+    message = cleaned_reason or "Meeting closed by an administrator."
+    closed = await meeting_manager.close_room(room_key, reason=message)
+    if closed:
+        msg = quote_plus("Meeting closed and participants notified.")
+        return RedirectResponse(f"/admin?meeting_msg={msg}#meetings", status_code=303)
+
+    err = quote_plus("Room not found or already empty.")
+    return RedirectResponse(f"/admin?meeting_err={err}#meetings", status_code=303)
+
+
+@app.get("/api/admin/meetings")
+async def api_admin_meetings(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    snapshot = await meeting_manager.snapshot()
+    payload = {"ok": True, "rooms": snapshot["rooms"], "stats": snapshot["stats"]}
+    return JSONResponse(payload)
 
 
 @app.post("/admin/gamefi/wheel")
@@ -6117,6 +6399,183 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     tasks = await _all_tasks()
     return JSONResponse({"ok": True, "tasks": tasks})
+
+
+@app.get("/business/meetings")
+async def business_meetings(
+    request: Request, room: str = Query("ambassador-hub")
+) -> Any:
+    guard = await _maintenance_guard(request)
+    if guard:
+        return guard
+
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    room_id = _normalize_room_id(room)
+    room_label = room.strip() or "Ambassador Hub"
+
+    profile = await redis_client.hgetall(f"user:{email}")
+    display_name = (
+        profile.get("name")
+        or profile.get("telegram")
+        or email.split("@")[0]
+        or "Ambassador"
+    )
+    display_name = _safe_text(display_name)
+
+    meeting_limits = await meeting_manager.stats()
+
+    return templates.TemplateResponse(
+        "meeting.html",
+        {
+            "request": request,
+            "project_name": "Interchained × Elara – Ambassadors",
+            "room_id": room_id,
+            "room_label": room_label,
+            "display_name": display_name,
+            "meeting_limits": meeting_limits,
+        },
+    )
+
+
+@app.websocket("/ws/meetings/{room_path}")
+async def meeting_socket(websocket: WebSocket, room_path: str) -> None:
+    email = await _current_email_from_websocket(websocket)
+    if not email:
+        await websocket.close(code=4401)
+        return
+
+    await websocket.accept()
+
+    room_id = _normalize_room_id(room_path)
+    profile = await redis_client.hgetall(f"user:{email}")
+    display_name = (
+        profile.get("name")
+        or profile.get("telegram")
+        or email.split("@")[0]
+        or "Ambassador"
+    )
+    display_name = _safe_text(display_name)
+
+    peer_id = secrets.token_hex(8)
+    participant = MeetingParticipant(
+        websocket=websocket,
+        peer_id=peer_id,
+        email=email,
+        display_name=display_name,
+    )
+    joined = False
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = message.get("type")
+
+            if msg_type == "join" and not joined:
+                try:
+                    existing = await meeting_manager.join(room_id, participant)
+                except MeetingCapacityError as exc:
+                    metrics = await meeting_manager.stats()
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "type": "capacity",
+                                "code": exc.code,
+                                "message": exc.detail,
+                                "metrics": metrics,
+                            }
+                        )
+                    )
+                    await websocket.close(code=4403)
+                    return
+                joined = True
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "init",
+                            "peer_id": peer_id,
+                            "display_name": display_name,
+                            "participants": existing,
+                        }
+                    )
+                )
+                await meeting_manager.broadcast(
+                    room_id,
+                    json.dumps(
+                        {
+                            "type": "peer-joined",
+                            "peer": participant.public_payload(),
+                        }
+                    ),
+                    exclude={peer_id},
+                )
+            elif msg_type == "chat" and joined:
+                text = _safe_text(str(message.get("text", ""))).strip()
+                if not text:
+                    continue
+                payload = json.dumps(
+                    {
+                        "type": "chat",
+                        "peer_id": peer_id,
+                        "display_name": display_name,
+                        "text": text,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                await meeting_manager.broadcast(room_id, payload)
+            elif msg_type == "signal" and joined:
+                target = str(message.get("target") or "").strip()
+                data = message.get("data")
+                if not target or data is None:
+                    continue
+                delivered = await meeting_manager.send_to(
+                    room_id,
+                    target,
+                    json.dumps(
+                        {
+                            "type": "signal",
+                            "peer_id": peer_id,
+                            "data": data,
+                        }
+                    ),
+                )
+                if not delivered:
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "message": "peer_unavailable",
+                                "target": target,
+                            }
+                        )
+                    )
+            elif msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if joined:
+            await meeting_manager.leave(room_id, peer_id)
+            await meeting_manager.broadcast(
+                room_id,
+                json.dumps({"type": "peer-left", "peer_id": peer_id}),
+            )
+
+
+@app.get("/api/meetings/metrics")
+async def api_meetings_metrics(request: Request) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    metrics = await meeting_manager.stats()
+    return JSONResponse({"ok": True, "metrics": metrics})
 
 
 @app.get("/")
