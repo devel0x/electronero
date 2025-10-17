@@ -86,8 +86,9 @@ class NodeMonitor:
                     "uptime_score": uptime_score,
                     "last_seen": now.isoformat(),
                     "latency_ms": health.latency_ms,
-                    "block_height": block_height,       # ✅ Only non-zero if RPC responded
-                    "rpc_responding": rpc_responding,   # ✅ 0 if no RPC or it failed
+                    "block_height": block_height,      
+                    "rpc_responding": rpc_responding, 
+                    "is_online": int(health.is_online), 
                 },
             )
 
