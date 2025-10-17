@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <title>Interchained Control Plane · Dashboard Preview</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style>
+      body {
+        background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 55%),
+          radial-gradient(circle at top right, rgba(168, 85, 247, 0.08), transparent 55%),
+          #020617;
+      }
+      .glass-panel {
+        backdrop-filter: blur(24px);
+        background: linear-gradient(160deg, rgba(15, 23, 42, 0.86) 0%, rgba(2, 6, 23, 0.75) 100%);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        box-shadow: 0 10px 40px rgba(15, 23, 42, 0.45);
+      }
+      .metric-card {
+        background: linear-gradient(160deg, rgba(8, 47, 73, 0.75), rgba(15, 23, 42, 0.78));
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
+      }
+      .metric-card[data-tone="amber"] {
+        background: linear-gradient(160deg, rgba(120, 53, 15, 0.75), rgba(30, 41, 59, 0.8));
+        border-color: rgba(251, 191, 36, 0.2);
+      }
+      .metric-card[data-tone="fuchsia"] {
+        background: linear-gradient(160deg, rgba(134, 25, 143, 0.75), rgba(30, 41, 59, 0.8));
+        border-color: rgba(232, 121, 249, 0.25);
+      }
+      .metric-card[data-tone="slate"] {
+        background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.8));
+        border-color: rgba(148, 163, 184, 0.24);
+      }
+      .badge {
+        border: 1px solid rgba(94, 234, 212, 0.3);
+        background: rgba(45, 212, 191, 0.08);
+      }
+      .glow-ring {
+        position: relative;
+      }
+      .glow-ring::after {
+        content: "";
+        position: absolute;
+        inset: -30px;
+        border-radius: 9999px;
+        opacity: 0.45;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.12), transparent 65%);
+        filter: blur(12px);
+        z-index: -1;
+      }
+      table thead th {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.68rem;
+        color: rgba(148, 163, 184, 0.8);
+      }
+      table tbody tr:hover {
+        background: rgba(30, 41, 59, 0.55);
+      }
+    </style>
+  </head>
+  <body class="h-full text-slate-100">
+    <div class="min-h-screen pb-16">
+      <div class="mx-auto flex max-w-7xl flex-col gap-10 px-6 pt-12 lg:flex-row lg:gap-14 lg:px-12">
+        <aside class="glass-panel w-full max-w-xs rounded-3xl p-8 text-sm text-slate-300">
+          <div class="glow-ring mb-12 flex items-center gap-4">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/20 text-2xl text-cyan-300 shadow-lg shadow-cyan-500/40">
+              🪐
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-[0.35em] text-cyan-400">Interchained</p>
+              <h1 class="text-xl font-semibold text-slate-100">Control Plane</h1>
+            </div>
+          </div>
+          <nav class="space-y-4">
+            <div>
+              <p class="mb-1 text-[0.6rem] uppercase tracking-[0.25em] text-slate-500">Overview</p>
+              <ul class="space-y-1">
+                <li class="rounded-xl bg-cyan-500/10 px-4 py-2 text-cyan-200">Dashboard</li>
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Nodes</li>
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Rewards</li>
+              </ul>
+            </div>
+            <div>
+              <p class="mb-1 text-[0.6rem] uppercase tracking-[0.25em] text-slate-500">Admin</p>
+              <ul class="space-y-1">
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Organizations</li>
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Users</li>
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Billing</li>
+                <li class="rounded-xl px-4 py-2 hover:bg-white/5">Audit Log</li>
+              </ul>
+            </div>
+          </nav>
+          <div class="mt-12 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-xs leading-relaxed text-slate-400">
+            <p class="font-semibold text-slate-200">Tenant</p>
+            <p class="text-cyan-200">org-enterprise</p>
+            <p class="mt-3 text-slate-400">Operator uptime exceeds 99.4% for the last 7 days. Reward multiplier locked at 1.12×.</p>
+          </div>
+        </aside>
+
+        <main class="flex-1 space-y-10">
+          <header class="flex flex-col gap-4 rounded-3xl border border-slate-800/70 bg-slate-950/70 p-8 shadow-xl shadow-black/30 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-3xl font-semibold text-slate-100">Executive Overview</h2>
+              <p class="text-sm text-slate-400">Demo Admin · Super Admin · org-enterprise</p>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <p class="text-sm font-semibold text-slate-100">Demo Admin</p>
+                <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Super Admin</p>
+              </div>
+              <button class="rounded-lg border border-slate-700/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition hover:border-rose-500/40 hover:text-rose-300">Logout</button>
+            </div>
+          </header>
+
+          <section class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div class="metric-card rounded-2xl p-6" data-tone="cyan">
+              <p class="text-xs uppercase tracking-[0.35em] text-cyan-200/80">Active Nodes</p>
+              <h3 class="mt-4 text-3xl font-semibold text-white">128</h3>
+              <p class="mt-2 text-xs text-cyan-100/70">Nodes responding to orchestration</p>
+            </div>
+            <div class="metric-card rounded-2xl p-6" data-tone="amber">
+              <p class="text-xs uppercase tracking-[0.35em] text-amber-200/80">Avg Uptime</p>
+              <h3 class="mt-4 text-3xl font-semibold text-white">99.42%</h3>
+              <p class="mt-2 text-xs text-amber-100/70">Weighted across fleet</p>
+            </div>
+            <div class="metric-card rounded-2xl p-6" data-tone="fuchsia">
+              <p class="text-xs uppercase tracking-[0.35em] text-fuchsia-200/80">Flagged Nodes</p>
+              <h3 class="mt-4 text-3xl font-semibold text-white">4</h3>
+              <p class="mt-2 text-xs text-fuchsia-100/70">Requires operator attention</p>
+            </div>
+            <div class="metric-card rounded-2xl p-6" data-tone="slate">
+              <p class="text-xs uppercase tracking-[0.35em] text-slate-200/80">Rewards Today</p>
+              <h3 class="mt-4 text-3xl font-semibold text-white">312.4821 ITC</h3>
+              <p class="mt-2 text-xs text-slate-200/70">Distributed during last cycle</p>
+            </div>
+          </section>
+
+          <section class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div class="glass-panel lg:col-span-2 rounded-3xl p-8">
+              <div class="mb-6 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-white">Fleet Uptime</h3>
+                <span class="text-xs uppercase tracking-[0.35em] text-slate-500">Last 7 Days</span>
+              </div>
+              <div class="grid grid-cols-7 gap-3 text-center text-xs text-slate-400">
+                <div class="space-y-3">
+                  <div class="mx-auto h-32 w-12 rounded-xl bg-gradient-to-t from-cyan-500/20 via-cyan-400/70 to-cyan-300/80"></div>
+                  <p class="text-cyan-200">Mon</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-28 w-12 rounded-xl bg-gradient-to-t from-fuchsia-500/20 via-fuchsia-400/60 to-fuchsia-300/80"></div>
+                  <p class="text-fuchsia-200">Tue</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-36 w-12 rounded-xl bg-gradient-to-t from-emerald-500/20 via-emerald-400/70 to-emerald-300/80"></div>
+                  <p class="text-emerald-200">Wed</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-30 w-12 rounded-xl bg-gradient-to-t from-blue-500/20 via-blue-400/70 to-blue-300/80"></div>
+                  <p class="text-blue-200">Thu</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-32 w-12 rounded-xl bg-gradient-to-t from-cyan-500/20 via-cyan-400/70 to-cyan-300/80"></div>
+                  <p class="text-cyan-200">Fri</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-34 w-12 rounded-xl bg-gradient-to-t from-purple-500/20 via-purple-400/70 to-purple-300/80"></div>
+                  <p class="text-purple-200">Sat</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="mx-auto h-35 w-12 rounded-xl bg-gradient-to-t from-amber-500/20 via-amber-400/70 to-amber-300/80"></div>
+                  <p class="text-amber-200">Sun</p>
+                </div>
+              </div>
+            </div>
+            <div class="glass-panel rounded-3xl p-8">
+              <h3 class="text-lg font-semibold text-white">Plan Mix</h3>
+              <div class="mt-6 space-y-4 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Enterprise</span>
+                  <span class="text-slate-100">62</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Scale</span>
+                  <span class="text-slate-100">37</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Growth</span>
+                  <span class="text-slate-100">21</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Community</span>
+                  <span class="text-slate-100">8</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="glass-panel rounded-3xl p-8">
+            <div class="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h3 class="text-lg font-semibold text-white">Node Health Snapshot</h3>
+              <span class="badge inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs uppercase tracking-[0.3em] text-teal-200">64 Active Nodes</span>
+            </div>
+            <div class="overflow-hidden rounded-2xl border border-white/5">
+              <table class="min-w-full divide-y divide-slate-800/60 text-sm">
+                <thead class="bg-slate-900/60">
+                  <tr>
+                    <th class="px-5 py-3 text-left">Node</th>
+                    <th class="px-5 py-3 text-left">Location</th>
+                    <th class="px-5 py-3 text-left">Uptime</th>
+                    <th class="px-5 py-3 text-left">Latency</th>
+                    <th class="px-5 py-3 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/40 bg-slate-950/40 text-slate-300">
+                  <tr>
+                    <td class="px-5 py-4 font-medium text-slate-100">ic-node-12</td>
+                    <td class="px-5 py-4">New York, US</td>
+                    <td class="px-5 py-4 text-emerald-300">99.82%</td>
+                    <td class="px-5 py-4">42 ms</td>
+                    <td class="px-5 py-4"><span class="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-emerald-200">Healthy</span></td>
+                  </tr>
+                  <tr>
+                    <td class="px-5 py-4 font-medium text-slate-100">ic-node-44</td>
+                    <td class="px-5 py-4">Frankfurt, DE</td>
+                    <td class="px-5 py-4 text-emerald-300">99.64%</td>
+                    <td class="px-5 py-4">57 ms</td>
+                    <td class="px-5 py-4"><span class="rounded-full border border-cyan-400/50 bg-cyan-500/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-cyan-200">Boosted</span></td>
+                  </tr>
+                  <tr>
+                    <td class="px-5 py-4 font-medium text-slate-100">ic-node-08</td>
+                    <td class="px-5 py-4">Tokyo, JP</td>
+                    <td class="px-5 py-4 text-amber-300">96.04%</td>
+                    <td class="px-5 py-4">81 ms</td>
+                    <td class="px-5 py-4"><span class="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-amber-200">Flagged</span></td>
+                  </tr>
+                  <tr>
+                    <td class="px-5 py-4 font-medium text-slate-100">ic-node-31</td>
+                    <td class="px-5 py-4">São Paulo, BR</td>
+                    <td class="px-5 py-4 text-rose-300">91.24%</td>
+                    <td class="px-5 py-4">114 ms</td>
+                    <td class="px-5 py-4"><span class="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-rose-200">Degraded</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
