@@ -1,5 +1,7 @@
 const config = window.MEETING_CONFIG || {};
-const roomId = String(config.roomId || 'ambassador-hub');
+// const roomId = String(config.roomId || 'ambassador-hub');
+const urlParams = new URLSearchParams(window.location.search);
+const roomId = urlParams.get("room") || String(config.roomId || 'ambassador-hub');
 const displayName = String(config.displayName || 'Ambassador');
 const capacity = config.capacity || {};
 
