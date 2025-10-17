@@ -211,9 +211,20 @@ async function createPeerConnection(peerId, name) {
 
   peer = ensureRemoteTile(peerId, name || participants.get(peerId));
   const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      // 🚀 Optional but highly recommended for mobile users:
+      // Replace these with your actual TURN server credentials once set up
+      {
+        urls: 'turn:turn.yourdomain.com:3478',
+        username: 'turnuser',
+        credential: 'turnpassword'
+      }
+    ]
   });
+  
   peer.pc = pc;
+
 
   pc.ontrack = (event) => {
     if (!peer.video) return;
