@@ -24,7 +24,7 @@ export default function NodeTable({ nodes }) {
             const uptime = (node.uptime_score || 0) * 100;
             const status = node.is_flagged
               ? 'Flagged'
-              : uptime > 95
+              : node.is_online
               ? 'Online'
               : uptime > 70
               ? 'Degraded'
