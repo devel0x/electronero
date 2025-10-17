@@ -38,6 +38,7 @@
                 <li class="nav-item"><a class="nav-link" href="#otc">OTC Desk</a></li>
                 <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
                 <li class="nav-item"><a class="nav-link" href="#gamefi">GameFi</a></li>
+                <li class="nav-item"><a class="nav-link" href="#business">Business</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
         </div>
@@ -200,6 +201,110 @@
                         </ul>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div id="business" class="glass-card p-3 mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Business Rooms</h1>
+                <p class="mb-0 text-light small">Manage the collaboration rooms shown in the ambassador business panel.</p>
+            </div>
+            <div class="text-lg-end">
+                <span class="badge bg-info text-dark">{{ business_rooms|length }} rooms</span>
+            </div>
+        </div>
+        {% if business_message %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ business_message }}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        {% if business_error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ business_error }}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        <div class="vstack gap-3">
+            {% for room in business_rooms %}
+            <div class="card bg-dark bg-opacity-75 border border-light" id="business-room-{{ room.id }}">
+                <div class="card-body">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                        <div>
+                            <h2 class="h6 text-uppercase text-muted mb-1">{{ room.name }}</h2>
+                            <div class="small text-light">Room ID: <code>{{ room.id }}</code></div>
+                            <div class="small text-info">{{ business_counts.get(room.id, 0) }} live participant{% if business_counts.get(room.id, 0) != 1 %}s{% endif %}</div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <form method="post" action="/admin/business/rooms/clear" class="d-inline" onsubmit="return confirm('Clear chat history for {{ room.name }}?');">
+                                <input type="hidden" name="room_id" value="{{ room.id }}">
+                                <button type="submit" class="btn btn-outline-warning btn-sm">Clear chat</button>
+                            </form>
+                            <form method="post" action="/admin/business/rooms/delete" class="d-inline" onsubmit="return confirm('Delete {{ room.name }}? This removes history and access.');">
+                                <input type="hidden" name="room_id" value="{{ room.id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    <form method="post" action="/admin/business/rooms" class="row g-3">
+                        <input type="hidden" name="room_id" value="{{ room.id }}">
+                        <div class="col-md-4">
+                            <label class="form-label small text-uppercase">Name</label>
+                            <input type="text" class="form-control form-control-sm" name="name" value="{{ room.name }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-uppercase">Topic</label>
+                            <input type="text" class="form-control form-control-sm" name="topic" value="{{ room.topic }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-uppercase">Ghost key</label>
+                            <input type="text" class="form-control form-control-sm" name="ghost_key" value="{{ room.ghost_key }}" placeholder="Leave blank for open access">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-uppercase">Description</label>
+                            <textarea class="form-control form-control-sm" name="description" rows="2">{{ room.description }}</textarea>
+                        </div>
+                        <div class="col-12 text-end">
+                            <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="card bg-dark bg-opacity-75 border border-light">
+                <div class="card-body text-muted">No business rooms defined yet. Use the form below to create one.</div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="card bg-dark bg-opacity-75 border border-light mt-4">
+            <div class="card-body">
+                <h2 class="h6 text-uppercase text-muted mb-3">Create new room</h2>
+                <form method="post" action="/admin/business/rooms" class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small text-uppercase">Name</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-uppercase">Topic</label>
+                        <input type="text" class="form-control form-control-sm" name="topic" placeholder="Optional">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-uppercase">Room ID</label>
+                        <input type="text" class="form-control form-control-sm" name="slug" placeholder="Auto if empty">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small text-uppercase">Description</label>
+                        <textarea class="form-control form-control-sm" name="description" rows="2" placeholder="Shown to ambassadors when selecting rooms."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-uppercase">Ghost key</label>
+                        <input type="text" class="form-control form-control-sm" name="ghost_key" placeholder="Leave blank for open access">
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end justify-content-end">
+                        <button type="submit" class="btn btn-success btn-sm">Create room</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

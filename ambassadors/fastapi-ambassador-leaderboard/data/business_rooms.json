@@ -1,0 +1,23 @@
+[
+  {
+    "id": "strategy",
+    "name": "Strategy War Room",
+    "description": "Plan high-impact raids, governance pushes, and cross-community launches.",
+    "topic": "Campaign Coordination",
+    "ghost_key": null
+  },
+  {
+    "id": "product-labs",
+    "name": "Product & Labs",
+    "description": "Deep dives into protocol upgrades, feature requests, and testing feedback.",
+    "topic": "Product Feedback",
+    "ghost_key": null
+  },
+  {
+    "id": "intel-vault",
+    "name": "Intel Vault",
+    "description": "Sensitive intel drops and counter-fud briefings. Share carefully.",
+    "topic": "Confidential",
+    "ghost_key": "ghost-7777"
+  }
+]
