@@ -38,6 +38,7 @@
                 <li class="nav-item"><a class="nav-link" href="#otc">OTC Desk</a></li>
                 <li class="nav-item"><a class="nav-link" href="#p2p">P2P Shop</a></li>
                 <li class="nav-item"><a class="nav-link" href="#gamefi">GameFi</a></li>
+                <li class="nav-item"><a class="nav-link" href="#meetings">Meetings</a></li>
             </ul>
             <a href="/admin/logout" class="btn btn-sm btn-outline-light ms-lg-3">Logout</a>
         </div>
@@ -68,6 +69,105 @@
                 </span>
             </form>
         </div>
+    </div>
+    <div id="meetings" class="glass-card p-3 mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h1 class="h5 text-uppercase mb-1">Meeting Control Center</h1>
+                <p class="mb-0 text-light small">
+                    Monitor every active room, remove disruptive participants, or close down a space instantly.
+                </p>
+            </div>
+            <div class="text-lg-end">
+                <div class="small text-uppercase text-info fw-semibold">Live Capacity</div>
+                <div class="fs-6 fw-bold">
+                    {{ meeting_snapshot.stats.rooms_active }} rooms · {{ meeting_snapshot.stats.participants_active }} ambassadors
+                </div>
+                <div class="small text-light">
+                    {% if meeting_snapshot.stats.rooms_limit %}
+                        Limit {{ meeting_snapshot.stats.rooms_limit }} rooms,
+                    {% else %}
+                        Unlimited rooms,
+                    {% endif %}
+                    {% if meeting_snapshot.stats.participants_per_room_limit %}
+                        {{ meeting_snapshot.stats.participants_per_room_limit }} per room
+                    {% else %}
+                        unlimited per room
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% if meeting_message %}
+        <div class="alert alert-success alert-dismissible fade show" role="status">
+            {{ meeting_message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        {% if meeting_error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ meeting_error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        {% if meeting_snapshot.rooms %}
+        <div class="row g-3">
+            {% for room_key, room_participants in meeting_snapshot.rooms|dictsort %}
+            <div class="col-12">
+                <div class="card bg-dark bg-opacity-75 border-light h-100">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+                            <div>
+                                <h2 class="h6 text-uppercase text-info mb-1">Room: {{ room_key }}</h2>
+                                <p class="small mb-0 text-muted">{{ room_participants|length }} participant{{ 's' if room_participants|length != 1 else '' }}</p>
+                            </div>
+                            <form class="d-flex flex-column flex-sm-row gap-2" method="post" action="/admin/meetings/close">
+                                <input type="hidden" name="room_id" value="{{ room_key }}">
+                                <input type="text" name="reason" class="form-control form-control-sm text-bg-dark border-secondary" placeholder="Reason (optional)">
+                                <button type="submit" class="btn btn-sm btn-warning">Close Room</button>
+                            </form>
+                        </div>
+                        {% if room_participants %}
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm align-middle mb-0">
+                                <thead class="table-light text-dark">
+                                    <tr>
+                                        <th scope="col">Ambassador</th>
+                                        <th scope="col">Joined</th>
+                                        <th scope="col" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for participant in room_participants %}
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ participant.display_name }}</div>
+                                            <div class="small text-muted">{{ participant.email }}</div>
+                                        </td>
+                                        <td class="small text-nowrap">{{ participant.joined_at }}</td>
+                                        <td class="text-end">
+                                            <form class="d-flex flex-column flex-sm-row gap-2 justify-content-end" method="post" action="/admin/meetings/kick">
+                                                <input type="hidden" name="room_id" value="{{ room_key }}">
+                                                <input type="hidden" name="peer_id" value="{{ participant.peer_id }}">
+                                                <input type="text" name="reason" class="form-control form-control-sm text-bg-dark border-secondary" placeholder="Reason (optional)">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">No ambassadors connected.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted small">No meeting rooms are currently active.</div>
+        {% endif %}
     </div>
     <div id="analytics" class="glass-card p-3 mb-4">
         <h1 class="h5 text-uppercase">Analytics Overview</h1>

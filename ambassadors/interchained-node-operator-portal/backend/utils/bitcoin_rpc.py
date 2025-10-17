@@ -62,6 +62,7 @@ async def check_node_health(p2p_address: str, rpc_url: str) -> NodeHealth:
     rpc_ok = False
     block_height: Optional[int] = None
 
+    # ✅ Always try P2P first
     if ":" in p2p_address:
         host, port_str = p2p_address.rsplit(":", 1)
         try:
