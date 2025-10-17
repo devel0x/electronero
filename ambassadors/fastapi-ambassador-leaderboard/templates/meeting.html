@@ -170,6 +170,36 @@
   </nav>
 
   <div class="container py-4">
+    <div class="meeting-card p-4 mb-4 text-center border-0 shadow-lg"
+     style="background: linear-gradient(145deg, rgba(0, 245, 233, 0.08), rgba(0, 153, 255, 0.06)); border: 1px solid rgba(0,255,180,0.2); box-shadow: 0 0 25px rgba(0,255,180,0.15); border-radius: 1rem;">
+  <h2 class="h5 fw-bold mb-3 text-uppercase" 
+      style="letter-spacing: 1px; background: linear-gradient(90deg, #00ffd0, #00a3ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+    🚀 Create or Join a Room
+  </h2>
+  
+  <form id="roomForm" action="/business/meetings" method="GET" class="d-flex flex-column flex-sm-row gap-3 justify-content-center align-items-center">
+    <input 
+      type="text" 
+      name="room" 
+      class="form-control text-center text-light border-0"
+      style="background: rgba(0,0,0,0.4); border: 1px solid rgba(0,255,180,0.2); border-radius: 0.75rem; padding: 0.75rem 1rem;"
+      placeholder="💡 Room name (e.g. devsync, alpha, whales-only)" 
+      required 
+    />
+    <button 
+      class="btn px-4 py-2 fw-semibold"
+      style="background: linear-gradient(135deg, #00ffd0, #00a3ff); border: none; border-radius: 0.75rem; color: #0b1120; transition: all 0.25s ease;"
+      onmouseover="this.style.filter='brightness(1.1)'"
+      onmouseout="this.style.filter='brightness(1)'">
+      🔑 Enter Room
+    </button>
+  </form>
+
+  <p class="text-info mt-3 mb-0" style="font-size: 0.9rem; opacity: 0.8;">
+    Each unique room name opens a new space. Share the link for others to join.
+  </p>
+</div>
+
     <div class="row g-4 align-items-stretch">
       <div class="col-lg-8 d-flex flex-column gap-3">
         <div class="status-banner" id="statusBanner" role="status" aria-live="polite">
