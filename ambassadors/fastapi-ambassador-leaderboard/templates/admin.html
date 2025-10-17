@@ -219,7 +219,14 @@
                 <span class="badge bg-danger">{{ rejected_list|length }} rejected</span>
             </div>
         </div>
-    
+
+        {% if referrals_error %}
+        <div class="alert alert-danger py-2 px-3 mt-2 mb-0">{{ referrals_error }}</div>
+        {% endif %}
+        {% if referrals_message %}
+        <div class="alert alert-success py-2 px-3 mt-2 mb-0">{{ referrals_message }}</div>
+        {% endif %}
+
         {% if pending_referrals %}
         <ul class="nav nav-tabs mb-3" id="referralTabs" role="tablist">
             <li class="nav-item" role="presentation">
@@ -284,6 +291,86 @@
         {% else %}
         <p class="mb-0 text-muted">No referrals are awaiting review. New submissions will appear here automatically.</p>
         {% endif %}
+
+        <div class="mt-4">
+            <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-3">
+                <div>
+                    <h2 class="h6 text-uppercase mb-1">Referral Network Overview</h2>
+                    <p class="small text-light mb-0">
+                        Track active ambassadors, their referrers, and potential rewards. Realizing rewards grants {{ '%.0f'|format(referral_totals.reward_rate_percent or 0) }}% of a referral's current score pad to the referrer.
+                    </p>
+                </div>
+                <form method="post" action="/admin/referrals/realize" class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
+                    <button type="submit" class="btn btn-warning btn-sm">Realize Referral Gains</button>
+                    <div class="text-muted small text-sm-end">
+                        Outstanding: <span class="text-light fw-semibold">{{ '%.2f'|format(referral_totals.outstanding or 0) }}</span> IGP
+                        • Realized: <span class="text-light fw-semibold">{{ '%.2f'|format(referral_totals.realized or 0) }}</span> IGP
+                    </div>
+                </form>
+            </div>
+            <div class="row g-3">
+                <div class="col-xl-5">
+                    <div class="table-responsive bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                        <table class="table table-dark table-striped table-sm align-middle mb-2">
+                            <thead class="table-light text-dark">
+                                <tr>
+                                    <th>Ambassador</th>
+                                    <th>Referred By</th>
+                                    <th class="text-end">Score Pad</th>
+                                    <th class="text-end">Referrals</th>
+                                    <th class="text-end">Referral IGP</th>
+                                    <th class="text-end">Realized</th>
+                                    <th class="text-end">Outstanding</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in referral_network_table %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ row.label }}</div>
+                                        <div class="small text-muted">{{ row.email }}</div>
+                                    </td>
+                                    <td>
+                                        {% if row.referred_by_label %}
+                                            <div class="fw-semibold">{{ row.referred_by_label }}</div>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ '%.2f'|format(row.score_pad or 0) }}</td>
+                                    <td class="text-end">{{ row.referrals }}</td>
+                                    <td class="text-end">{{ '%.2f'|format(row.referral_score or 0) }}</td>
+                                    <td class="text-end text-success">{{ '%.2f'|format(row.realized_reward or 0) }}</td>
+                                    <td class="text-end text-warning">{{ '%.2f'|format(row.outstanding_reward or 0) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">No referral performance data captured yet.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <div class="small text-muted">
+                            <div>Total active referrers: <strong>{{ referral_totals.referrers or 0 }}</strong></div>
+                            <div>Total direct referrals tracked: <strong>{{ referral_totals.referrals or 0 }}</strong></div>
+                            <div>Total potential rewards: <strong>{{ '%.2f'|format(referral_totals.potential or 0) }}</strong> IGP</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-7">
+                    <div class="bg-dark bg-opacity-50 border border-light rounded p-3 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h3 class="h6 mb-0 text-uppercase text-secondary">Network Graph</h3>
+                            <span class="badge bg-secondary text-uppercase">{{ referral_totals.links or 0 }} connections</span>
+                        </div>
+                        <div id="referral-network-chart" class="referral-network-chart text-center text-muted">
+                            Loading referral relationships…
+                        </div>
+                        <p class="small text-muted mt-2 mb-0">Node size scales with score pad. Drag nodes to explore relationships.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="recoveries" class="glass-card p-3 mb-4">
         <h1 class="h5">Password Recoveries</h1>
@@ -1443,6 +1530,7 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const maintenanceForm = document.getElementById('maintenance-form');
@@ -1490,6 +1578,114 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
             },
         });
+    }
+
+    const referralNodes = {{ referral_network_nodes | tojson }};
+    const referralLinks = {{ referral_network_links | tojson }};
+    const networkContainer = document.getElementById('referral-network-chart');
+    if (networkContainer) {
+        if (!referralNodes || !referralNodes.length || !referralLinks || !referralLinks.length || typeof d3 === 'undefined') {
+            networkContainer.textContent = referralNodes && referralNodes.length ? 'Not enough referral relationships to visualize yet.' : 'No referral data to display yet.';
+        } else {
+            const parentEl = networkContainer.parentElement;
+            const width = networkContainer.clientWidth || (parentEl ? parentEl.clientWidth : 600) || 600;
+            const height = 420;
+            networkContainer.textContent = '';
+            const svg = d3.select(networkContainer)
+                .append('svg')
+                .attr('width', '100%')
+                .attr('height', height)
+                .attr('viewBox', `0 0 ${width} ${height}`);
+
+            const nodes = referralNodes.map(node => ({ ...node }));
+            const links = referralLinks.map(link => ({ ...link }));
+
+            const radiusForScore = score => {
+                const safeScore = Number.isFinite(score) ? Math.max(score, 0) : 0;
+                return 10 + Math.min(Math.sqrt(safeScore), 22);
+            };
+
+            const link = svg.append('g')
+                .attr('stroke', '#495057')
+                .attr('stroke-opacity', 0.6)
+                .selectAll('line')
+                .data(links)
+                .enter()
+                .append('line')
+                .attr('stroke-width', d => {
+                    const reward = Number.isFinite(d.reward) ? Math.max(d.reward, 0) : 0;
+                    return Math.max(1.5, Math.sqrt(reward + 1) / 2.5);
+                });
+
+            const nodeGroup = svg.append('g')
+                .selectAll('g')
+                .data(nodes)
+                .enter()
+                .append('g')
+                .call(
+                    d3.drag()
+                        .on('start', event => {
+                            if (!event.active) {
+                                simulation.alphaTarget(0.3).restart();
+                            }
+                            event.subject.fx = event.subject.x;
+                            event.subject.fy = event.subject.y;
+                        })
+                        .on('drag', event => {
+                            event.subject.fx = event.x;
+                            event.subject.fy = event.y;
+                        })
+                        .on('end', event => {
+                            if (!event.active) {
+                                simulation.alphaTarget(0);
+                            }
+                            event.subject.fx = null;
+                            event.subject.fy = null;
+                        })
+                );
+
+            nodeGroup.append('circle')
+                .attr('r', d => radiusForScore(d.score_pad))
+                .attr('fill', '#0dcaf0')
+                .attr('fill-opacity', 0.85)
+                .attr('stroke', '#031633')
+                .attr('stroke-width', 1.5);
+
+            nodeGroup.append('title')
+                .text(d => {
+                    const label = d.label || d.email || 'Ambassador';
+                    const score = Number.isFinite(d.score_pad) ? d.score_pad.toFixed(2) : '0.00';
+                    const refs = Number.isFinite(d.referral_count) ? d.referral_count : 0;
+                    return `${label}\nScore Pad: ${score} IGP\nDirect Referrals: ${refs}`;
+                });
+
+            nodeGroup.append('text')
+                .attr('x', d => radiusForScore(d.score_pad) + 4)
+                .attr('y', 4)
+                .attr('fill', '#dee2e6')
+                .attr('font-size', 11)
+                .attr('font-weight', '500')
+                .text(d => {
+                    const label = d.label || d.email || 'Ambassador';
+                    return label.length > 24 ? `${label.slice(0, 21)}…` : label;
+                });
+
+            const simulation = d3.forceSimulation(nodes)
+                .force('link', d3.forceLink(links).id(d => d.id).distance(130).strength(0.25))
+                .force('charge', d3.forceManyBody().strength(-240))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => radiusForScore(d.score_pad) + 8));
+
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                nodeGroup.attr('transform', d => `translate(${d.x}, ${d.y})`);
+            });
+        }
     }
 
     const segmentsTable = document.getElementById('segments-table');
