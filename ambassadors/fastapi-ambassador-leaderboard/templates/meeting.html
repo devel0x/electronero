@@ -203,7 +203,7 @@
     <div class="row g-4 align-items-stretch">
       <div class="col-lg-8 d-flex flex-column gap-3">
         <div class="status-banner" id="statusBanner" role="status" aria-live="polite">
-          Ready as <strong>{{ display_name }}</strong> · Room: <strong>{{ room_label }}</strong>
+          Ready as <strong>{{ display_name }}</strong> · Room: <strong id="currentRoomName">Loading...</strong>
           {% if meeting_limits.participants_per_room_limit %}
             · Max {{ meeting_limits.participants_per_room_limit }} participants per room
           {% else %}
@@ -261,7 +261,13 @@
       </div>
     </div>
   </div>
-
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentRoom = urlParams.get("room") || "ambassador-hub";
+      document.getElementById("currentRoomName").textContent = currentRoom;
+    });
+  </script>
   <script>
     window.MEETING_CONFIG = {
       roomId: {{ room_id|tojson }},
