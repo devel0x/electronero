@@ -136,6 +136,7 @@ async def _build_node_status(node_id: str) -> NodeStatus:
     if latency_raw is not None and latency_raw < 0:
         latency_raw = None
     tags = node.get("tags", "")
+    
     return NodeStatus(
         id=node_id,
         organization_id=node.get("organization_id", ""),
@@ -152,4 +153,6 @@ async def _build_node_status(node_id: str) -> NodeStatus:
         latency_ms=latency_raw,
         block_height=int(stats.get("block_height", 0)) if stats.get("block_height") else None,
         is_flagged=bool(int(node.get("is_flagged", 0))),
+        # ✅ NEW: expose online status from Redis
+        is_online=bool(int(stats.get("is_online", 0))),
     )
