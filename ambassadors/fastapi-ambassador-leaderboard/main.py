@@ -4,10 +4,9 @@ import re
 import ipaddress
 import mimetypes
 import base64
-import os, json, shutil, shlex, subprocess
+import os, json, shutil, shlex, subprocess, time
 import secrets
 import hashlib
-import subprocess
 import csv
 import io
 import string
@@ -20,7 +19,17 @@ import requests
 import pandas as pd
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Query, Request, UploadFile, File
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Form,
+    Query,
+    Request,
+    UploadFile,
+    File,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -162,6 +171,328 @@ MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
 PENDING_VERIFICATION_MIGRATION_SENTINEL = (
     MIGRATIONS_DIR / "pending_all_v2.complete"
 )
+
+BUSINESS_ROOMS_PATH = Path(
+    os.getenv("BUSINESS_ROOMS_PATH", "data/business_rooms.json")
+).resolve()
+BUSINESS_ROOMS_REFRESH_SECONDS = int(
+    os.getenv("BUSINESS_ROOMS_REFRESH_SECONDS", "15")
+)
+BUSINESS_ROOM_ACCESS_TTL = int(
+    os.getenv("BUSINESS_ROOM_ACCESS_TTL", str(4 * 3600))
+)
+BUSINESS_CHAT_HISTORY_LIMIT = int(
+    os.getenv("BUSINESS_CHAT_HISTORY_LIMIT", "200")
+)
+BUSINESS_SIGNAL_MAX_BYTES = int(
+    os.getenv("BUSINESS_SIGNAL_MAX_BYTES", str(256 * 1024))
+)
+
+BUSINESS_DEFAULT_ROOMS = [
+    {
+        "id": "strategy",
+        "name": "Strategy War Room",
+        "description": "Coordinate high-impact launches and raid responses.",
+        "topic": "Campaign Coordination",
+        "ghost_key": "",
+    },
+    {
+        "id": "product-labs",
+        "name": "Product & Labs",
+        "description": "Feedback loop for feature requests, QA, and roadmap insights.",
+        "topic": "Product Feedback",
+        "ghost_key": "",
+    },
+]
+
+_business_rooms_cache: list[dict[str, Any]] = []
+_business_rooms_cached_at: float = 0.0
+_business_rooms_mtime: float | None = None
+
+
+def _slugify(value: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
+    return base or secrets.token_hex(4)
+
+
+def _initials(value: str) -> str:
+    parts = [segment[0] for segment in str(value or "").split() if segment]
+    if not parts:
+        return "IG"
+    if len(parts) == 1:
+        return parts[0].upper()
+    return (parts[0] + parts[1]).upper()
+
+
+def _business_room_key(room_id: str) -> str:
+    return f"business:room:{room_id}"
+
+
+def _business_room_chat_key(room_id: str) -> str:
+    return f"{_business_room_key(room_id)}:chat"
+
+
+def _business_room_access_key(room_id: str, email: str) -> str:
+    email_norm = _normalize_email(email)
+    return f"business:access:{room_id}:{email_norm}"
+
+
+def _coerce_business_room(entry: dict[str, Any]) -> dict[str, Any]:
+    name_raw = _safe_text(entry.get("name") or "")
+    topic_raw = _safe_text(entry.get("topic") or "")
+    description_raw = _safe_text(entry.get("description") or "")
+    ghost_key = str(entry.get("ghost_key") or "").strip()
+    slug = _slugify(entry.get("id") or entry.get("slug") or name_raw or ghost_key)
+    return {
+        "id": slug,
+        "name": name_raw or slug.replace("-", " ").title(),
+        "topic": topic_raw or "Open Collaboration",
+        "description": description_raw,
+        "ghost_key": ghost_key,
+        "is_private": bool(ghost_key),
+    }
+
+
+async def _load_business_rooms(force_refresh: bool = False) -> list[dict[str, Any]]:
+    global _business_rooms_cache, _business_rooms_cached_at, _business_rooms_mtime
+
+    now = time.monotonic()
+    if (
+        not force_refresh
+        and _business_rooms_cache
+        and now - _business_rooms_cached_at < BUSINESS_ROOMS_REFRESH_SECONDS
+    ):
+        return [dict(room) for room in _business_rooms_cache]
+
+    rooms_data: list[dict[str, Any]] = []
+    path = BUSINESS_ROOMS_PATH
+    if path.exists():
+        try:
+            text = path.read_text(encoding="utf-8")
+            payload = json.loads(text)
+            if isinstance(payload, list):
+                rooms_data = [
+                    _coerce_business_room(room)
+                    for room in payload
+                    if isinstance(room, dict)
+                ]
+        except Exception as exc:
+            print(f"[business] failed to load rooms: {exc}")
+
+    if not rooms_data:
+        rooms_data = [_coerce_business_room(room) for room in BUSINESS_DEFAULT_ROOMS]
+
+    # deduplicate by id preserving order
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for room in rooms_data:
+        rid = room.get("id") or ""
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        deduped.append(room)
+
+    _business_rooms_cache = [dict(room) for room in deduped]
+    _business_rooms_cached_at = now
+    _business_rooms_mtime = path.stat().st_mtime if path.exists() else None
+    return [dict(room) for room in deduped]
+
+
+async def _business_rooms(refresh: bool = False) -> list[dict[str, Any]]:
+    rooms = await _load_business_rooms(force_refresh=refresh)
+    sanitized: list[dict[str, Any]] = []
+    for room in rooms:
+        sanitized.append(
+            {
+                "id": room["id"],
+                "name": room["name"],
+                "topic": room["topic"],
+                "description": room.get("description", ""),
+                "is_private": bool(room.get("ghost_key")),
+            }
+        )
+    return sanitized
+
+
+async def _business_room(room_id: str) -> dict[str, Any] | None:
+    rooms = await _load_business_rooms()
+    for room in rooms:
+        if room.get("id") == room_id:
+            return dict(room)
+    return None
+
+
+async def _business_room_history(
+    room_id: str, limit: int = BUSINESS_CHAT_HISTORY_LIMIT
+) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    key = _business_room_chat_key(room_id)
+    entries = await redis_client.lrange(key, -limit, -1)
+    history: list[dict[str, Any]] = []
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        history.append(entry)
+    history.sort(key=lambda m: m.get("timestamp", ""))
+    return history
+
+
+async def _append_business_message(room_id: str, message: dict[str, Any]) -> None:
+    payload = json.dumps(message)
+    key = _business_room_chat_key(room_id)
+    pipe = redis_client.pipeline()
+    pipe.rpush(key, payload)
+    pipe.ltrim(key, -BUSINESS_CHAT_HISTORY_LIMIT, -1)
+    await pipe.execute()
+
+
+async def _business_profile(email: str) -> dict[str, Any]:
+    email_norm = _normalize_email(email)
+    profile = await redis_client.hgetall(f"user:{email_norm}")
+    display_name = _safe_text(profile.get("name") or "")
+    if not display_name:
+        local_part = email_norm.split("@")[0]
+        display_name = local_part.replace(".", " ").title()
+    telegram = _safe_text(profile.get("telegram") or "")
+    initials = _initials(display_name)
+    color_seed = hashlib.sha1(email_norm.encode()).hexdigest()[:6]
+    return {
+        "email": email_norm,
+        "display_name": display_name,
+        "telegram": telegram,
+        "initials": initials,
+        "color": f"#{color_seed}",
+    }
+
+
+async def _has_business_access(room: dict[str, Any], email: str) -> bool:
+    if not room.get("ghost_key"):
+        return True
+    key = _business_room_access_key(room["id"], email)
+    return bool(await redis_client.exists(key))
+
+
+class BusinessRoomManager:
+    def __init__(self) -> None:
+        self._connections: dict[str, set[WebSocket]] = {}
+        self._participants: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def active_counts(self) -> dict[str, int]:
+        return {
+            room_id: len(members)
+            for room_id, members in self._participants.items()
+        }
+
+    async def connect(
+        self, room_id: str, websocket: WebSocket, participant: dict[str, Any]
+    ) -> None:
+        await websocket.accept()
+        self._connections.setdefault(room_id, set()).add(websocket)
+        self._participants.setdefault(room_id, {})[participant["id"]] = {
+            "info": participant,
+            "websocket": websocket,
+        }
+        await self._broadcast_presence(room_id)
+
+    async def disconnect(self, room_id: str, participant_id: str) -> None:
+        members = self._participants.get(room_id, {})
+        member = members.pop(participant_id, None)
+        if not member:
+            return
+        websocket = member["websocket"]
+        conns = self._connections.get(room_id)
+        if conns is not None:
+            if websocket in conns:
+                conns.remove(websocket)
+            if not conns:
+                self._connections.pop(room_id, None)
+        if not members:
+            self._participants.pop(room_id, None)
+        await self._broadcast_presence(room_id)
+
+    async def _broadcast_presence(self, room_id: str) -> None:
+        members = self._participants.get(room_id, {})
+        payload = {
+            "type": "presence",
+            "participants": [
+                {
+                    "id": data["info"]["id"],
+                    "display_name": data["info"]["display_name"],
+                    "telegram": data["info"].get("telegram", ""),
+                    "initials": data["info"].get("initials", ""),
+                    "color": data["info"].get("color", "#4aa3ff"),
+                }
+                for data in members.values()
+            ],
+        }
+        await self._broadcast(room_id, payload)
+
+    async def _broadcast(
+        self, room_id: str, message: dict[str, Any], skip: str | None = None
+    ) -> None:
+        members = self._participants.get(room_id, {})
+        if not members:
+            return
+        text = json.dumps(message)
+        for pid, data in list(members.items()):
+            if skip and pid == skip:
+                continue
+            websocket = data["websocket"]
+            try:
+                await websocket.send_text(text)
+            except Exception as exc:
+                print(f"[business] failed to send to {pid}: {exc}")
+
+    async def send_welcome(self, room_id: str, participant_id: str) -> None:
+        member = self._participants.get(room_id, {}).get(participant_id)
+        if not member:
+            return
+        info = member["info"]
+        payload = {
+            "type": "welcome",
+            "self": {
+                "id": info["id"],
+                "display_name": info["display_name"],
+                "telegram": info.get("telegram", ""),
+                "initials": info.get("initials", ""),
+                "color": info.get("color", "#4aa3ff"),
+                "email": info.get("email", ""),
+            },
+        }
+        try:
+            await member["websocket"].send_text(json.dumps(payload))
+        except Exception as exc:
+            print(f"[business] failed to send welcome to {participant_id}: {exc}")
+
+    async def send_history(self, room_id: str, participant_id: str) -> None:
+        member = self._participants.get(room_id, {}).get(participant_id)
+        if not member:
+            return
+        history = await _business_room_history(room_id)
+        payload = {"type": "history", "messages": history[-BUSINESS_CHAT_HISTORY_LIMIT:]}
+        try:
+            await member["websocket"].send_text(json.dumps(payload))
+        except Exception as exc:
+            print(f"[business] failed to send history to {participant_id}: {exc}")
+
+    async def broadcast_message(
+        self, room_id: str, message: dict[str, Any], sender_id: str
+    ) -> None:
+        await self._broadcast(room_id, message, skip=None)
+
+    async def broadcast_signal(
+        self, room_id: str, signal: dict[str, Any], sender_id: str
+    ) -> None:
+        await self._broadcast(room_id, signal, skip=sender_id)
+
+    async def broadcast_system(self, room_id: str, message: dict[str, Any]) -> None:
+        await self._broadcast(room_id, message)
+
+
+business_manager = BusinessRoomManager()
 
 # Legacy in-memory cache kept for reference. Redis is the primary cache, but
 # retain the structure for forward compatibility when new metrics are added.
@@ -2074,6 +2405,13 @@ async def _get_cached_data(force_refresh: bool = False) -> Dict[str, Any]:
 
 async def _current_email(request: Request) -> str | None:
     token = request.cookies.get("session")
+    if not token:
+        return None
+    return await redis_client.get(f"session:{token}")
+
+
+async def _current_email_ws(websocket: WebSocket) -> str | None:
+    token = websocket.cookies.get("session")
     if not token:
         return None
     return await redis_client.get(f"session:{token}")
@@ -4440,6 +4778,234 @@ async def tasks_page(request: Request) -> Any:
             "statuses": statuses,
         },
     )
+
+
+@app.get("/business")
+async def business_panel(request: Request) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    profile = await _business_profile(email)
+    rooms = await _business_rooms()
+    counts = business_manager.active_counts()
+
+    for room in rooms:
+        room["active"] = counts.get(room["id"], 0)
+
+    return templates.TemplateResponse(
+        "business.html",
+        {
+            "request": request,
+            "rooms": rooms,
+            "profile": profile,
+        },
+    )
+
+
+@app.get("/api/business/rooms")
+async def business_rooms_api(request: Request) -> JSONResponse:
+    email = await _current_email(request)
+    if not email:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    rooms = await _business_rooms()
+    counts = business_manager.active_counts()
+    for room in rooms:
+        room["active"] = counts.get(room["id"], 0)
+    return JSONResponse({"rooms": rooms})
+
+
+@app.get("/business/room/{room_id}")
+async def business_room_view(request: Request, room_id: str) -> Any:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    room = await _business_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    profile = await _business_profile(email)
+    has_access = await _has_business_access(room, email)
+    error_msg = _safe_text(request.query_params.get("error", "")).strip()
+    ws_url = request.url_for("business_room_socket", room_id=room_id)
+    ws_url = ws_url.replace("http", "ws", 1)
+
+    boot_payload = {
+        "roomId": room["id"],
+        "roomName": room["name"],
+        "roomTopic": room.get("topic", ""),
+        "isPrivate": bool(room.get("ghost_key")),
+        "wsUrl": ws_url,
+        "user": {
+            "displayName": profile["display_name"],
+            "email": profile["email"],
+            "telegram": profile.get("telegram", ""),
+            "initials": profile.get("initials", ""),
+            "color": profile.get("color", "#4aa3ff"),
+        },
+    }
+
+    return templates.TemplateResponse(
+        "business_room.html",
+        {
+            "request": request,
+            "room": {
+                "id": room["id"],
+                "name": room["name"],
+                "topic": room.get("topic", ""),
+                "description": room.get("description", ""),
+                "is_private": bool(room.get("ghost_key")),
+            },
+            "profile": profile,
+            "has_access": has_access,
+            "error": error_msg,
+            "boot_payload": json.dumps(boot_payload),
+            "history_limit": BUSINESS_CHAT_HISTORY_LIMIT,
+        },
+    )
+
+
+@app.post("/business/room/{room_id}/access")
+async def business_room_access(
+    request: Request, room_id: str, ghost_key: str = Form("")
+) -> RedirectResponse:
+    email = await _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+
+    room = await _business_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    expected = room.get("ghost_key") or ""
+    provided = str(ghost_key or "").strip()
+    if expected and secrets.compare_digest(provided, expected):
+        key = _business_room_access_key(room["id"], email)
+        await redis_client.setex(key, BUSINESS_ROOM_ACCESS_TTL, "1")
+        return RedirectResponse(f"/business/room/{room_id}", status_code=303)
+
+    if expected:
+        msg = quote_plus("Invalid ghost key")
+        return RedirectResponse(
+            f"/business/room/{room_id}?error={msg}", status_code=303
+        )
+
+    return RedirectResponse(f"/business/room/{room_id}", status_code=303)
+
+
+@app.websocket("/ws/business/{room_id}")
+async def business_room_socket(websocket: WebSocket, room_id: str) -> None:
+    email = await _current_email_ws(websocket)
+    if not email:
+        await websocket.close(code=4401)
+        return
+
+    room = await _business_room(room_id)
+    if not room:
+        await websocket.close(code=4404)
+        return
+
+    if not await _has_business_access(room, email):
+        await websocket.close(code=4403)
+        return
+
+    profile = await _business_profile(email)
+    participant_id = secrets.token_urlsafe(8)
+    participant = {
+        "id": participant_id,
+        "display_name": profile["display_name"],
+        "telegram": profile.get("telegram", ""),
+        "initials": profile.get("initials", ""),
+        "color": profile.get("color", "#4aa3ff"),
+        "email": profile["email"],
+    }
+
+    await business_manager.connect(room_id, websocket, participant)
+    await business_manager.send_welcome(room_id, participant_id)
+    await business_manager.send_history(room_id, participant_id)
+
+    join_message = {
+        "type": "system",
+        "message": f"{participant['display_name']} joined the room",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    await business_manager.broadcast_system(room_id, join_message)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if not data:
+                continue
+            if len(data) > BUSINESS_SIGNAL_MAX_BYTES:
+                continue
+            try:
+                payload = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = payload.get("type")
+            if msg_type == "chat":
+                body = _safe_text(payload.get("body", "")).strip()
+                if not body:
+                    continue
+                if len(body) > 2000:
+                    body = body[:2000]
+                timestamp = datetime.utcnow().isoformat()
+                message = {
+                    "type": "chat",
+                    "id": secrets.token_hex(8),
+                    "sender": {
+                        "id": participant_id,
+                        "display_name": participant["display_name"],
+                        "initials": participant.get("initials", ""),
+                        "color": participant.get("color", "#4aa3ff"),
+                    },
+                    "body": body,
+                    "timestamp": timestamp,
+                }
+                await _append_business_message(room_id, message)
+                await business_manager.broadcast_message(
+                    room_id, message, participant_id
+                )
+            elif msg_type == "signal":
+                signal_name = str(payload.get("signal") or "").strip()
+                if not signal_name:
+                    continue
+                signal_payload = {
+                    "type": "signal",
+                    "signal": signal_name,
+                    "from": participant_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "payload": payload.get("payload"),
+                }
+                target = str(payload.get("target") or "").strip()
+                if target:
+                    signal_payload["target"] = target
+                await business_manager.broadcast_signal(
+                    room_id, signal_payload, participant_id
+                )
+            elif msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        leave_message = {
+            "type": "system",
+            "message": f"{participant['display_name']} left the room",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        await business_manager.broadcast_system(room_id, leave_message)
+        await business_manager.disconnect(room_id, participant_id)
+    except Exception as exc:
+        print(f"[business] websocket error: {exc}")
+        leave_message = {
+            "type": "system",
+            "message": f"{participant['display_name']} left the room",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        await business_manager.broadcast_system(room_id, leave_message)
+        await business_manager.disconnect(room_id, participant_id)
+        await websocket.close(code=1011)
 
 
 @app.post("/tasks/apply")
