@@ -112,7 +112,8 @@ function ensureRemoteTile(peerId, name) {
     tile.dataset.peerTile = peerId;
     const video = document.createElement('video');
     video.autoplay = true;
-    video.playsInline = true;
+    video.playsInline = true;      // ← critical for iOS/Safari
+    video.muted = false;           // ← make sure remote video isn’t muted
     const label = document.createElement('span');
     label.className = 'video-label';
     label.textContent = name || 'Connecting…';
@@ -219,6 +220,11 @@ async function createPeerConnection(peerId, name) {
     const [stream] = event.streams;
     if (stream) {
       peer.video.srcObject = stream;
+  
+      // ✅ Force playback on mobile (Safari/iOS/Android)
+      peer.video
+        .play()
+        .catch(err => console.warn('Autoplay blocked on mobile, will resume after user gesture:', err));
     }
   };
 
