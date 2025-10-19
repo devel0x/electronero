@@ -415,6 +415,19 @@
             {% endif %}
         </ul>
     </div>
+    <div id="transfers" class="glass-card p-3 mb-4">
+        <h1 class="h5">Transfers History</h1>
+     <div class="d-flex flex-wrap gap-2 mb-3">
+            <form method="post" action="/admin/transfers/reset" class="ghost-form">
+                <input type="hidden" name="ghost">
+                <button type="submit" class="btn btn-outline-warning btn-sm">Zero-out Amounts (keep entries)</button>
+            </form>
+            <form method="post" action="/admin/transfers/delete" class="ghost-form">
+                <input type="hidden" name="ghost">
+                <button type="submit" class="btn btn-outline-danger btn-sm">Delete Transfer History</button>
+            </form>
+        </div>
+    </div>
     <div id="wallets" class="glass-card p-3 mb-4">
         <h1 class="h5">Wallet Addresses</h1>
         <div class="d-flex flex-wrap gap-2 mb-2">
