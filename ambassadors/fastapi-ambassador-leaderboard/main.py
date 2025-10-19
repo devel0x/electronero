@@ -5818,6 +5818,7 @@ async def api_admin_export(
             "verified": bool(w.get("verified", False)),
             "posts": int(w.get("verified_posts", 0)),
             "activity": str(w.get("activity", "inactive")),
+            "kyc_status": str(w.get("kyc_status", "")),
         }
         for w in wallets
     ]
@@ -5832,6 +5833,7 @@ async def api_admin_export(
             "verified",
             "posts",
             "activity",
+            "kyc_status",
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
