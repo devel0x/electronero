@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
+from collections import defaultdict
 from urllib.parse import quote_plus
 import requests
 import pandas as pd
@@ -41,6 +42,9 @@ AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 EXPLORER_API = "https://explorer.interchained.org/api/address"
 POOL_CACHE_KEY = "ambassador:pool_balance_cache"
 POOL_CACHE_TTL = 120  # cache for 2 minutes
+# Backwards-compatible aliases for updated pool balance cache helpers.
+POOL_BALANCE_CACHE_KEY = POOL_CACHE_KEY
+POOL_BALANCE_CACHE_TTL = POOL_CACHE_TTL
 
 TINIFY_API_KEY = "VprDVvZQhDl8g064XrxrrxpGqTg9y4Nh"
 TINIFY_ENDPOINT = "https://api.tinify.com/shrink"
@@ -186,6 +190,8 @@ MEETING_MAX_PARTICIPANTS = _positive_int_from_env("MEETING_MAX_PARTICIPANTS", 12
 
 REFERRAL_CODE_KEY_PREFIX = "referral:code:"
 REFERRALS_HASH_PREFIX = "referrals:"
+REFERRAL_REWARDS_HASH_PREFIX = "referral:rewards:"
+REFERRAL_REWARD_RATE = 0.10
 REFERRAL_CODE_LENGTH = 8
 PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v2"
 
@@ -3109,6 +3115,259 @@ async def _referral_entries(email: str) -> list[dict[str, str]]:
     return entries
 
 
+async def _referral_network_stats() -> dict[str, Any]:
+    """Return aggregated referral statistics for admin analytics."""
+
+    pad_raw = await redis_client.hgetall("score_pad")
+    pad_map: dict[str, float] = {}
+    for email, value in pad_raw.items():
+        email_norm = str(email or "").strip().lower()
+        try:
+            pad_map[email_norm] = float(value)
+        except Exception:
+            pad_map[email_norm] = 0.0
+
+    nodes: dict[str, dict[str, Any]] = {}
+    referral_children: dict[str, list[str]] = defaultdict(list)
+
+    async for key in redis_client.scan_iter("user:*"):
+        email = key.split(":", 1)[1].strip().lower()
+        if not email:
+            continue
+        data = await redis_client.hgetall(key)
+        telegram = str(data.get("telegram", ""))
+        name = str(data.get("name", ""))
+        label = telegram or name or email
+        referred_by = str(data.get("referred_by", "")).strip().lower()
+
+        nodes[email] = {
+            "id": email,
+            "email": email,
+            "label": label,
+            "telegram": telegram,
+            "name": name,
+            "score_pad": pad_map.get(email, 0.0),
+            "referred_by": referred_by,
+        }
+
+        if referred_by:
+            referral_children[referred_by].append(email)
+
+    # Ensure referrers are represented even if they have no user hash
+    for referrer in list(referral_children.keys()):
+        if referrer not in nodes:
+            nodes[referrer] = {
+                "id": referrer,
+                "email": referrer,
+                "label": referrer,
+                "telegram": "",
+                "name": "",
+                "score_pad": pad_map.get(referrer, 0.0),
+                "referred_by": "",
+            }
+
+    referrers = list(referral_children.keys())
+    realized_lookup: dict[str, dict[str, float]] = {}
+    if referrers:
+        pipe = redis_client.pipeline()
+        for referrer in referrers:
+            pipe.hgetall(f"{REFERRAL_REWARDS_HASH_PREFIX}{referrer}")
+        raw_results = await pipe.execute()
+        for referrer, raw_map in zip(referrers, raw_results):
+            realized_map: dict[str, float] = {}
+            if isinstance(raw_map, dict):
+                for key, value in raw_map.items():
+                    referral_email = str(key or "").strip().lower()
+                    try:
+                        realized_map[referral_email] = float(value)
+                    except Exception:
+                        realized_map[referral_email] = 0.0
+            realized_lookup[referrer] = realized_map
+
+    links: list[dict[str, Any]] = []
+    table_rows: list[dict[str, Any]] = []
+    total_potential = 0.0
+    total_realized = 0.0
+    total_referrals = 0
+
+    for referrer, children in referral_children.items():
+        for child in children:
+            child_score = pad_map.get(child, 0.0)
+            links.append(
+                {
+                    "source": referrer,
+                    "target": child,
+                    "value": 1,
+                    "score": child_score,
+                    "reward": child_score * REFERRAL_REWARD_RATE,
+                }
+            )
+
+        if not children:
+            continue
+
+        node = nodes.get(referrer, {})
+        referral_score = sum(pad_map.get(child, 0.0) for child in children)
+        potential_reward = referral_score * REFERRAL_REWARD_RATE
+        realized_map = realized_lookup.get(referrer, {})
+        realized_reward = sum(realized_map.get(child, 0.0) for child in children)
+        outstanding_reward = potential_reward - realized_reward
+        if outstanding_reward < 0:
+            outstanding_reward = 0.0
+
+        parent_label = ""
+        referred_by = node.get("referred_by", "")
+        if referred_by:
+            parent = nodes.get(referred_by, {})
+            parent_label = parent.get("label") or referred_by
+
+        table_rows.append(
+            {
+                "email": referrer,
+                "label": node.get("label") or referrer,
+                "referred_by": referred_by,
+                "referred_by_label": parent_label,
+                "score_pad": node.get("score_pad", 0.0),
+                "referrals": len(children),
+                "referral_score": referral_score,
+                "potential_reward": potential_reward,
+                "realized_reward": realized_reward,
+                "outstanding_reward": outstanding_reward,
+            }
+        )
+
+        total_potential += potential_reward
+        total_realized += realized_reward
+        total_referrals += len(children)
+
+    table_rows.sort(
+        key=lambda row: (row.get("outstanding_reward", 0.0), row.get("potential_reward", 0.0)),
+        reverse=True,
+    )
+
+    for email, node in nodes.items():
+        node["referral_count"] = len(referral_children.get(email, []))
+        referred_by = node.get("referred_by", "")
+        if referred_by:
+            parent = nodes.get(referred_by, {})
+            node["referrer_label"] = parent.get("label") or referred_by
+        else:
+            node["referrer_label"] = ""
+
+    totals = {
+        "potential": total_potential,
+        "realized": total_realized,
+        "outstanding": max(total_potential - total_realized, 0.0),
+        "referrals": total_referrals,
+        "referrers": len(table_rows),
+        "reward_rate": REFERRAL_REWARD_RATE,
+        "reward_rate_percent": REFERRAL_REWARD_RATE * 100,
+        "links": len(links),
+    }
+
+    return {
+        "nodes": list(nodes.values()),
+        "links": links,
+        "table": table_rows,
+        "totals": totals,
+    }
+
+
+async def _realize_referral_rewards() -> dict[str, Any]:
+    """Apply referral reward adjustments and return a summary."""
+
+    pad_raw = await redis_client.hgetall("score_pad")
+    pad_map: dict[str, float] = {}
+    for email, value in pad_raw.items():
+        email_norm = str(email or "").strip().lower()
+        try:
+            pad_map[email_norm] = float(value)
+        except Exception:
+            pad_map[email_norm] = 0.0
+
+    referral_map: dict[str, list[str]] = defaultdict(list)
+
+    async for key in redis_client.scan_iter("user:*"):
+        email = key.split(":", 1)[1].strip().lower()
+        if not email:
+            continue
+        data = await redis_client.hgetall(key)
+        referrer = str(data.get("referred_by", "")).strip().lower()
+        if referrer:
+            referral_map[referrer].append(email)
+
+    if not referral_map:
+        return {"credited": 0.0, "referrers": 0, "referrals": 0}
+
+    referrers = list(referral_map.keys())
+    pipe = redis_client.pipeline()
+    for referrer in referrers:
+        pipe.hgetall(f"{REFERRAL_REWARDS_HASH_PREFIX}{referrer}")
+    raw_realized = await pipe.execute()
+
+    realized_lookup: dict[str, dict[str, float]] = {}
+    for referrer, raw_map in zip(referrers, raw_realized):
+        realized_map: dict[str, float] = {}
+        if isinstance(raw_map, dict):
+            for key, value in raw_map.items():
+                referral_email = str(key or "").strip().lower()
+                try:
+                    realized_map[referral_email] = float(value)
+                except Exception:
+                    realized_map[referral_email] = 0.0
+        realized_lookup[referrer] = realized_map
+
+    update_pipe = redis_client.pipeline()
+    had_updates = False
+    credited_total = 0.0
+    credited_referrers = 0
+    credited_referrals = 0
+
+    for referrer in referrers:
+        children = referral_map[referrer]
+        if not children:
+            continue
+        realized_map = realized_lookup.get(referrer, {})
+        updates: dict[str, str] = {}
+        delta_total = 0.0
+        rewarded_children = 0
+
+        for child in children:
+            referral_score = pad_map.get(child, 0.0)
+            target_reward = referral_score * REFERRAL_REWARD_RATE
+            previous_reward = realized_map.get(child, 0.0)
+
+            if target_reward > previous_reward + 1e-9:
+                delta = target_reward - previous_reward
+                delta_total += delta
+                rewarded_children += 1
+                updates[child] = f"{target_reward:.8f}"
+            elif child not in realized_map:
+                updates[child] = f"{target_reward:.8f}"
+
+        if updates:
+            update_pipe.hset(
+                f"{REFERRAL_REWARDS_HASH_PREFIX}{referrer}", mapping=updates
+            )
+            had_updates = True
+
+        if delta_total > 1e-9:
+            update_pipe.hincrbyfloat("score_pad", referrer, delta_total)
+            credited_total += delta_total
+            credited_referrers += 1
+            credited_referrals += rewarded_children
+            had_updates = True
+
+    if had_updates:
+        await update_pipe.execute()
+
+    return {
+        "credited": credited_total,
+        "referrers": credited_referrers,
+        "referrals": credited_referrals,
+    }
+
+
 async def _set_referral_status(
     referrer_email: str, referred_email: str, status: str
 ) -> None:
@@ -4851,6 +5110,7 @@ async def admin_panel(request: Request) -> Any:
     meeting_error = request.query_params.get("meeting_err", "")
     # transfers = await _all_transfer_history()
     pending_referrals = await _pending_referrals()
+    referral_network = await _referral_network_stats()
     stakes = await _all_active_stakes()
     stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
     stakes_message = request.query_params.get("stakes_msg", "")
@@ -4875,6 +5135,8 @@ async def admin_panel(request: Request) -> Any:
     otc_error = request.query_params.get("otc_err", "")
     gamefi_message = request.query_params.get("gamefi_msg", "")
     gamefi_error = request.query_params.get("gamefi_err", "")
+    referrals_message = request.query_params.get("referrals_msg", "")
+    referrals_error = request.query_params.get("referrals_err", "")
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -4898,6 +5160,12 @@ async def admin_panel(request: Request) -> Any:
             # "transfers": transfers,
             "verified_search_limit": VERIFIED_SEARCH_LIMIT,
             "pending_referrals": pending_referrals,
+            "referral_network_table": referral_network.get("table", []),
+            "referral_network_nodes": referral_network.get("nodes", []),
+            "referral_network_links": referral_network.get("links", []),
+            "referral_totals": referral_network.get("totals", {}),
+            "referrals_message": referrals_message,
+            "referrals_error": referrals_error,
             "stakes": stakes,
             "stakes_total": stakes_total,
             "stakes_message": stakes_message,
@@ -5618,6 +5886,30 @@ async def admin_referral_reject(
             print(f"[admin] failed to refresh leaderboard cache: {exc}")
 
     return RedirectResponse("/admin#referrals", status_code=303)
+
+
+@app.post("/admin/referrals/realize")
+async def admin_referrals_realize(request: Request) -> RedirectResponse:
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
+
+    summary = await _realize_referral_rewards()
+    credited = summary.get("credited", 0.0)
+    referrers = summary.get("referrers", 0)
+    referrals = summary.get("referrals", 0)
+
+    if credited <= 0:
+        msg = quote_plus("No referral rewards were available to realize.")
+        return RedirectResponse(
+            f"/admin?referrals_err={msg}#referrals", status_code=303
+        )
+
+    msg = quote_plus(
+        f"Credited {credited:.2f} IGP across {referrers} referrers ({referrals} referrals)."
+    )
+    return RedirectResponse(
+        f"/admin?referrals_msg={msg}#referrals", status_code=303
+    )
 
 
 @app.post("/admin/stakes/unstake")
