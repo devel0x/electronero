@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Electronero Network</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(45deg, yellow, black, white);
+      min-height: 100vh;
+    }
+    .hero {
+      padding: 6rem 0;
+      text-align: center;
+      color: #fff;
+    }
+    .timeline {
+      position: relative;
+      padding: 2rem 0;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: #fff;
+    }
+    .timeline-item {
+      position: relative;
+      margin: 2rem 0;
+      width: 50%;
+      padding: 1rem 2rem;
+      box-sizing: border-box;
+    }
+    .timeline-item:nth-child(odd) {
+      left: 0;
+    }
+    .timeline-item:nth-child(even) {
+      left: 50%;
+    }
+    @media (max-width: 768px) {
+      .timeline::before { left: 8px; }
+      .timeline-item {
+        width: calc(100% - 16px);
+        left: 0 !important;
+        padding-left: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <img src="logo.png" alt="Logo" class="mb-4" width="120" height="120">
+    <h1 class="display-4 fw-bold">Write Electronero</h1>
+  </section>
+
+  <section class="container">
+    <h2 class="text-center text-light">Roadmap</h2>
+    <div class="timeline">
+      <div class="timeline-item text-light">
+        <h5>Core Cryptocurrency Protocol</h5>
+        <p>Based on Monero with enhanced privacy and security features.</p>
+      </div>
+      <div class="timeline-item text-light">
+        <h5>XRC-20 Token Platform</h5>
+        <p>Manage tokens via CLI and RPC using <code>token_create</code>, <code>token_transfer</code> and more.</p>
+      </div>
+      <div class="timeline-item text-light">
+        <h5>Language SDKs</h5>
+        <p>Interact with Electronero using Node.js, PHP, Python and Go modules located in the repository.</p>
+      </div>
+      <div class="timeline-item text-light">
+        <h5>Electronero Smart Chain</h5>
+        <p>Cross-chain atomic swaps and smart contract support.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container my-5">
+    <h2 class="text-light">Subscribe for updates</h2>
+    <form class="row g-3">
+      <div class="col-auto">
+        <label for="subscribeEmail" class="visually-hidden">Email</label>
+        <input type="email" class="form-control" id="subscribeEmail" placeholder="email@example.com">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-warning mb-3">Subscribe</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="container mb-5">
+    <a href="../docs/rpc.html" class="btn btn-light">RPC Documentation</a>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
