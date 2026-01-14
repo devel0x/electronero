@@ -134,6 +134,7 @@ namespace tools
   std::error_code replace_file(const std::string& replacement_name, const std::string& replaced_name);
 
   //! Return tokens storage file path inside given data directory
+  //! If empty, uses the default data directory
   std::string get_tokens_cache_path(const std::string &data_dir);
 
   bool sanitize_locale();

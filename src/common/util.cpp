@@ -526,7 +526,8 @@ std::string get_nix_version_display_string()
 
   std::string get_tokens_cache_path(const std::string &data_dir)
   {
-    boost::filesystem::path path = boost::filesystem::path(data_dir) / "tokens.bin";
+    const std::string &base = data_dir.empty() ? get_default_data_dir() : data_dir;
+    boost::filesystem::path path = boost::filesystem::path(base) / "tokens.bin";
     return path.string();
   }
 
