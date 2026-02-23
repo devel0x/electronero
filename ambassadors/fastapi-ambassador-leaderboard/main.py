@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import asyncio
 import re
 import ipaddress
@@ -23,12 +24,13 @@ import pandas as pd
 import httpx
 from dotenv import load_dotenv
 from fastapi import File, FastAPI, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from redis.asyncio import Redis
 from redis.exceptions import LockError
-
+pd.set_option('future.no_silent_downcasting', True)
 
 # Load environment variables
 load_dotenv()
@@ -39,8 +41,11 @@ CSV_PATH: str = os.getenv("CSV_PATH", "data/leaderboard.csv")
 CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "30"))
 AMBASSADOR_POOL_ADDRESS: str | None = os.getenv("AMBASSADOR_POOL_ADDRESS")
 EXPLORER_API = "https://explorer.interchained.org/api/address"
-POOL_CACHE_KEY = "ambassador:pool_balance_cache"
-POOL_CACHE_TTL = 120  # cache for 2 minutes
+POOL_BALANCE_CACHE_KEY = "ambassador:pool_balance_cache"
+POOL_BALANCE_CACHE_TTL = 600  # cache for 10 minutes
+SCAN_LOCK_KEY = "pool_balance_scan_lock"
+SCAN_LOCK_TTL = 60   # prevent overlapping scans (seconds)
+
 
 TINIFY_API_KEY = "VprDVvZQhDl8g064XrxrrxpGqTg9y4Nh"
 TINIFY_ENDPOINT = "https://api.tinify.com/shrink"
@@ -99,7 +104,7 @@ REGISTRATIONS_CSV: str = os.getenv("REGISTRATIONS_CSV", "data/registrations.csv"
 SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 RECOVERY_TTL_SECONDS: int = int(os.getenv("RECOVERY_TTL_SECONDS", "86400"))
 MAX_STAKE = 10000.0
-
+LEADERBOARD_CSV: str = os.getenv("LEADERBOARD_SHEET_CSV", "data/leaderboard.csv")
 EXPECTED_COLUMNS = [
     "name",
     "telegram",
@@ -165,8 +170,19 @@ def _load_registrations() -> set[str]:
     return set()
 
 
-REGISTERED_EMAILS = _load_registrations()
+def _load_spread_leaderboard() -> set[str]:
+    try:
+        df = pd.read_csv(LEADERBOARD_CSV)
+        df.columns = [c.strip().lower() for c in df.columns]
+        if "email" in df.columns:
+            return set(str(e).strip().lower() for e in df["email"].dropna())
+    except Exception:
+        return set()
+    return set()
 
+
+REGISTERED_EMAILS = _load_registrations()
+LEADERBOARD_EMAILS = _load_spread_leaderboard()
 
 def _positive_int_from_env(name: str, default: int | None = None) -> int | None:
     raw = os.getenv(name)
@@ -187,8 +203,7 @@ MEETING_MAX_PARTICIPANTS = _positive_int_from_env("MEETING_MAX_PARTICIPANTS", 12
 REFERRAL_CODE_KEY_PREFIX = "referral:code:"
 REFERRALS_HASH_PREFIX = "referrals:"
 REFERRAL_CODE_LENGTH = 8
-PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v2"
-
+PENDING_VERIFICATION_MIGRATION_KEY = "referrals:migration:pending_all_v3"
 
 @dataclass
 class MeetingParticipant:
@@ -372,9 +387,10 @@ meeting_manager = MeetingManager(
     max_rooms=MEETING_MAX_ROOMS,
     max_participants_per_room=MEETING_MAX_PARTICIPANTS,
 )
+
 MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", "data/migrations")).resolve()
 PENDING_VERIFICATION_MIGRATION_SENTINEL = (
-    MIGRATIONS_DIR / "pending_all_v2.complete"
+    MIGRATIONS_DIR / "pending_all_v3.complete"
 )
 
 # Legacy in-memory cache kept for reference. Redis is the primary cache, but
@@ -570,6 +586,7 @@ async def _build_profile_account_context(
 ACTIVITY_ZSET_PREFIX = "activity:posts:"
 ACTIVITY_RESET_KEY = "activity:last_reset"
 SCOREPAD_BOOST_POINTS = 1000.0
+REFERRAL_BONUS_RATE = 0.25  # referrer earns 25% of each referral's scorepad
 TRANSFER_HISTORY_LIMIT = int(os.getenv("TRANSFER_HISTORY_LIMIT", "100"))
 GLOBAL_TRANSFER_HISTORY_LIMIT = int(os.getenv("GLOBAL_TRANSFER_HISTORY_LIMIT", "500"))
 VERIFIED_SEARCH_LIMIT = int(os.getenv("VERIFIED_SEARCH_LIMIT", "50"))
@@ -1448,56 +1465,92 @@ def _daemon_ready() -> bool:
 async def _get_pool_balance() -> float:
     addr = AMBASSADOR_POOL_ADDRESS
     if not addr:
-        return 500.0
+        return 1000.0
 
-    # ✅ 1. Try Redis cache first
+    # ✅ Try cached first
     try:
         cached = await redis_client.get(POOL_BALANCE_CACHE_KEY)
-        if cached is not None:
-            cached_val = float(cached)
-            return cached_val if cached_val >= 500.0 else 500.0
+        if cached:
+            val = float(cached)
+            print(f"[pool_balance] Cached value found: {val}")
+            return val if val <= 1000.0 else 1000.0
     except Exception as e:
         print(f"[pool_balance] Redis cache read failed: {e}")
 
-    # ✅ 2. Fallback to Explorer API if cache is missing/expired
+    # ✅ Prevent overlap
     try:
-        r = requests.get(f"{EXPLORER_API}/{addr}", timeout=45)
-        r.raise_for_status()
-        data = r.json()
+        locked = await redis_client.set(SCAN_LOCK_KEY, "1", ex=SCAN_LOCK_TTL, nx=True)
+        if not locked:
+            print("[pool_balance] Scan already running")
+            for _ in range(5):  # wait up to 5s for cache
+                await asyncio.sleep(1)
+                cached = await redis_client.get(POOL_BALANCE_CACHE_KEY)
+                if cached:
+                    val = float(cached)
+                    print(f"[pool_balance] Got cache during wait: {val}")
+                    return val if val <= 1000.0 else 1000.0
+            print("[pool_balance] Scan still running, fallback 500.0")
+            return 1000.0
+    except Exception as e:
+        print(f"[pool_balance] Redis lock failed: {e}")
 
-        # Extract balance (satoshis → ITC)
-        balance_sat = data.get("txHistory", {}).get("balanceSat", 0)
-        base_amount = balance_sat / 1e8
+    # ✅ Run scantxoutset safely
+    try:
+        cmd = [
+            "interchained-cli",
+            "scantxoutset",
+            "start",
+            f'[{{"desc":"addr({addr})"}}]'
+        ]
+        print(f"[pool_balance] Running CLI: {' '.join(cmd)}")
+        start_time = time.time()
 
-        # Apply operations + reserve deductions
-        ops_amount = base_amount * 0.90
-        operations_reserve = 6030
-        true_amount = base_amount - ops_amount - operations_reserve
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT  # combine both
+        )
+        stdout, _ = await proc.communicate()
+        elapsed = time.time() - start_time
+        output = stdout.decode().strip()
 
+        print(f"[pool_balance] CLI completed in {elapsed:.1f}s, output:\n{output[:300]}")
+
+        # Some nodes print logs before JSON; extract JSON part
+        json_start = output.find('{')
+        json_end = output.rfind('}') + 1
+        if json_start == -1 or json_end == -1:
+            raise ValueError("No JSON in output")
+
+        data = json.loads(output[json_start:json_end])
+        total_amount = float(data.get("total_amount", 0.0))
+
+        # Apply logic
+        ops_amount = total_amount * 0.90
+        operations_reserve = 8500
+        true_amount = total_amount - ops_amount - operations_reserve
         result = max(true_amount / 2, 0.0)
+        if result > 1000.0:
+            result = 1000.0
 
-        # ✅ Always enforce a minimum of 500.0
-        if result < 500.0:
-            result = 500.0
-
-        # ✅ 3. Cache result for 2 minutes
-        try:
-            await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
-        except Exception as e:
-            print(f"[pool_balance] Redis cache write failed: {e}")
-
+        # Cache result
+        await redis_client.setex(POOL_BALANCE_CACHE_KEY, POOL_BALANCE_CACHE_TTL, result)
+        print(f"[pool_balance] Cached new value: {result}")
         return result
 
-    except requests.Timeout:
-        print("[pool_balance] Explorer API timeout (45s)")
-    except requests.RequestException as e:
-        print(f"[pool_balance] Explorer API error: {e}")
     except Exception as e:
-        print(f"[pool_balance] Unexpected error: {e}")
+        print(f"[pool_balance] CLI error: {e}")
+        return 1000.0
 
-    # ✅ 4. Final fallback if everything fails
-    return 500.0
-    
+    finally:
+        # Always release lock
+        try:
+            await redis_client.delete(SCAN_LOCK_KEY)
+            print("[pool_balance] Lock released")
+        except Exception as e:
+            print(f"[pool_balance] Redis lock cleanup failed: {e}")
+
+
 
 async def _load_csv() -> Dict[str, Any]:
     path = SHEET_CSV_URL or CSV_PATH
@@ -1741,9 +1794,10 @@ async def _transfer_history(email: str) -> list[dict[str, Any]]:
     return history
 
 
-async def _all_transfer_history() -> list[dict[str, Any]]:
+async def _all_transfer_history(limit: int = 500) -> list[dict[str, Any]]:
+    # default reasonable limit
     entries = await redis_client.lrange(
-        TRANSFER_GLOBAL_LOG_KEY, 0, GLOBAL_TRANSFER_HISTORY_LIMIT - 1
+        TRANSFER_GLOBAL_LOG_KEY, 0, limit - 1
     )
     history: list[dict[str, Any]] = []
     for raw in entries:
@@ -2125,10 +2179,10 @@ async def _otc_order(order_id: str) -> dict[str, Any] | None:
 async def _otc_orders(
     status: str | None = None,
     currency: str | None = None,
-    limit: int | None = None,
+    limit: int = 150,
 ) -> list[dict[str, Any]]:
     end_index = -1
-    if limit is not None and limit > 0:
+    if limit > 0:
         end_index = limit - 1
     ids = await redis_client.zrevrange(OTC_ORDER_INDEX_KEY, 0, end_index)
     orders: list[dict[str, Any]] = []
@@ -2676,13 +2730,43 @@ async def _all_wallets() -> list[dict[str, Any]]:
 
     pad_map = await redis_client.hgetall("score_pad")
 
+    # Fetch all user keys first
     keys = await redis_client.keys("user:*")
+    
+    # Filter only for registered emails to process
+    valid_emails = []
     for key in keys:
         email = key.split(":", 1)[1].strip().lower()
-        if email not in REGISTERED_EMAILS:   # 🚨 filter unregistered
-            continue
+        if email in REGISTERED_EMAILS:
+            valid_emails.append(email)
 
-        udata = await redis_client.hgetall(key)
+    if not valid_emails:
+        return wallets
+
+    # 1. Pipeline for READS
+    read_pipe = redis_client.pipeline()
+    for email in valid_emails:
+        read_pipe.hgetall(f"user:{email}")
+        read_pipe.scard(f"posts_verified:{email}")
+        read_pipe.hvals(f"tasks:{email}")
+        read_pipe.zcount(f"{ACTIVITY_ZSET_PREFIX}{email}", activity_start_ts, activity_end_ts)
+        read_pipe.hgetall(f"{REFERRALS_HASH_PREFIX}{email}")
+        read_pipe.hgetall(f"kyc:{email}")
+        
+    read_results = await read_pipe.execute()
+    
+    # 2. Pipeline for WRITES (state changes that originally occurred during reads)
+    write_pipe = redis_client.pipeline()
+
+    # We read 6 results per valid_email
+    for i, email in enumerate(valid_emails):
+        base_idx = i * 6
+        udata = read_results[base_idx] or {}
+        verified_posts = read_results[base_idx + 1] or 0
+        task_statuses = read_results[base_idx + 2] or []
+        weekly_posts = read_results[base_idx + 3] or 0
+        raw_referrals = read_results[base_idx + 4] or {}
+        kyc_data = read_results[base_idx + 5] or {}
 
         tele_raw = udata.get("telegram", "")
         tele_norm = str(tele_raw).strip().lstrip("@").lower()
@@ -2697,38 +2781,57 @@ async def _all_wallets() -> list[dict[str, Any]]:
         except Exception:
             pad_val = 0.0
 
-        verified_posts = await redis_client.scard(f"posts_verified:{email}")
-        task_statuses = await redis_client.hvals(f"tasks:{email}")
         task_verified = any(v == "verified" for v in task_statuses)
         is_verified = (
             verified_posts > 0
             or task_verified
             or str(udata.get("verified")) == "1"
         )
-        await redis_client.hset(f"user:{email}", "verified", int(is_verified))
+        write_pipe.hset(f"user:{email}", "verified", int(is_verified))
 
-        activity_key = f"{ACTIVITY_ZSET_PREFIX}{email}"
-        weekly_posts = await redis_client.zcount(activity_key, activity_start_ts, activity_end_ts)
         is_active = weekly_posts > 0
         activity_label = "active" if is_active else "inactive"
-        await redis_client.hset(f"user:{email}", "activity", activity_label)
+        write_pipe.hset(f"user:{email}", "activity", activity_label)
 
         is_guardian = email in guardians
         if is_guardian:
-            await redis_client.hset(f"user:{email}", GUARDIAN_USER_FIELD, "1")
+            write_pipe.hset(f"user:{email}", GUARDIAN_USER_FIELD, "1")
         else:
-            await redis_client.hdel(f"user:{email}", GUARDIAN_USER_FIELD)
+            write_pipe.hdel(f"user:{email}", GUARDIAN_USER_FIELD)
 
-        referrals = await _referral_entries(email)
-        referral_count = sum(1 for entry in referrals if entry.get("status") != "rejected")
-        await redis_client.hset(
-            f"user:{email}", mapping={"referral_count": referral_count}
-        )
+        # Process inline referrals parsing logic
+        referral_entries = []
+        for raw_email, raw_payload in raw_referrals.items():
+            try:
+                data = json.loads(raw_payload)
+            except Exception:
+                data = {}
+            joined_at = str(data.get("joined_at", ""))
+            status = str(data.get("status", "pending")) or "pending"
+            referral_entries.append(
+                {
+                    "email": str(data.get("email", raw_email)),
+                    "telegram": str(data.get("telegram", "")),
+                    "joined_at": joined_at,
+                    "joined_at_display": _format_timestamp(joined_at),
+                    "status": status,
+                    "approved_at": str(data.get("approved_at", "")),
+                    "rejected_at": str(data.get("rejected_at", "")),
+                }
+            )
+        referral_entries.sort(key=lambda item: item.get("joined_at", ""), reverse=True)
+        referral_count = sum(1 for entry in referral_entries if entry.get("status") != "rejected")
+        write_pipe.hset(f"user:{email}", mapping={"referral_count": referral_count})
 
-        kyc_record = await _get_kyc_record(email)
-        kyc_status = kyc_record.get("status", KYC_STATUS_NONE)
-        await _set_user_kyc_status(email, kyc_status)
-        kyc_updated = _format_timestamp(kyc_record.get("updated_at", ""))
+        # Process inline KYC logic
+        if not kyc_data:
+            kyc_status = KYC_STATUS_NONE
+            kyc_updated = ""
+        else:
+            kyc_status = _normalize_kyc_status(kyc_data.get("status"))
+            kyc_updated = _format_timestamp(kyc_data.get("updated_at", ""))
+
+        write_pipe.hset(f"user:{email}", mapping={"kyc_status": kyc_status})
 
         wallets.append(
             {
@@ -2745,7 +2848,7 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "activity": activity_label,
                 "guardian": is_guardian,
                 "referral_count": referral_count,
-                "referrals": referrals,
+                "referrals": referral_entries,
                 "kyc_status": kyc_status,
                 "kyc_status_label": KYC_STATUS_LABELS.get(kyc_status, "Not Submitted"),
                 "kyc_badge_class": KYC_STATUS_BADGE_CLASSES.get(
@@ -2754,6 +2857,9 @@ async def _all_wallets() -> list[dict[str, Any]]:
                 "kyc_updated_at": kyc_updated,
             }
         )
+
+    if write_pipe.command_stack:
+        await write_pipe.execute()
 
     return wallets
 
@@ -2829,11 +2935,16 @@ async def _all_posts() -> dict[str, dict[str, Any]]:
         urls = await redis_client.lrange(key, 0, -1)
         verified = await redis_client.smembers(f"posts_verified:{email}")
         safe_verified = {str(v).strip() for v in verified}
-        pending = [
-            {"url": str(u).strip()}
-            for u in urls
-            if u and str(u).strip() not in safe_verified
-        ]
+        unique_urls = []
+        seen_urls = set()
+        for u in urls:
+            if not u: continue
+            url_str = str(u).strip()
+            if url_str and url_str not in safe_verified and url_str not in seen_urls:
+                unique_urls.append(url_str)
+                seen_urls.add(url_str)
+        
+        pending = [{"url": u} for u in unique_urls]
         if pending:
             udata = await redis_client.hgetall(f"user:{email}")
             tele_raw = udata.get("telegram", "")
@@ -3342,6 +3453,8 @@ async def _pending_referrals() -> list[dict[str, Any]]:
 
     async for key in redis_client.scan_iter("user:*"):
         email = key.split(":", 1)[1].strip().lower()
+        if not email or "@" not in email:
+            continue
         data = await redis_client.hgetall(key)
         if not data:
             continue
@@ -3543,7 +3656,11 @@ async def login(
 ) -> Any:
     email_norm = email.strip().lower()
     stored = await redis_client.hgetall(f"user:{email_norm}")
-    if not stored and email_norm not in REGISTERED_EMAILS:
+    # Relaxed check: Allow if in Redis OR in CSV (Sheet)
+    is_registered_redis = bool(stored)
+    is_registered_csv = email_norm in REGISTERED_EMAILS
+
+    if not is_registered_redis and not is_registered_csv:
         return templates.TemplateResponse(
             "login.html", {"request": request, "error": "Email not registered", "msg": ""}
         )
@@ -3552,16 +3669,26 @@ async def login(
             "login.html", {"request": request, "error": "Invalid credentials", "msg": ""}
         )
     if str(stored.get("verified", "0")) != "1":
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Your registration is pending admin approval.",
-                "msg": "",
-            },
-        )
-    if email_norm not in REGISTERED_EMAILS:
-        _register_email_record(email_norm)
+        # Check if already on the leaderboard (means they are an approved ambassador)
+        if await _ambassador_entry_by_email(email_norm):
+            await redis_client.hset(f"user:{email_norm}", "verified", "1")
+            # Proceed with login
+        else:
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "error": "Your registration is pending admin approval.",
+                    "msg": "",
+                },
+            )
+    
+    # Attempt to sync to CSV if missing, but don't block login on failure
+    if not is_registered_csv:
+        try:
+            _register_email_record(email_norm)
+        except Exception as exc:
+            print(f"[login] Warning: Failed to update registrations.csv for {email_norm}: {exc}")
     token = secrets.token_urlsafe(32)
     await redis_client.set(f"session:{token}", email_norm, ex=SESSION_TTL_SECONDS)
     response = RedirectResponse("/", status_code=303)
@@ -4636,7 +4763,6 @@ async def api_transfers_rolodex(request: Request, q: str = Query("")) -> JSONRes
     #     "limit": limit
     # })
 
-
 @app.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("session")
@@ -4825,104 +4951,16 @@ async def admin_panel(request: Request) -> Any:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
-    # Pagination params
-    page = int(request.query_params.get("page", 1))
-    limit = int(request.query_params.get("limit", 20))
+    if not await _current_admin(request):
+        return RedirectResponse("/admin/login")
 
-    await _ensure_existing_ambassadors_pending()
-
-    cached_data = await _get_cached_data()
-    wallets = await _all_wallets()
-    wallets_active = sorted(
-        [w for w in wallets if w.get("active")], key=lambda w: w.get("email", "")
-    )
-    wallets_inactive = sorted(
-        [w for w in wallets if not w.get("active")], key=lambda w: w.get("email", "")
-    )
-    posts = await _all_posts()
-    tasks = await _all_tasks()
-    proposals = await _pending_proposals()
-    recoveries = await _all_recoveries()
-    analytics = await _analytics_dashboard(page=page, limit=limit)
-    gamefi_state = await _wheel_state(None, limit=15)
-    maintenance_enabled = await _maintenance_enabled()
-    meeting_snapshot = await meeting_manager.snapshot()
-    meeting_message = request.query_params.get("meeting_msg", "")
-    meeting_error = request.query_params.get("meeting_err", "")
-    # transfers = await _all_transfer_history()
-    pending_referrals = await _pending_referrals()
-    stakes = await _all_active_stakes()
-    stakes_total = sum(float(entry.get("amount", 0.0) or 0.0) for entry in stakes)
-    stakes_message = request.query_params.get("stakes_msg", "")
-    stakes_error = request.query_params.get("stakes_err", "")
-    kyc_records = await _all_kyc_records()
-    kyc_counts = {
-        "pending": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_PENDING),
-        "verified": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_VERIFIED),
-        "rejected": sum(1 for record in kyc_records if record.get("status") == KYC_STATUS_REJECTED),
-    }
-    kyc_message = request.query_params.get("kyc_msg", "")
-    kyc_error = request.query_params.get("kyc_err", "")
-    p2p_prizes = await _p2p_prizes(include_inactive=True)
-    p2p_history = await _p2p_recent_history(limit=100)
-    p2p_message = request.query_params.get("p2p_msg", "")
-    p2p_error = request.query_params.get("p2p_err", "")
-    otc_currencies = await _otc_currencies(include_inactive=True)
-    otc_pending_orders = await _otc_orders(status=OTC_ORDER_STATUS_PENDING)
-    otc_recent_orders = await _otc_orders(limit=200)
-    otc_pending_value = sum(order.get("total", 0.0) for order in otc_pending_orders)
-    otc_message = request.query_params.get("otc_msg", "")
-    otc_error = request.query_params.get("otc_err", "")
-    gamefi_message = request.query_params.get("gamefi_msg", "")
-    gamefi_error = request.query_params.get("gamefi_err", "")
+    # Pass minimal context or configuration if needed for the SPA shell
     return templates.TemplateResponse(
         "admin.html",
         {
             "request": request,
-            "wallets": wallets,
-            "wallets_active": wallets_active,
-            "wallets_inactive": wallets_inactive,
-            "posts": posts,
-            "tasks": tasks,
-            "recoveries": recoveries,
-            "task_labels": TASK_LABELS,
-            "proposals": proposals,
-            "analytics": analytics,
-            "maintenance_enabled": maintenance_enabled,
-            "meeting_snapshot": meeting_snapshot,
-            "meeting_message": meeting_message,
-            "meeting_error": meeting_error,
-            "gamefi_state": gamefi_state,
-            "gamefi_message": gamefi_message,
-            "gamefi_error": gamefi_error,
-            # "transfers": transfers,
-            "verified_search_limit": VERIFIED_SEARCH_LIMIT,
-            "pending_referrals": pending_referrals,
-            "stakes": stakes,
-            "stakes_total": stakes_total,
-            "stakes_message": stakes_message,
-            "stakes_error": stakes_error,
-            "stake_duration_days": STAKE_DURATION_DAYS,
-            "kyc_records": kyc_records,
-            "kyc_counts": kyc_counts,
-            "kyc_message": kyc_message,
-            "kyc_error": kyc_error,
-            "p2p_prizes": p2p_prizes,
-            "p2p_history": p2p_history,
-            "p2p_message": p2p_message,
-            "p2p_error": p2p_error,
-            "otc_currencies": otc_currencies,
-            "otc_pending_orders": otc_pending_orders,
-            "otc_recent_orders": otc_recent_orders,
-            "otc_pending_value": otc_pending_value,
-            "otc_pending_value_display": _otc_format_decimal(otc_pending_value, 6, grouping=True),
-            "otc_message": otc_message,
-            "otc_error": otc_error,
-            "otc_status_labels": OTC_STATUS_LABELS,
-            "otc_status_badges": OTC_STATUS_BADGE_CLASSES,
-            "otc_side_labels": OTC_SIDE_LABELS,
-            "otc_igp_to_itc": cached_data.get("igp_to_itc", 0.0),
-            "otc_itc_to_igp": cached_data.get("itc_to_igp", 0.0),
+            # Pass any static config here if strictly necessary, otherwise fetch via API
+            "maintenance_enabled": await _maintenance_enabled(), # useful for initial state
         },
     )
 
@@ -4933,7 +4971,7 @@ async def admin_meetings_kick(
     room_id: str = Form(...),
     peer_id: str = Form(...),
     reason: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
@@ -4947,17 +4985,14 @@ async def admin_meetings_kick(
     message = cleaned_reason or "Removed by an administrator."
     removed = await meeting_manager.disconnect(room_key, peer_key, reason=message)
     if removed:
-        msg = quote_plus("Participant removed from the meeting.")
-        return RedirectResponse(f"/admin?meeting_msg={msg}#meetings", status_code=303)
-
-    err = quote_plus("Participant already left the meeting.")
-    return RedirectResponse(f"/admin?meeting_err={err}#meetings", status_code=303)
+        return JSONResponse({"ok": True, "message": "Participant removed from the meeting."})
+    return JSONResponse({"ok": False, "error": "Participant already left the meeting."}, status_code=400)
 
 
 @app.post("/admin/meetings/close")
 async def admin_meetings_close(
     request: Request, room_id: str = Form(...), reason: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
@@ -4966,11 +5001,8 @@ async def admin_meetings_close(
     message = cleaned_reason or "Meeting closed by an administrator."
     closed = await meeting_manager.close_room(room_key, reason=message)
     if closed:
-        msg = quote_plus("Meeting closed and participants notified.")
-        return RedirectResponse(f"/admin?meeting_msg={msg}#meetings", status_code=303)
-
-    err = quote_plus("Room not found or already empty.")
-    return RedirectResponse(f"/admin?meeting_err={err}#meetings", status_code=303)
+        return JSONResponse({"ok": True, "message": "Meeting closed and participants notified."})
+    return JSONResponse({"ok": False, "error": "Room not found or already empty."}, status_code=400)
 
 
 @app.get("/api/admin/meetings")
@@ -4982,10 +5014,13 @@ async def api_admin_meetings(request: Request) -> JSONResponse:
     return JSONResponse(payload)
 
 
+
+
+
 @app.post("/admin/gamefi/wheel")
-async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
+async def admin_gamefi_wheel_update(request: Request) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     form = await request.form()
     config = await _ensure_wheel_config()
@@ -4996,11 +5031,9 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         try:
             entry_fee = float(str(entry_fee_raw).replace(",", "").strip())
         except Exception:
-            err = quote_plus("Entry fee must be a valid number.")
-            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            return JSONResponse({"ok": False, "error": "Entry fee must be a valid number."}, status_code=400)
     if entry_fee < 0:
-        err = quote_plus("Entry fee cannot be negative.")
-        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        return JSONResponse({"ok": False, "error": "Entry fee cannot be negative."}, status_code=400)
 
     pool_balance = config["pool_balance"]
     pool_adjust_raw = form.get("pool_adjust")
@@ -5009,12 +5042,10 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         try:
             pool_adjust_amount = float(str(pool_adjust_raw).replace(",", "").strip())
         except Exception:
-            err = quote_plus("Pool adjustment must be a valid number.")
-            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            return JSONResponse({"ok": False, "error": "Pool adjustment must be a valid number."}, status_code=400)
         new_balance = pool_balance + pool_adjust_amount
         if new_balance < 0:
-            err = quote_plus("Pool balance cannot drop below zero.")
-            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            return JSONResponse({"ok": False, "error": "Pool balance cannot drop below zero."}, status_code=400)
         pool_balance = new_balance
     else:
         pool_balance_raw = form.get("pool_balance")
@@ -5022,11 +5053,9 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
             try:
                 pool_balance = float(str(pool_balance_raw).replace(",", "").strip())
             except Exception:
-                err = quote_plus("Pool balance must be a valid number.")
-                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                return JSONResponse({"ok": False, "error": "Pool balance must be a valid number."}, status_code=400)
             if pool_balance < 0:
-                err = quote_plus("Pool balance cannot be negative.")
-                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                return JSONResponse({"ok": False, "error": "Pool balance cannot be negative."}, status_code=400)
 
     cooldown_seconds = config["cooldown_seconds"]
     cooldown_raw = form.get("cooldown_seconds")
@@ -5034,11 +5063,9 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         try:
             cooldown_seconds = int(float(str(cooldown_raw).replace(",", "").strip()))
         except Exception:
-            err = quote_plus("Cooldown must be a whole number of seconds.")
-            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            return JSONResponse({"ok": False, "error": "Cooldown must be a whole number of seconds."}, status_code=400)
     if cooldown_seconds < 0:
-        err = quote_plus("Cooldown cannot be negative.")
-        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        return JSONResponse({"ok": False, "error": "Cooldown cannot be negative."}, status_code=400)
 
     enabled_value = str(form.get("enabled", "")).strip().lower()
     enabled = enabled_value not in {"", "0", "false", "off"}
@@ -5084,8 +5111,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
             try:
                 seg_weight = float(weight_raw.replace(",", ""))
             except Exception:
-                err = quote_plus(f"Weight for slice '{seg_label}' must be numeric.")
-                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                return JSONResponse({"ok": False, "error": f"Weight for slice '{seg_label}' must be numeric."}, status_code=400)
         else:
             seg_weight = 0.0
         seg_weight = max(0.0, seg_weight)
@@ -5095,8 +5121,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
             try:
                 seg_index = int(float(index_raw.replace(",", "")))
             except Exception:
-                err = quote_plus(f"Index for slice '{seg_label}' must be numeric.")
-                return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                return JSONResponse({"ok": False, "error": f"Index for slice '{seg_label}' must be numeric."}, status_code=400)
             seg_index = max(0, seg_index)
         else:
             seg_index = len(segments)
@@ -5116,8 +5141,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
                 try:
                     multiplier_value = float(multiplier_raw.replace(",", ""))
                 except Exception:
-                    err = quote_plus(f"Multiplier for slice '{seg_label}' must be numeric.")
-                    return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                    return JSONResponse({"ok": False, "error": f"Multiplier for slice '{seg_label}' must be numeric."}, status_code=400)
             else:
                 multiplier_value = 0.0
             segment_entry["multiplier"] = max(0.0, multiplier_value)
@@ -5127,8 +5151,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
                 try:
                     amount_value = float(amount_raw.replace(",", ""))
                 except Exception:
-                    err = quote_plus(f"Amount for slice '{seg_label}' must be numeric.")
-                    return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+                    return JSONResponse({"ok": False, "error": f"Amount for slice '{seg_label}' must be numeric."}, status_code=400)
             else:
                 amount_value = 0.0
             segment_entry["amount"] = max(0.0, amount_value)
@@ -5136,8 +5159,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         segments.append(segment_entry)
 
     if not segments:
-        err = quote_plus("Configure at least one wheel slice before saving.")
-        return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+        return JSONResponse({"ok": False, "error": "Configure at least one wheel slice before saving."}, status_code=400)
 
     segments_sorted = sorted(segments, key=lambda seg: seg.get("index", 0))
     for idx, segment in enumerate(segments_sorted):
@@ -5162,8 +5184,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         except LockError:
             acquired = False
         if not acquired:
-            err = quote_plus("Wheel is busy. Please try again.")
-            return RedirectResponse(f"/admin?gamefi_err={err}#gamefi", status_code=303)
+            return JSONResponse({"ok": False, "error": "Wheel is busy. Please try again."}, status_code=503)
 
         await redis_client.hset(WHEEL_CONFIG_KEY, mapping=payload)
     finally:
@@ -5180,8 +5201,7 @@ async def admin_gamefi_wheel_update(request: Request) -> RedirectResponse:
         )
     else:
         msg = "Wheel configuration updated."
-    message = quote_plus(msg)
-    return RedirectResponse(f"/admin?gamefi_msg={message}#gamefi", status_code=303)
+    return JSONResponse({"ok": True, "message": msg})
 
 
 @app.post("/admin/p2p/prizes")
@@ -5192,22 +5212,20 @@ async def admin_p2p_create(
     quantity: str = Form(""),
     description: str = Form(""),
     active: str = Form("1"),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     name_clean = _safe_text(name).strip()
     if not name_clean:
-        message = quote_plus("Prize name is required.")
-        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        return JSONResponse({"ok": False, "error": "Prize name is required."}, status_code=400)
 
     try:
         cost_value = float(str(cost).strip())
     except Exception:
         cost_value = -1.0
     if cost_value <= 0:
-        message = quote_plus("Enter a positive cost for the prize.")
-        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        return JSONResponse({"ok": False, "error": "Enter a positive cost for the prize."}, status_code=400)
 
     quantity_value: int | None = None
     quantity_raw = str(quantity or "").strip()
@@ -5215,11 +5233,9 @@ async def admin_p2p_create(
         try:
             quantity_value = int(quantity_raw)
         except Exception:
-            message = quote_plus("Quantity must be a whole number or left blank for unlimited stock.")
-            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+            return JSONResponse({"ok": False, "error": "Quantity must be a whole number or left blank for unlimited stock."}, status_code=400)
         if quantity_value < 0:
-            message = quote_plus("Quantity cannot be negative.")
-            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+            return JSONResponse({"ok": False, "error": "Quantity cannot be negative."}, status_code=400)
 
     description_clean = _safe_text(description)[:500]
     active_flag = _p2p_parse_bool(active)
@@ -5244,8 +5260,7 @@ async def admin_p2p_create(
     pipe.zadd(P2P_PRIZE_INDEX_KEY, {prize_id: datetime.utcnow().timestamp()})
     await pipe.execute()
 
-    message = quote_plus("Prize added to the P2P shop.")
-    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+    return JSONResponse({"ok": True, "message": "Prize added to the P2P shop."})
 
 
 @app.post("/admin/p2p/prizes/update")
@@ -5257,27 +5272,24 @@ async def admin_p2p_update(
     quantity: str = Form(""),
     description: str = Form(""),
     active: str = Form("0"),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     prize = await _p2p_prize(prize_id)
     if not prize:
-        message = quote_plus("Prize not found.")
-        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        return JSONResponse({"ok": False, "error": "Prize not found."}, status_code=404)
 
     name_clean = _safe_text(name).strip()
     if not name_clean:
-        message = quote_plus("Prize name cannot be empty.")
-        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        return JSONResponse({"ok": False, "error": "Prize name cannot be empty."}, status_code=400)
 
     try:
         cost_value = float(str(cost).strip())
     except Exception:
         cost_value = -1.0
     if cost_value <= 0:
-        message = quote_plus("Enter a positive cost for the prize.")
-        return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+        return JSONResponse({"ok": False, "error": "Enter a positive cost for the prize."}, status_code=400)
 
     quantity_value: int | None = None
     quantity_raw = str(quantity or "").strip()
@@ -5285,11 +5297,9 @@ async def admin_p2p_update(
         try:
             quantity_value = int(quantity_raw)
         except Exception:
-            message = quote_plus("Quantity must be a whole number or left blank for unlimited stock.")
-            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+            return JSONResponse({"ok": False, "error": "Quantity must be a whole number or left blank for unlimited stock."}, status_code=400)
         if quantity_value < 0:
-            message = quote_plus("Quantity cannot be negative.")
-            return RedirectResponse(f"/admin?p2p_err={message}#p2p", status_code=303)
+            return JSONResponse({"ok": False, "error": "Quantity cannot be negative."}, status_code=400)
 
     description_clean = _safe_text(description)[:500]
     active_flag = _p2p_parse_bool(active)
@@ -5305,22 +5315,20 @@ async def admin_p2p_update(
 
     await redis_client.hset(_p2p_prize_key(prize.get("id") or prize_id), mapping=mapping)
 
-    message = quote_plus("Prize updated successfully.")
-    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+    return JSONResponse({"ok": True, "message": "Prize updated successfully."})
 
 
 @app.post("/admin/p2p/prizes/delete")
 async def admin_p2p_delete(
     request: Request,
     prize_id: str = Form(...),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     await _p2p_delete_prize(prize_id)
 
-    message = quote_plus("Prize removed from the P2P shop.")
-    return RedirectResponse(f"/admin?p2p_msg={message}#p2p", status_code=303)
+    return JSONResponse({"ok": True, "message": "Prize removed from the P2P shop."})
 
 
 @app.post("/admin/otc/currencies")
@@ -5329,18 +5337,18 @@ async def admin_otc_currency_add(
     code: str = Form(...),
     label: str = Form(""),
     active: str = Form("1"),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     success, message = await _otc_add_or_update_currency(
         code,
         label,
         active=_otc_parse_bool(active),
     )
-    target = "otc_msg" if success else "otc_err"
-    payload = quote_plus(message)
-    return RedirectResponse(f"/admin?{target}={payload}#otc", status_code=303)
+    if not success:
+        return JSONResponse({"ok": False, "error": message}, status_code=400)
+    return JSONResponse({"ok": True, "message": message})
 
 
 @app.post("/admin/otc/currencies/toggle")
@@ -5348,24 +5356,21 @@ async def admin_otc_currency_toggle(
     request: Request,
     code: str = Form(...),
     state: str = Form("1"),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     code_norm = _normalize_currency_code(code)
     if not code_norm:
-        message = quote_plus("Invalid currency code provided.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid currency code provided."}, status_code=400)
 
     desired_active = _otc_parse_bool(state)
     success = await _otc_set_currency_active(code_norm, desired_active)
     if not success:
-        message = quote_plus("Currency could not be updated.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Currency could not be updated."}, status_code=500)
 
     status_text = "enabled" if desired_active else "disabled"
-    message = quote_plus(f"Currency {code_norm} {status_text}.")
-    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+    return JSONResponse({"ok": True, "message": f"Currency {code_norm} {status_text}."})
 
 
 @app.post("/admin/otc/orders/verify")
@@ -5374,22 +5379,19 @@ async def admin_otc_verify(
     order_id: str = Form(...),
     wallet_destination: str = Form(...),
     transaction_hash: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     order = await _otc_order(order_id)
     if not order:
-        message = quote_plus("Order not found.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Order not found."}, status_code=404)
     if order.get("status") != OTC_ORDER_STATUS_PENDING:
-        message = quote_plus("Order is already processed.")
-        return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Order is already processed."}, status_code=400)
 
     destination_clean = _safe_text(wallet_destination).strip()
     if not destination_clean:
-        message = quote_plus("Wallet destination is required to verify an order.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Wallet destination is required to verify an order."}, status_code=400)
 
     transaction_clean = _safe_text(transaction_hash).strip()
     now_iso = datetime.utcnow().isoformat()
@@ -5410,8 +5412,7 @@ async def admin_otc_verify(
         pipe.zrem(f"{OTC_ORDER_CURRENCY_PREFIX}{currency_code}", order_id)
     await pipe.execute()
 
-    message = quote_plus("Order verified and closed.")
-    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+    return JSONResponse({"ok": True, "message": "Order verified and closed."})
 
 
 @app.post("/admin/otc/orders/reject")
@@ -5419,22 +5420,19 @@ async def admin_otc_reject(
     request: Request,
     order_id: str = Form(...),
     reason: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     order = await _otc_order(order_id)
     if not order:
-        message = quote_plus("Order not found.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Order not found."}, status_code=404)
     if order.get("status") != OTC_ORDER_STATUS_PENDING:
-        message = quote_plus("Order is already processed.")
-        return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Order is already processed."}, status_code=400)
 
     ambassador_email = order.get("ambassador_email")
     if not ambassador_email:
-        message = quote_plus("Order is missing ambassador contact information.")
-        return RedirectResponse(f"/admin?otc_err={message}#otc", status_code=303)
+        return JSONResponse({"ok": False, "error": "Order is missing ambassador contact information."}, status_code=500)
 
     total_cost = order.get("total", 0.0)
     reason_clean = _safe_text(reason).strip() or "Rejected by admin"
@@ -5472,8 +5470,7 @@ async def admin_otc_reject(
         },
     )
 
-    message = quote_plus("Order rejected and IGP refunded.")
-    return RedirectResponse(f"/admin?otc_msg={message}#otc", status_code=303)
+    return JSONResponse({"ok": True, "message": "Order rejected and IGP refunded."})
 
 
 async def _approve_pending_applicant(email: str) -> bool:
@@ -5500,7 +5497,10 @@ async def _approve_pending_applicant(email: str) -> bool:
     except Exception as exc:
         print(f"[admin] failed to update leaderboard for {email_norm}: {exc}")
 
-    _register_email_record(email_norm)
+    try:
+        _register_email_record(email_norm)
+    except Exception as exc:
+        print(f"[admin] Warning: failed to register email record for {email_norm}: {exc}")
 
     referrer = str(data.get("referred_by", "")).strip().lower()
     if referrer:
@@ -5551,9 +5551,9 @@ async def admin_referral_approve(
     request: Request,
     email: str = Form(""),
     emails: list[str] | None = Form(None),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     targets: set[str] = set()
 
@@ -5567,7 +5567,7 @@ async def admin_referral_approve(
                 targets.add(value_norm)
 
     if not targets:
-        return RedirectResponse("/admin#referrals", status_code=303)
+        return JSONResponse({"ok": False, "error": "No targets specified"}, status_code=400)
 
     refresh_needed = False
     for target in targets:
@@ -5580,7 +5580,7 @@ async def admin_referral_approve(
         except Exception as exc:
             print(f"[admin] failed to refresh leaderboard cache: {exc}")
 
-    return RedirectResponse("/admin#referrals", status_code=303)
+    return JSONResponse({"ok": True, "message": f"Approved {len(targets)} referrals."})
 
 
 @app.post("/admin/referrals/reject")
@@ -5588,9 +5588,9 @@ async def admin_referral_reject(
     request: Request,
     email: str = Form(""),
     emails: list[str] | None = Form(None),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     targets: set[str] = set()
 
@@ -5604,7 +5604,7 @@ async def admin_referral_reject(
                 targets.add(value_norm)
 
     if not targets:
-        return RedirectResponse("/admin#referrals", status_code=303)
+        return JSONResponse({"ok": False, "error": "No targets specified"}, status_code=400)
 
     refresh_needed = False
     for target in targets:
@@ -5617,23 +5617,23 @@ async def admin_referral_reject(
         except Exception as exc:
             print(f"[admin] failed to refresh leaderboard cache: {exc}")
 
-    return RedirectResponse("/admin#referrals", status_code=303)
+    return JSONResponse({"ok": True, "message": f"Rejected {len(targets)} referrals."})
 
 
 @app.post("/admin/stakes/unstake")
 async def admin_stakes_unstake(
     request: Request, emails: str = Form(""), ghost: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin?stakes_err=Invalid+ghost+key#stakes", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     raw = str(emails or "").strip()
     if not raw:
-        return RedirectResponse("/admin?stakes_err=Provide+one+or+more+emails#stakes", status_code=303)
+        return JSONResponse({"ok": False, "error": "Provide one or more emails"}, status_code=400)
 
     candidates: list[str] = []
     seen: set[str] = set()
@@ -5644,7 +5644,7 @@ async def admin_stakes_unstake(
             candidates.append(value_norm)
 
     if not candidates:
-        return RedirectResponse("/admin?stakes_err=No+valid+emails+found#stakes", status_code=303)
+        return JSONResponse({"ok": False, "error": "No valid emails found"}, status_code=400)
 
     successes = 0
     failures: list[str] = []
@@ -5655,33 +5655,25 @@ async def admin_stakes_unstake(
         else:
             failures.append(f"{candidate}: {err or 'unable to unstake'}")
 
-    params: list[tuple[str, str]] = []
-    if successes:
-        label = "stake" if successes == 1 else "stakes"
-        params.append(("stakes_msg", f"Unstaked {successes} {label}."))
     if failures:
-        joined = "; ".join(failures[:5])
-        params.append(("stakes_err", joined))
-
-    query = "&".join(f"{key}={quote_plus(value)}" for key, value in params if value)
-    redirect_url = "/admin#stakes"
-    if query:
-        redirect_url = f"/admin?{query}#stakes"
-    return RedirectResponse(redirect_url, status_code=303)
+        return JSONResponse({"ok": False, "error": "; ".join(failures), "success_count": successes}, status_code=400)
+    
+    return JSONResponse({"ok": True, "message": f"Unstaked {successes} stakes.", "success_count": successes})
 
 
 @app.post("/admin/maintenance")
 async def admin_maintenance_toggle(
     request: Request, enabled: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login", status_code=303)
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     is_enabled = str(enabled).strip().lower() in {"1", "true", "yes", "on"}
     await _set_maintenance(is_enabled)
 
-    return RedirectResponse("/admin", status_code=303)
+    status = "enabled" if is_enabled else "disabled"
+    return JSONResponse({"ok": True, "message": f"Maintenance mode {status}."})
     # Require Ghost key (same pattern as scorepad/posts/tasks forms)
     # if not ghost or ghost != os.getenv("ADMIN_GHOST_KEY"):
     #     raise HTTPException(status_code=403, detail="Invalid ghost key")
@@ -5690,7 +5682,7 @@ async def admin_maintenance_toggle(
 @app.post("/admin/recovery/reset")
 async def admin_recovery_reset(
     request: Request, email: str = Form(...), ghost: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     expected = os.getenv("GHOST_EXPORT_KEY")
@@ -5710,17 +5702,17 @@ async def admin_recovery_reset(
                 f"user:{email_norm}", mapping={"password": _hash_password(code)}
             )
             await redis_client.delete(key)
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Recovery code reset."})
 
 
 @app.post("/admin/activity/reset")
-async def admin_activity_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
+async def admin_activity_reset(request: Request, ghost: str = Form("")) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     await redis_client.set(ACTIVITY_RESET_KEY, _monday_start(datetime.utcnow()).isoformat())
 
@@ -5740,29 +5732,29 @@ async def admin_activity_reset(request: Request, ghost: str = Form("")) -> Redir
 
 
 @app.post("/admin/transfers/reset")
-async def admin_transfers_reset(request: Request, ghost: str = Form("")) -> RedirectResponse:
+async def admin_transfers_reset(request: Request, ghost: str = Form("")) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     await _zero_transfer_history()
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Transfer history cleared."})
 
 
 @app.post("/admin/transfers/delete")
-async def admin_transfers_delete(request: Request, ghost: str = Form("")) -> RedirectResponse:
+async def admin_transfers_delete(request: Request, ghost: str = Form("")) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     await _delete_transfer_history()
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Transfer history deleted."})
 
 
 @app.get("/api/admin/wallets")
@@ -5931,7 +5923,7 @@ async def admin_post_verify(
     email: str | None = Form(None),
     url: str | None = Form(None),
     verify_all: str | None = Form(None),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
@@ -5943,15 +5935,13 @@ async def admin_post_verify(
     touched_emails: set[str] = set()
 
     if verify_all:
-        # Works with BOTH shapes:
-        #   { email: [ {"url": "...", "verified": bool}, ... ] }
-        #   { email: [ "https://...", ... ] }
         posts = await _all_posts()
-        for eml, entries in posts.items():
+        for eml, info in posts.items():
             eml_key = eml.strip().lower()
             if eml_key:
                 touched_emails.add(eml_key)
-            for entry in entries:
+            urls = info.get("urls", [])
+            for entry in urls:
                 if isinstance(entry, dict):
                     u = entry.get("url", "")
                 else:
@@ -5995,13 +5985,13 @@ async def admin_post_verify(
                 f"user:{eml}", mapping={"verified": 1, "activity": "active"}
             )
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Posts verified."})
 
 
 @app.post("/admin/posts/reject")
 async def admin_post_reject(
     request: Request, email: str = Form(...), url: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     email_key = email.strip().lower()
@@ -6010,7 +6000,7 @@ async def admin_post_reject(
     await redis_client.srem(f"posts_verified:{email_key}", url_clean)
     await redis_client.sadd(f"posts_rejected:{email_key}", url_clean)
     await redis_client.zrem(f"{ACTIVITY_ZSET_PREFIX}{email_key}", url_clean)
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Post rejected."})
 
 
 @app.post("/admin/posts/reject-selected")
@@ -6019,7 +6009,7 @@ async def admin_post_reject_selected(
     selected: list[str] = Form([]),
     email: str | None = Form(None),
     url: str | None = Form(None),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
@@ -6045,7 +6035,7 @@ async def admin_post_reject_selected(
     if pipe.command_stack:
         await pipe.execute()
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Selected posts rejected."})
 
 
 @app.post("/admin/kyc/verify")
@@ -6053,7 +6043,7 @@ async def admin_kyc_verify(
     request: Request,
     email: str = Form(...),
     notes: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     email_norm = str(email or "").strip().lower()
@@ -6077,7 +6067,7 @@ async def admin_kyc_verify(
     )
     await _set_user_kyc_status(email_norm, KYC_STATUS_VERIFIED)
     msg = quote_plus("KYC verified")
-    return RedirectResponse(f"/admin?kyc_msg={msg}#kyc", status_code=303)
+    return JSONResponse({"ok": True, "message": "KYC verified."})
 
 
 @app.post("/admin/kyc/reject")
@@ -6086,7 +6076,7 @@ async def admin_kyc_reject(
     email: str = Form(...),
     reason: str = Form(""),
     notes: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     email_norm = str(email or "").strip().lower()
@@ -6111,7 +6101,7 @@ async def admin_kyc_reject(
     )
     await _set_user_kyc_status(email_norm, KYC_STATUS_REJECTED)
     msg = quote_plus("KYC rejected")
-    return RedirectResponse(f"/admin?kyc_msg={msg}#kyc", status_code=303)
+    return JSONResponse({"ok": True, "message": "KYC rejected."})
 
 
 @app.post("/admin/proposals/verify")
@@ -6119,7 +6109,7 @@ async def admin_proposal_verify(
     request: Request,
     proposal_id: str = Form(...),
     funding_wallet: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     mapping = {"status": "active"}
@@ -6127,29 +6117,29 @@ async def admin_proposal_verify(
     if fw:
         mapping["funding_wallet"] = fw
     await redis_client.hset(f"proposal:{proposal_id.strip()}", mapping=mapping)
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Proposal verified/active."})
 
 
 @app.post("/admin/proposals/reject")
 async def admin_proposal_reject(
     request: Request, proposal_id: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     await redis_client.hset(f"proposal:{proposal_id.strip()}", "status", "rejected")
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Proposal rejected."})
 
 
 @app.post("/admin/telegram/update")
 async def admin_telegram_update(
     request: Request, email: str = Form(...), telegram: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
     await redis_client.hset(
         f"user:{email}", "telegram", _normalize_telegram(telegram)
     )
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Telegram updated."})
 
 
 @app.post("/admin/email/update")
@@ -6157,7 +6147,7 @@ async def admin_email_update(
     request: Request,
     current_email: str = Form(...),
     new_email: str = Form(...),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
         return RedirectResponse("/admin/login")
 
@@ -6187,15 +6177,15 @@ async def admin_email_update(
     REGISTERED_EMAILS.discard(old_norm)
     REGISTERED_EMAILS.add(new_norm)
     
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Email updated and records moved."})
     
 
 @app.post("/admin/scorepad")
 async def admin_scorepad(
     request: Request, email: str = Form(...), pad: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     email_key = email.strip().lower()
     try:
         pad_val = float(pad)
@@ -6204,7 +6194,7 @@ async def admin_scorepad(
     await redis_client.hset("score_pad", email_key, pad_val)
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Score pad updated."})
 
 
 @app.post("/admin/guardians/toggle")
@@ -6213,19 +6203,19 @@ async def admin_guardian_toggle(
     email: str = Form(...),
     enable: str = Form("1"),
     ghost: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     email_norm = str(email or "").strip().lower()
     if not email_norm:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Email required"}, status_code=400)
     if email_norm not in REGISTERED_EMAILS:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Email not registered"}, status_code=404)
 
     enable_flag = str(enable).strip().lower() in {"1", "true", "yes", "on"}
     await _set_guardian_status(email_norm, enable_flag)
@@ -6235,19 +6225,19 @@ async def admin_guardian_toggle(
     except Exception as exc:
         print(f"[guardian] failed to refresh leaderboard cache: {exc}")
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Guardian status updated."})
 
 
 @app.post("/admin/scorepad/boost")
 async def admin_scorepad_boost(
     request: Request, ghost: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     wallets = await _all_wallets()
     pipe = redis_client.pipeline()
@@ -6261,19 +6251,19 @@ async def admin_scorepad_boost(
         await pipe.execute()
         await _load_csv()
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Score pad boosted."})
 
 
 @app.post("/admin/scorepad/slash")
 async def admin_scorepad_slash(
     request: Request, ghost: str = Form("")
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
 
     wallets = await _all_wallets()
     pipe = redis_client.pipeline()
@@ -6287,7 +6277,7 @@ async def admin_scorepad_slash(
         await pipe.execute()
         await _load_csv()
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Score pad slashed for inactive wallets."})
 
 
 @app.post("/admin/scorepad/reset")
@@ -6296,12 +6286,12 @@ async def admin_scorepad_reset(
     emails: list[str] = Form([]),
     reset_all: str | None = Form(None),
     ghost: str = Form(""),
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     expected = os.getenv("GHOST_EXPORT_KEY")
     if not expected or ghost != expected:
-        return RedirectResponse("/admin", status_code=303)
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
     if reset_all:
         await redis_client.delete("score_pad")
     else:
@@ -6312,17 +6302,120 @@ async def admin_scorepad_reset(
             await pipe.execute()
     # Refresh cached leaderboard so padding is reflected immediately
     await _load_csv()
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Score pad reset."})
+
+
+@app.post("/admin/scorepad/referral-bonus")
+async def admin_scorepad_referral_bonus(
+    request: Request, ghost: str = Form("")
+) -> JSONResponse:
+    """Award each referrer 25% of their approved referrals' scorepad balances."""
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    expected = os.getenv("GHOST_EXPORT_KEY")
+    if not expected or ghost != expected:
+        return JSONResponse({"ok": False, "error": "Invalid ghost key"}, status_code=403)
+
+    # --- Build referrer → [referral emails] from BOTH sources ---
+
+    referrer_map: dict[str, set[str]] = {}
+
+    # Source 1: referrals:* hashes (approved entries)
+    async for key in redis_client.scan_iter(f"{REFERRALS_HASH_PREFIX}*"):
+        key_str = key if isinstance(key, str) else key.decode("utf-8", "ignore")
+        key_type = await redis_client.type(key_str)
+        key_type_str = key_type if isinstance(key_type, str) else key_type.decode()
+        if key_type_str != "hash":
+            print(f"[referral-bonus] skipping non-hash key: {key_str} (type={key_type_str})")
+            continue
+        referrer_email = key_str.replace(REFERRALS_HASH_PREFIX, "", 1).strip().lower()
+        if not referrer_email:
+            continue
+        entries = await _referral_entries(referrer_email)
+        for e in entries:
+            status = e.get("status", "")
+            ref_email = str(e.get("email", "")).strip().lower()
+            print(f"[referral-bonus] referrer={referrer_email} → referral={ref_email} status={status}")
+            if status == "approved" and ref_email:
+                referrer_map.setdefault(referrer_email, set()).add(ref_email)
+
+    # Source 2: user:* hashes with referred_by field (verified users)
+    async for user_key in redis_client.scan_iter("user:*"):
+        user_key_str = user_key if isinstance(user_key, str) else user_key.decode("utf-8", "ignore")
+        udata = await redis_client.hgetall(user_key_str)
+        ref_email = user_key_str.split(":", 1)[1].strip().lower()
+        referrer = str(udata.get("referred_by", "")).strip().lower()
+        is_verified = str(udata.get("verified", "")) == "1"
+        if referrer and ref_email and is_verified:
+            print(f"[referral-bonus] (user hash) referrer={referrer} → referral={ref_email} verified={is_verified}")
+            referrer_map.setdefault(referrer, set()).add(ref_email)
+
+    print(f"[referral-bonus] total referrers found: {len(referrer_map)}")
+    for r, refs in referrer_map.items():
+        print(f"[referral-bonus]   {r} → {refs}")
+
+    if not referrer_map:
+        return JSONResponse({
+            "ok": True,
+            "message": "No approved referrals found. Nothing to process.",
+            "processed": 0,
+            "total_bonus_awarded": 0.0,
+        })
+
+    # --- Calculate and credit bonuses ---
+    total_bonus = 0.0
+    processed = 0
+    details: list[str] = []
+    pipe = redis_client.pipeline()
+
+    for referrer, referral_emails in referrer_map.items():
+        bonus = 0.0
+        for ref_email in referral_emails:
+            ref_pad = await _scorepad_balance(ref_email)
+            contribution = ref_pad * REFERRAL_BONUS_RATE
+            print(f"[referral-bonus]   {ref_email} scorepad={ref_pad:.2f} → contribution={contribution:.2f}")
+            bonus += contribution
+        if bonus > 0:
+            pipe.hincrbyfloat("score_pad", referrer, bonus)
+            total_bonus += bonus
+            processed += 1
+            details.append(f"{referrer}: +{bonus:,.2f}")
+            print(f"[referral-bonus] ✅ crediting {referrer} with {bonus:.2f}")
+        else:
+            print(f"[referral-bonus] ⏭ {referrer}: bonus=0 (referrals have no scorepad balance)")
+
+    if pipe.command_stack:
+        await pipe.execute()
+        try:
+            await _get_cached_data(force_refresh=True)
+        except Exception as exc:
+            print(f"[referral-bonus] cache refresh error: {exc}")
+
+    msg = f"Referral bonuses processed. {processed} referrers credited {total_bonus:,.2f} IGP total."
+    print(f"[referral-bonus] DONE: {msg}")
+    return JSONResponse({
+        "ok": True,
+        "message": msg,
+        "processed": processed,
+        "total_bonus_awarded": round(total_bonus, 4),
+        "details": details,
+    })
 
 
 @app.post("/admin/tasks/bulk")
-async def admin_task_bulk(
-    request: Request,
-    action: str = Form(...),
-    selected: list[str] = Form([]),
-) -> RedirectResponse:
+async def admin_task_bulk(request: Request) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    form = await request.form()
+    action = str(form.get("action", "")).strip()
+    selected = form.getlist("selected")
+
+    if not action:
+        return JSONResponse({"ok": False, "error": "No action specified."}, status_code=400)
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     action_name = (action or "").strip().lower()
 
@@ -6371,28 +6464,28 @@ async def admin_task_bulk(
                 for email_key in touched:
                     await redis_client.hset(f"user:{email_key}", "verified", 1)
 
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Bulk task action completed."})
 
 
 @app.post("/admin/tasks/verify")
 async def admin_task_verify(
     request: Request, email: str = Form(...), task_id: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     await redis_client.hset(f"tasks:{email}", task_id, "verified")
     await redis_client.hset(f"user:{email}", "verified", 1)
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Task verified."})
 
 
 @app.post("/admin/tasks/destroy")
 async def admin_task_destroy(
     request: Request, email: str = Form(...), task_id: str = Form(...)
-) -> RedirectResponse:
+) -> JSONResponse:
     if not await _current_admin(request):
-        return RedirectResponse("/admin/login")
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     await redis_client.hdel(f"tasks:{email}", task_id)
-    return RedirectResponse("/admin", status_code=303)
+    return JSONResponse({"ok": True, "message": "Task deleted."})
 
 
 @app.get("/api/admin/tasks")
@@ -6400,7 +6493,174 @@ async def api_admin_tasks(request: Request) -> JSONResponse:
     if not await _current_admin(request):
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
     tasks = await _all_tasks()
-    return JSONResponse({"ok": True, "tasks": tasks})
+    return JSONResponse(jsonable_encoder({"ok": True, "tasks": tasks}))
+
+
+@app.get("/api/admin/referrals")
+async def api_admin_referrals(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    pending_referrals = await _pending_referrals()
+    return JSONResponse(jsonable_encoder({"ok": True, "referrals": pending_referrals}))
+
+
+@app.get("/api/admin/kyc")
+async def api_admin_kyc(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    records = await _all_kyc_records()
+    counts = {
+        "pending": sum(1 for r in records if r.get("status") == "pending"),
+        "verified": sum(1 for r in records if r.get("status") == "verified"),
+        "rejected": sum(1 for r in records if r.get("status") == "rejected"),
+    }
+    return JSONResponse(jsonable_encoder({"ok": True, "records": records, "counts": counts}))
+
+
+
+
+
+@app.get("/api/admin/proposals")
+async def api_admin_proposals(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    proposals = await _pending_proposals()
+    return JSONResponse(jsonable_encoder({"ok": True, "proposals": proposals}))
+
+
+@app.get("/api/admin/recoveries")
+async def api_admin_recoveries(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    recoveries = await _all_recoveries()
+    return JSONResponse(jsonable_encoder({"ok": True, "recoveries": recoveries}))
+
+
+@app.get("/api/admin/otc/orders")
+async def api_admin_otc_orders(
+    request: Request, status: str = Query(""), limit: int = Query(200)
+) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    
+    st = status.strip() if status else None
+    orders = await _otc_orders(status=st, limit=limit)
+    return JSONResponse(jsonable_encoder({"ok": True, "orders": orders}))
+
+
+@app.get("/api/admin/p2p/orders")
+async def api_admin_p2p_orders(request: Request, limit: int = Query(100)) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    history = await _p2p_recent_history(limit=limit)
+    return JSONResponse(jsonable_encoder({"ok": True, "orders": history}))
+
+
+@app.get("/api/admin/p2p/prizes")
+async def api_admin_p2p_prizes(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    prizes = await _p2p_prizes(include_inactive=True)
+    return JSONResponse(jsonable_encoder({"ok": True, "prizes": prizes}))
+
+
+@app.get("/api/admin/otc/currencies")
+async def api_admin_otc_currencies(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    currencies = await _otc_currencies(include_inactive=True)
+    return JSONResponse(jsonable_encoder({"ok": True, "currencies": currencies}))
+
+
+@app.get("/api/admin/maintenance")
+async def api_admin_maintenance(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    enabled = await _maintenance_enabled()
+    return JSONResponse({"ok": True, "enabled": enabled})
+
+
+@app.get("/api/admin/gamefi")
+async def api_admin_gamefi(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    state = await _wheel_state(email=None, limit=50)
+    # Add 'email' alias for 'player' so frontend template works
+    for h in state.get("history", []):
+        h["email"] = h.get("player", "")
+    return JSONResponse({"ok": True, **state})
+
+
+@app.get("/api/admin/dashboard")
+async def api_admin_dashboard(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    
+    analytics = await _analytics_dashboard(page=1, limit=50)
+    
+    # Aggregated stats
+    wallets = await _all_wallets()
+    active_count = sum(1 for w in wallets if w.get("active"))
+    inactive_count = len(wallets) - active_count
+    
+    kyc_records = await _all_kyc_records()
+    kyc_pending = sum(1 for r in kyc_records if r.get("status") == KYC_STATUS_PENDING)
+    
+    stakes = await _all_active_stakes()
+    total_staked = sum(float(s.get("amount", 0.0) or 0.0) for s in stakes)
+    
+    return JSONResponse({
+        "ok": True,
+        "analytics": analytics,
+        "wallets": wallets,
+        "stats": {
+            "wallets_total": len(wallets),
+            "wallets_active": active_count,
+            "wallets_inactive": inactive_count,
+            "kyc_pending": kyc_pending,
+            "stakes_active_count": len(stakes),
+            "stakes_total_amount": total_staked,
+        }
+    })
+
+
+@app.get("/api/admin/stakes")
+async def api_admin_stakes(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    try:
+        raw_stakes = await _all_active_stakes()
+        stakes = []
+        for s in raw_stakes:
+            stakes.append({
+                "email": s.get("email", ""),
+                "amount": float(s.get("amount", 0) or 0),
+                "staked_at": s.get("started_at_display", ""),
+                "unlock_at": s.get("ends_at_display", ""),
+                "telegram": s.get("telegram", ""),
+                "name": s.get("name", ""),
+                "time_remaining": s.get("time_remaining_label", ""),
+                "is_mature": s.get("is_mature", False),
+            })
+        return JSONResponse(jsonable_encoder({"ok": True, "stakes": stakes, "v": 2}))
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            {"ok": False, "error": str(exc)}, status_code=500
+        )
+
+
+
+
+
+
+@app.get("/api/admin/transfers")
+async def api_admin_transfers(request: Request, limit: int = Query(100)) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    history = await _all_transfer_history(limit=limit)
+    return JSONResponse({"ok": True, "transfers": history})
 
 
 @app.get("/business/meetings")
