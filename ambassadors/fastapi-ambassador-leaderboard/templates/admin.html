@@ -1318,14 +1318,18 @@
             let html = '';
             for (const [email, info] of Object.entries(data.posts)) {
                 const urls = info.urls || [];
-                if (urls.length === 0) continue;
+                const linkUrls = urls.filter(item => {
+                    const u = (item.url || item).trim();
+                    return u.startsWith('http://') || u.startsWith('https://');
+                });
+                if (linkUrls.length === 0) continue;
 
                 const safeEmail = email.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const encEmail = encodeURIComponent(email);
-                const safeTg = (info.telegram || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+                const safeTg = (info.telegram || '').replace(/&/g, '&amp;').replace(/</, '&lt;');
                 const tgLink = info.tg_link || '';
                 const padVal = parseFloat(info.pad || 0);
-                const postCount = info.count || urls.length;
+                const postCount = linkUrls.length;
 
                 html += `<div class="card bg-dark bg-opacity-50 border-secondary mb-3">
                     <div class="card-body">
@@ -1352,7 +1356,7 @@
                             <table class="table table-dark table-sm align-middle mb-0">
                                 <tbody>`;
 
-                urls.forEach(item => {
+                linkUrls.forEach(item => {
                     const url = item.url || item;
                     const encUrl = encodeURIComponent(url);
                     const safeUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
