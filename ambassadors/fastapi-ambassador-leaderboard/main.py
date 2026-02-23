@@ -1590,6 +1590,25 @@ async def _load_csv() -> Dict[str, Any]:
         pads = await redis_client.hgetall("score_pad")
         norm_map = {k.strip().lower(): float(v) for k, v in pads.items() if v is not None}
         df["points"] = df["points"] + df["__email_norm"].map(norm_map).fillna(0)
+
+        # Inject Redis-only users (registered + have score_pad but missing from CSV)
+        existing_emails = set(df["__email_norm"].tolist())
+        missing_rows = []
+        for email in REGISTERED_EMAILS:
+            if email not in existing_emails and email in norm_map:
+                udata = await redis_client.hgetall(f"user:{email}")
+                tg = str(udata.get("telegram", "")).strip()
+                name = str(udata.get("name", "")).strip() or email.split("@")[0]
+                row = {c: "" for c in df.columns}
+                row["email"] = email
+                row["__email_norm"] = email
+                row["name"] = name
+                row["telegram"] = tg
+                row["points"] = norm_map[email]
+                missing_rows.append(row)
+        if missing_rows:
+            df = pd.concat([df, pd.DataFrame(missing_rows)], ignore_index=True)
+            df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0)
     else:
         df["points"] = pd.to_numeric(df.get("points"), errors="coerce").fillna(0)
         df["__email_norm"] = ""
@@ -5757,12 +5776,68 @@ async def admin_transfers_delete(request: Request, ghost: str = Form("")) -> JSO
     return JSONResponse({"ok": True, "message": "Transfer history deleted."})
 
 
+async def _wallet_stats_only() -> dict[str, int]:
+    """Compute wallet stats (active/inactive/total) without building full wallet objects."""
+    activity_start_ts, activity_end_ts = await _activity_window_bounds()
+    emails = list(REGISTERED_EMAILS)
+    if not emails:
+        return {"wallets_total": 0, "wallets_active": 0, "wallets_inactive": 0}
+    pipe = redis_client.pipeline()
+    for email in emails:
+        pipe.zcount(f"{ACTIVITY_ZSET_PREFIX}{email}", activity_start_ts, activity_end_ts)
+    results = await pipe.execute()
+    active = sum(1 for r in results if (r or 0) > 0)
+    return {
+        "wallets_total": len(emails),
+        "wallets_active": active,
+        "wallets_inactive": len(emails) - active,
+    }
+
+
 @app.get("/api/admin/wallets")
-async def api_admin_wallets(request: Request) -> JSONResponse:
+async def api_admin_wallets(
+    request: Request,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    filter: str = Query("all"),
+    q: str = Query(""),
+) -> JSONResponse:
     if not await _current_admin(request):
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
-    wallets = await _all_wallets()
-    return JSONResponse({"ok": True, "wallets": wallets})
+
+    all_wallets = await _all_wallets()
+
+    # Server-side search
+    query = q.strip().lower()
+    if query:
+        all_wallets = [
+            w for w in all_wallets
+            if query in w.get("email", "").lower()
+            or query in w.get("telegram", "").lower()
+            or query in w.get("wallet", "").lower()
+        ]
+
+    # Server-side filter
+    if filter == "active":
+        all_wallets = [w for w in all_wallets if w.get("active")]
+    elif filter == "inactive":
+        all_wallets = [w for w in all_wallets if not w.get("active")]
+
+    total = len(all_wallets)
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages)
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_wallets = all_wallets[start:end]
+
+    return JSONResponse({
+        "ok": True,
+        "wallets": page_wallets,
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "per_page": per_page,
+    })
 
 
 @app.get("/api/admin/validate_wallets")
@@ -6598,10 +6673,8 @@ async def api_admin_dashboard(request: Request) -> JSONResponse:
     
     analytics = await _analytics_dashboard(page=1, limit=50)
     
-    # Aggregated stats
-    wallets = await _all_wallets()
-    active_count = sum(1 for w in wallets if w.get("active"))
-    inactive_count = len(wallets) - active_count
+    # Lightweight stats — no full wallet build needed
+    wallet_stats = await _wallet_stats_only()
     
     kyc_records = await _all_kyc_records()
     kyc_pending = sum(1 for r in kyc_records if r.get("status") == KYC_STATUS_PENDING)
@@ -6612,17 +6685,29 @@ async def api_admin_dashboard(request: Request) -> JSONResponse:
     return JSONResponse({
         "ok": True,
         "analytics": analytics,
-        "wallets": wallets,
         "stats": {
-            "wallets_total": len(wallets),
-            "wallets_active": active_count,
-            "wallets_inactive": inactive_count,
+            **wallet_stats,
             "kyc_pending": kyc_pending,
             "stakes_active_count": len(stakes),
             "stakes_total_amount": total_staked,
         }
     })
 
+
+@app.post("/api/admin/sync-leaderboard")
+async def api_admin_sync_leaderboard(request: Request) -> JSONResponse:
+    if not await _current_admin(request):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    try:
+        data = await _get_cached_data(force_refresh=True)
+        total_rows = len(data.get("rows", []))
+        return JSONResponse({
+            "ok": True,
+            "message": f"Leaderboard synced — {total_rows} users now in leaderboard.",
+            "total_rows": total_rows,
+        })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
 @app.get("/api/admin/stakes")
 async def api_admin_stakes(request: Request) -> JSONResponse:
