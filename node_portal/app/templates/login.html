@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Operator Portal · Login</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: radial-gradient(circle at top left, #1f1b2e, #05030a 70%);
+            --glass: rgba(30, 24, 54, 0.6);
+            --accent: #6ef8ff;
+            --accent-strong: #ff00d4;
+            --text: #e5f2ff;
+            --muted: #94a3b8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: var(--bg);
+            font-family: "Inter", "Segoe UI", sans-serif;
+            color: var(--text);
+            overflow: hidden;
+        }
+        .grid {
+            position: absolute;
+            width: 120vmax;
+            height: 120vmax;
+            background-image: linear-gradient(90deg, rgba(110, 248, 255, 0.08) 1px, transparent 1px),
+                              linear-gradient(0deg, rgba(110, 248, 255, 0.05) 1px, transparent 1px);
+            background-size: 80px 80px;
+            animation: pulse 20s linear infinite;
+            opacity: 0.5;
+        }
+        @keyframes pulse {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(5deg) scale(1.05); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        .card {
+            width: min(420px, 90vw);
+            padding: 3rem 2.5rem;
+            border-radius: 24px;
+            background: var(--glass);
+            backdrop-filter: blur(28px) saturate(120%);
+            box-shadow: 0 45px 85px rgba(0,0,0,0.65);
+            border: 1px solid rgba(110, 248, 255, 0.2);
+            position: relative;
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            inset: -2px;
+            border-radius: inherit;
+            background: linear-gradient(120deg, rgba(110,248,255,0.55), rgba(255,0,212,0.25));
+            z-index: -1;
+            opacity: 0.6;
+        }
+        h1 {
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            margin-top: 0;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            color: var(--accent);
+            text-shadow: 0 0 18px rgba(110,248,255,0.5);
+        }
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+        }
+        input {
+            width: 100%;
+            padding: 0.85rem 1rem;
+            border-radius: 14px;
+            border: 1px solid rgba(110,248,255,0.25);
+            background: rgba(8, 5, 19, 0.55);
+            color: var(--text);
+            outline: none;
+            font-size: 1rem;
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+        input:focus {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(110,248,255,0.15);
+        }
+        button {
+            width: 100%;
+            margin-top: 2rem;
+            padding: 1rem;
+            border: none;
+            border-radius: 16px;
+            background: linear-gradient(130deg, rgba(110,248,255,0.9), rgba(255,0,212,0.85));
+            color: #04121c;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 18px 30px rgba(110,248,255,0.25);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 24px 40px rgba(255,0,212,0.25);
+        }
+        .meta {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            color: rgba(255,255,255,0.35);
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+<div class="grid"></div>
+<section class="card">
+    <div class="meta">Bitcoin · Validator Ops</div>
+    <h1>Operator Login</h1>
+    <form method="post" action="/login">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Enter Portal</button>
+    </form>
+</section>
+</body>
+</html>
