@@ -233,6 +233,12 @@ Check accumulated governance fees:
 $ interchained-cli getgovernancebalance
 ```
 
+Check total burned transaction fees:
+
+```
+$ interchained-cli getburnedfees
+```
+
 Rescan token transactions from a specific block height:
 
 ```
