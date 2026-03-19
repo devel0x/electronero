@@ -1,0 +1,19 @@
+# Node Operator Rewards Portal Frontend
+
+This lightweight frontend provides the neon-glass UI for the Interchained Node Operator Rewards Portal. It is a static site built with vanilla JavaScript and CSS and communicates with the FastAPI backend.
+
+Accounts flagged as administrators (email present in the backend `PORTAL_ADMIN_EMAILS` list) see an additional control center after logging in. The admin view surfaces pool balances, allows balance/daily payout adjustments, exposes node moderation controls, and can export the current payout cycle as a CSV snapshot.
+
+## Usage
+
+1. Serve the files from any static web server (e.g. `python -m http.server` inside the `ambassadors/node-operator-rewards-portal/frontend` directory).
+2. The app expects the backend to be available at `http://localhost:8000` by default. Override by setting `window.PORTAL_API_URL` before loading `app.js`.
+
+Example using Python's built-in server:
+
+```bash
+cd ambassadors/node-operator-rewards-portal/frontend
+python -m http.server 9000
+```
+
+Then visit `http://localhost:9000` in your browser.
