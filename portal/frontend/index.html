@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interchained Node Operator Rewards Portal</title>
+    <link rel="stylesheet" href="assets/css/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="starfield"></canvas>
+    <div class="portal-shell">
+      <header class="portal-header glass">
+        <div class="logo">
+          <span class="glow-dot"></span>
+          <h1>Interchained Rewards</h1>
+        </div>
+        <nav>
+          <button id="loginToggle" class="button ghost">Login</button>
+          <button id="registerToggle" class="button primary">Register</button>
+        </nav>
+      </header>
+
+      <main class="portal-content">
+        <section class="auth-panel glass" id="authPanel">
+          <h2 id="authTitle">Authenticate</h2>
+          <form id="authForm">
+            <label>Email<input type="email" id="email" required /></label>
+            <label>Password<input type="password" id="password" required minlength="8" /></label>
+            <button type="submit" class="button primary" id="authSubmit">Login</button>
+          </form>
+          <p class="hint">Use the toggle buttons above to switch between login and registration.</p>
+        </section>
+
+        <section class="dashboard" id="dashboard" hidden>
+          <div class="stats-grid">
+            <article class="stat-card glass">
+              <h3>Total Nodes</h3>
+              <p id="totalNodes">0</p>
+            </article>
+            <article class="stat-card glass">
+              <h3>Active Nodes</h3>
+              <p id="activeNodes">0</p>
+            </article>
+            <article class="stat-card glass">
+              <h3>Flagged for Bonus</h3>
+              <p id="flaggedNodes">0</p>
+            </article>
+            <article class="stat-card glass">
+              <h3>Daily Reward Pool</h3>
+              <p id="rewardPool">0</p>
+            </article>
+          </div>
+
+          <section class="nodes-panel glass">
+            <div class="panel-header">
+              <h2>Your Nodes</h2>
+              <button class="button primary" id="nodeModalToggle">Register Node</button>
+            </div>
+            <div id="nodesList" class="node-list"></div>
+          </section>
+
+          <section class="rewards-panel glass">
+            <h2>Projected Rewards</h2>
+            <div id="rewardsList" class="reward-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal hidden" id="nodeModal">
+      <div class="modal-content glass">
+        <button class="modal-close" id="closeModal">×</button>
+        <h2>Register Node</h2>
+        <form id="nodeForm">
+          <div class="form-row">
+            <label>Name<input type="text" id="nodeName" required maxlength="64" /></label>
+            <label>Wallet<input type="text" id="walletAddress" required minlength="32" maxlength="128" /></label>
+          </div>
+          <div class="form-row">
+            <label>P2P Host<input type="text" id="p2pHost" required /></label>
+            <label>P2P Port<input type="number" id="p2pPort" min="1" max="65535" required /></label>
+          </div>
+          <div class="form-row">
+            <label>RPC Host<input type="text" id="rpcHost" required /></label>
+            <label>RPC Port<input type="number" id="rpcPort" min="1" max="65535" required /></label>
+          </div>
+          <button type="submit" class="button primary">Save Node</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="assets/js/app.js" type="module"></script>
+  </body>
+</html>

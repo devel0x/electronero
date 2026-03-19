@@ -37,6 +37,11 @@ that repository unless it is for development reasons.
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
 
+Node Operator Rewards Portal
+----------------------------
+
+The `portal/` directory contains a full-stack rewards dashboard for node operators with a FastAPI backend and a neon glassmorphic frontend. Consult `portal/backend/README.md` and `portal/frontend/README.md` for setup instructions.
+
 Testing
 -------
 
