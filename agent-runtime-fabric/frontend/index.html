@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ServerBuddy Runtime Cockpit</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>ServerBuddy Runtime</h1>
+      <p>Both toolsets enabled: deployment/runtime + safe coding/file tools.</p>
+    </header>
+
+    <main>
+      <section class="card grid">
+        <h2>Session</h2>
+        <label>API Base <input id="apiBase" value="http://localhost:8080" /></label>
+        <button id="createSession">Create Session</button>
+        <button id="resetSession">session_reset</button>
+        <div><strong>Session ID:</strong> <span id="sessionId">—</span></div>
+        <pre id="sessionOut"></pre>
+      </section>
+
+      <section class="card grid">
+        <h2>Deployment Tools</h2>
+        <label>Repo URL <input id="repoUrl" value="https://github.com/vercel/serve" /></label>
+        <label>Target Dir <input id="targetDir" value="app" /></label>
+        <label>Ref <input id="ref" value="main" /></label>
+        <button id="cloneRepo">clone_repo</button>
+        <button id="checkoutRef">checkout_ref</button>
+        <button id="detectStack">detect_stack</button>
+        <button id="installNode">install_node_deps</button>
+        <button id="installPython">install_python_deps</button>
+        <button id="writeEnv">write_env_file</button>
+        <pre id="repoOut"></pre>
+      </section>
+
+      <section class="card grid">
+        <h2>Process + Preview</h2>
+        <label>Process Name <input id="procName" value="web" /></label>
+        <label>Port <input id="port" value="3000" /></label>
+        <label>Start Command (JSON array)
+          <input id="command" value='["npm","run","start"]' />
+        </label>
+        <button id="startProcess">start_process</button>
+        <button id="checkPort">check_port</button>
+        <button id="httpHealth">http_health_check</button>
+        <button id="captureMeta">capture_preview_metadata</button>
+        <button id="streamLogs">stream_logs</button>
+        <button id="stopProcess">stop_process</button>
+        <button id="exportArtifacts">export_artifacts</button>
+        <pre id="procOut"></pre>
+      </section>
+
+      <section class="card grid">
+        <h2>Safe Coding Tools</h2>
+        <label>Runtime Path <input id="runtimePath" value="/runtime/workspaces" /></label>
+        <textarea id="code" rows="6">print("hello safe toolset")</textarea>
+        <button id="runCode">run_code</button>
+        <button id="installPackage">install_package</button>
+        <button id="listDir">list_directory</button>
+        <button id="writeFile">write_file sample.py</button>
+        <button id="readFile">read_file sample.py</button>
+        <button id="searchFiles">search_in_files</button>
+        <button id="functionsMap">functions_mapping</button>
+        <button id="bracketTrack">bracket_tracker</button>
+        <button id="exportArtifact">export_artifact</button>
+        <pre id="safeOut"></pre>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
