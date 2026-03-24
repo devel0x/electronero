@@ -104,26 +104,14 @@ def build_tree_summary(files: list[dict]) -> str:
 
 def create_workspace(client: httpx.Client, name: str) -> dict:
     resp = client.post(f"{API_BASE}/api/workspaces", json={
-        "name": name,
-        "mode": "ai",
-    }, headers={"Cookie": f"session_id={get_session(client)}"})
+        "initial_message": f"Code analysis workspace: {name}",
+        "client_id": f"analyzer_{hashlib.md5(name.encode()).hexdigest()[:12]}",
+    }, headers=headers, timeout=30)
     if resp.status_code == 401:
-        print("[!] Cannot create workspace via API key auth — need session. Skipping workspace creation.")
+        print("[!] API key auth failed for workspace creation. Check your AIAS_API_KEY.")
         return None
     resp.raise_for_status()
     return resp.json()
-
-
-def get_session(client: httpx.Client) -> str:
-    resp = client.post(f"{API_BASE}/api/auth/login", json={
-        "email": os.getenv("AIAS_EMAIL", "admin@aiassist.net"),
-        "password": os.getenv("AIAS_PASSWORD", "admin123"),
-    })
-    if resp.status_code == 200:
-        for cookie in resp.cookies.jar:
-            if cookie.name == "session_id":
-                return cookie.value
-    return ""
 
 
 def send_to_llm(client: httpx.Client, system_prompt: str, user_msg: str) -> str:
@@ -151,11 +139,12 @@ def send_to_llm(client: httpx.Client, system_prompt: str, user_msg: str) -> str:
     return content
 
 
-def store_in_workspace(client: httpx.Client, workspace_id: str, content: str, session_id: str):
+def store_in_workspace(client: httpx.Client, workspace_id: str, content: str):
     resp = client.post(
         f"{API_BASE}/api/workspaces/{workspace_id}/messages",
-        json={"content": content, "role": "user"},
-        headers={"Cookie": f"session_id={session_id}"},
+        json={"content": content},
+        headers=headers,
+        timeout=30,
     )
     if resp.status_code != 200:
         print(f"[!] Failed to store message in workspace: {resp.status_code}")
@@ -247,31 +236,18 @@ Provide a thorough analysis with specific file paths and line references. Format
     print(f"       Report saved: {report_path}")
 
     print("[4/4] Storing in AiAS workspace...")
-    session_id = get_session(client)
-    if session_id:
-        ws_name = f"CodeScan: {repo_name} ({datetime.now().strftime('%m/%d %H:%M')})"
-        resp = client.post(
-            f"{API_BASE}/api/workspaces",
-            json={
-                "name": ws_name,
-                "mode": "takeover",
-                "initial_message": f"Code Analysis Report for `{repo_name}` — {len(files)} file(s) scanned\n\n{tree}",
-            },
-            headers={"Cookie": f"session_id={session_id}"},
-        )
-        if resp.status_code == 200:
-            ws = resp.json()
-            ws_id = ws.get("id", ws.get("workspace", {}).get("id", ""))
-            if ws_id:
-                store_in_workspace(client, ws_id, analysis, session_id)
-                print(f"       Workspace created: {ws_name}")
-                print(f"       Workspace ID: {ws_id}")
-            else:
-                print(f"[!] Workspace created but no ID returned")
+    ws_name = f"CodeScan: {repo_name} ({datetime.now().strftime('%m/%d %H:%M')})"
+    ws_result = create_workspace(client, ws_name)
+    if ws_result:
+        ws_id = ws_result.get("id", ws_result.get("workspace", {}).get("id", ""))
+        if ws_id:
+            store_in_workspace(client, ws_id, analysis)
+            print(f"       Workspace created: {ws_name}")
+            print(f"       Workspace ID: {ws_id}")
         else:
-            print(f"[!] Workspace creation failed: {resp.status_code} — {resp.text[:100]}")
+            print(f"[!] Workspace created but no ID returned")
     else:
-        print("       [!] No session — workspace storage skipped (report saved locally)")
+        print("       [!] Workspace creation failed — report saved locally only")
 
     client.close()
 
@@ -289,14 +265,9 @@ def list_workspaces():
         sys.exit(1)
 
     client = httpx.Client()
-    session_id = get_session(client)
-    if not session_id:
-        print("[!] Could not authenticate")
-        sys.exit(1)
-
     resp = client.get(
         f"{API_BASE}/api/user/workspaces",
-        headers={"Cookie": f"session_id={session_id}"},
+        headers=headers,
     )
     resp.raise_for_status()
     workspaces = resp.json()
