@@ -182,15 +182,65 @@ def parse_surgical_blocks(llm_output: str) -> list[dict]:
         if action == "WRITE":
             blocks.append({"action": "write", "path": filepath, "content": body.rstrip("\n")})
         elif action == "PATCH":
-            try:
-                ops_data = json.loads(body.strip())
-                operations = ops_data if isinstance(ops_data, list) else ops_data.get("operations", [ops_data])
-                blocks.append({"action": "patch", "path": filepath, "operations": operations})
-            except json.JSONDecodeError as e:
-                print(f"[!] Failed to parse PATCH JSON for {filepath}: {e}")
-                blocks.append({"action": "patch_error", "path": filepath, "raw": body, "error": str(e)})
+            parsed_ops = _parse_patch_json(filepath, body)
+            if parsed_ops is not None:
+                blocks.append({"action": "patch", "path": filepath, "operations": parsed_ops})
+            else:
+                blocks.append({"action": "patch_error", "path": filepath, "raw": body, "error": "all parse strategies failed"})
 
     return blocks
+
+
+def _parse_patch_json(filepath: str, body: str):
+    raw = body.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r'^```\w*\n?', '', raw)
+        raw = re.sub(r'\n?```$', '', raw)
+        raw = raw.strip()
+
+    try:
+        ops_data = json.loads(raw)
+        return ops_data if isinstance(ops_data, list) else ops_data.get("operations", [ops_data])
+    except json.JSONDecodeError:
+        pass
+
+    fixed = re.sub(
+        r'"content"\s*:\s*"((?:[^"\\]|\\.)*?)"',
+        lambda m: '"content": ' + json.dumps(m.group(1).replace('\n', '\\n')),
+        raw,
+        flags=re.DOTALL,
+    )
+    try:
+        ops_data = json.loads(fixed)
+        return ops_data if isinstance(ops_data, list) else ops_data.get("operations", [ops_data])
+    except json.JSONDecodeError:
+        pass
+
+    ops = []
+    op_pattern = re.compile(
+        r'\{\s*"action"\s*:\s*"(\w+)"'
+        r'(?:.*?"start_line"\s*:\s*(\d+))?'
+        r'(?:.*?"end_line"\s*:\s*(\d+))?'
+        r'(?:.*?"content"\s*:\s*"((?:[^"\\]|\\.)*)?")?'
+        r'[^}]*\}',
+        re.DOTALL,
+    )
+    for m in op_pattern.finditer(raw):
+        op = {"action": m.group(1)}
+        if m.group(2):
+            op["start_line"] = int(m.group(2))
+        if m.group(3):
+            op["end_line"] = int(m.group(3))
+        if m.group(4) is not None:
+            op["content"] = m.group(4).replace("\\n", "\n").replace('\\"', '"')
+        ops.append(op)
+
+    if ops:
+        print(f"[*] Recovered {len(ops)} operations for {filepath} via regex fallback")
+        return ops
+
+    print(f"[!] Failed to parse PATCH JSON for {filepath} — all strategies failed")
+    return None
 
 
 def apply_patch_operations(content: str, operations: list[dict]) -> tuple[str, int, int]:
@@ -484,6 +534,11 @@ def list_workspaces():
         sys.exit(1)
     client = httpx.Client()
     resp = client.get(f"{API_BASE}/api/user/workspaces", headers=auth_headers)
+    if resp.status_code == 401:
+        print("[!] 401 — workspace listing requires session auth (not supported via API key alone).")
+        print("    Use the AiAS dashboard to view workspaces, or check workspace IDs from Gex run output.")
+        client.close()
+        return
     resp.raise_for_status()
     workspaces = resp.json()
     print(f"\n  AiAS Workspaces ({len(workspaces)} total)\n")
