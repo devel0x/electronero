@@ -1,0 +1,68 @@
+version: 1
+runtime_profile:
+  name: default-pooled
+  lifecycle:
+    mode: pooled
+    periodic_reset_cron: "0 2 * * *"
+    force_reset_after_session: true
+  resources:
+    cpu_quota: "2"
+    memory_limit_mb: 4096
+    max_pids: 256
+    ttl_seconds: 1800
+    output_limit_mb: 100
+  filesystem:
+    readonly:
+      - /runtime/readonly-base
+    writable:
+      - /runtime/workspaces/{session}
+      - /runtime/tmp
+      - /runtime/output
+      - /runtime/cache
+  network:
+    profile: restricted
+    allow_domains:
+      - github.com
+      - api.github.com
+      - pypi.org
+      - files.pythonhosted.org
+      - registry.npmjs.org
+    deny_cidrs:
+      - 169.254.169.254/32
+  tools:
+    allowed:
+      - clone_repo
+      - checkout_ref
+      - detect_stack
+      - install_node_deps
+      - install_python_deps
+      - write_env_file
+      - start_process
+      - stop_process
+      - check_port
+      - http_health_check
+      - stream_logs
+      - capture_preview_metadata
+      - export_artifacts
+      - run_code
+      - install_package
+      - read_file
+      - write_file
+      - search_in_files
+      - functions_mapping
+      - bracket_tracker
+      - list_directory
+      - export_artifact
+      - reset_session
+    install_package:
+      allowed_registries:
+        - pypi.org
+        - registry.npmjs.org
+      require_version_pin: false
+      block_post_install_scripts: true
+      max_package_size_mb: 100
+      max_install_time_seconds: 180
+audit:
+  immutable_ledger: true
+  include_tool_args_hash: true
+  include_artifact_checksums: true

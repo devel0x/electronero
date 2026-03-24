@@ -1,0 +1,2 @@
+# Keep generated preview screenshots out of git
+*.png
