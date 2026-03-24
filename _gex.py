@@ -143,14 +143,21 @@ def create_workspace(client: httpx.Client, name: str) -> Optional[dict]:
 
 
 def store_in_workspace(client: httpx.Client, workspace_id: str, content: str):
-    resp = client.post(
-        f"{API_BASE}/api/workspaces/{workspace_id}/messages",
-        json={"content": content},
-        headers=auth_headers,
-        timeout=30,
-    )
-    if resp.status_code != 200:
-        print(f"[!] Failed to store in workspace: {resp.status_code}")
+    max_len = 12000
+    chunks = [content[i:i+max_len] for i in range(0, len(content), max_len)]
+    for i, chunk in enumerate(chunks):
+        label = f" (part {i+1}/{len(chunks)})" if len(chunks) > 1 else ""
+        try:
+            resp = client.post(
+                f"{API_BASE}/api/workspaces/{workspace_id}/messages",
+                json={"content": chunk},
+                headers=auth_headers,
+                timeout=120,
+            )
+            if resp.status_code != 200:
+                print(f"[!] Failed to store in workspace{label}: {resp.status_code}")
+        except Exception as e:
+            print(f"[!] Workspace upload{label} failed: {e}")
 
 
 def clone_repo(source: str) -> str:
