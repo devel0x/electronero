@@ -34,7 +34,7 @@ from typing import Optional
 
 API_BASE = os.getenv("AIAS_API_URL", "https://api.aiassist.net")
 API_KEY = os.getenv("AIAS_API_KEY", "aai_08Yje_4t11_r4zxMMxOWymYht5pbx2ASvRwJB0wKasc")
-MODEL = os.getenv("AIAS_MODEL", "llama-3.3-70b-versatile")
+MODEL = os.getenv("AIAS_MODEL", "moonshotai/kimi-k2-instruct")
 PROVIDER = os.getenv("AIAS_PROVIDER", "groq")
 
 SKIP_DIRS = {
@@ -227,11 +227,24 @@ def apply_patch_operations(content: str, operations: list[dict]) -> tuple[str, i
     return "\n".join(lines), added, removed
 
 
+def validate_clone_path(clone_path: str, filepath: str) -> Optional[Path]:
+    clone_root = Path(clone_path).resolve()
+    candidate = (clone_root / filepath).resolve()
+    if not str(candidate).startswith(str(clone_root) + os.sep) and candidate != clone_root:
+        return None
+    return candidate
+
+
 def apply_blocks_to_clone(clone_path: str, blocks: list[dict]) -> list[dict]:
     results = []
     for block in blocks:
         filepath = block["path"]
-        full_path = Path(clone_path) / filepath
+        full_path = validate_clone_path(clone_path, filepath)
+
+        if full_path is None:
+            results.append({"path": filepath, "action": block["action"].upper(), "status": "blocked", "detail": "path traversal detected — skipped"})
+            print(f"       BLOCK  {filepath}  [PATH TRAVERSAL — REJECTED]")
+            continue
 
         if block["action"] == "write":
             full_path.parent.mkdir(parents=True, exist_ok=True)
