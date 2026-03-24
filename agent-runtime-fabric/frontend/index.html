@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ServerBuddy Runtime Cockpit</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>ServerBuddy — Agent Runtime Fabric</h1>
+      <p>Disposable runtime orchestration cockpit with policy-mediated tools only.</p>
+    </header>
+
+    <main>
+      <section class="card grid">
+        <h2>Session Control</h2>
+        <label>API Base
+          <input id="apiBase" value="http://localhost:8080" />
+        </label>
+        <button id="createSession">Create Session</button>
+        <button id="resetSession">Reset Session</button>
+        <div><strong>Session ID:</strong> <span id="sessionId">—</span></div>
+        <pre id="sessionPolicy"></pre>
+      </section>
+
+      <section class="card">
+        <h2>run_code</h2>
+        <label>Language
+          <select id="language">
+            <option value="python">python</option>
+            <option value="node">node</option>
+          </select>
+        </label>
+        <textarea id="code" rows="8">print("hello from runtime fabric")</textarea>
+        <button id="runCode">Execute</button>
+        <pre id="runCodeOut"></pre>
+      </section>
+
+      <section class="card grid">
+        <h2>install_package (restricted)</h2>
+        <label>Ecosystem
+          <select id="ecosystem">
+            <option value="python">python</option>
+            <option value="node">node</option>
+          </select>
+        </label>
+        <label>Package <input id="pkgName" value="requests" /></label>
+        <label>Version <input id="pkgVersion" placeholder="2.32.3 (optional)" /></label>
+        <button id="installPackage">Install via policy tool</button>
+        <pre id="installOut"></pre>
+      </section>
+
+      <section class="card grid">
+        <h2>Filesystem / Tooling</h2>
+        <label>Path <input id="path" value="/runtime/workspaces" /></label>
+        <button id="listDir">list_directory</button>
+        <button id="writeFile">write_file sample</button>
+        <button id="readFile">read_file sample</button>
+        <button id="searchFiles">search_in_files("runtime")</button>
+        <button id="functionsMap">functions_mapping sample.py</button>
+        <button id="bracketTrack">bracket_tracker sample.py</button>
+        <button id="exportArtifact">export_artifact sample.py</button>
+        <pre id="fsOut"></pre>
+      </section>
+
+      <section class="card">
+        <h2>Audit Logs</h2>
+        <button id="refreshLogs">Refresh logs</button>
+        <pre id="logsOut"></pre>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
