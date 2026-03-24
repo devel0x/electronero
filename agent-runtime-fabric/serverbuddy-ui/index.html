@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ServerBuddy Runtime Cockpit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="shell">
+      <header class="topbar glass">
+        <div>
+          <h1>ServerBuddy</h1>
+          <p>Policy-Restricted Runtime Cockpit</p>
+        </div>
+        <span id="statusChip" class="chip online">Runtime: Online</span>
+      </header>
+
+      <section class="layout">
+        <aside class="panel glass">
+          <h2>Allowed Tools</h2>
+          <button data-tool="clone_repo">clone_repo</button>
+          <button data-tool="checkout_ref">checkout_ref</button>
+          <button data-tool="detect_stack">detect_stack</button>
+          <button data-tool="install_node_deps">install_node_deps</button>
+          <button data-tool="install_python_deps">install_python_deps</button>
+          <button data-tool="write_env_file">write_env_file</button>
+          <button data-tool="start_process">start_process</button>
+          <button data-tool="stop_process">stop_process</button>
+          <button data-tool="check_port">check_port</button>
+          <button data-tool="http_health_check">http_health_check</button>
+          <button data-tool="stream_logs">stream_logs</button>
+          <button data-tool="capture_preview_metadata">capture_preview_metadata</button>
+          <button data-tool="export_artifacts">export_artifacts</button>
+          <hr />
+          <button data-tool="run_code">run_code</button>
+          <button data-tool="install_package">install_package</button>
+          <button data-tool="read_file">read_file</button>
+          <button data-tool="write_file">write_file</button>
+          <button data-tool="search_in_files">search_in_files</button>
+          <button data-tool="functions_mapping">functions_mapping</button>
+          <button data-tool="bracket_tracker">bracket_tracker</button>
+          <button data-tool="list_directory">list_directory</button>
+          <button data-tool="export_artifact">export_artifact</button>
+          <button data-tool="reset_session">reset_session</button>
+        </aside>
+
+        <section class="panel glass grow">
+          <h2>Request Builder</h2>
+          <label>Session ID
+            <input id="sessionId" value="demo-session" />
+          </label>
+          <label>Request JSON
+            <textarea id="requestBox" spellcheck="false">{
+  "tool": "detect_stack",
+  "args": {
+    "repo_dir": "repo"
+  }
+}</textarea>
+          </label>
+          <div class="actions">
+            <button id="executeBtn" class="primary">Execute Tool</button>
+            <button id="clearBtn">Clear Logs</button>
+          </div>
+        </section>
+
+        <section class="panel glass grow">
+          <h2>Output & Audit Stream</h2>
+          <pre id="output"></pre>
+        </section>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
