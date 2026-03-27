@@ -38,11 +38,14 @@ using namespace epee;
 #include "cryptonote_core.h"
 #include "common/command_line.h"
 #include "common/util.h"
+#include "cryptonote_basic/cryptonote_format_utils.h"
+#include "cryptonote_basic/tx_extra.h"
 #include "common/updates.h"
 #include "common/download.h"
 #include "common/threadpool.h"
 #include "common/command_line.h"
 #include "warnings.h"
+#include <boost/filesystem.hpp>
 #include "crypto/crypto.h"
 #include "cryptonote_config.h"
 #include "cryptonote_tx_utils.h"
@@ -556,12 +559,15 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::load_state_data()
   {
-    // may be some code later
+    boost::filesystem::path evm_file = boost::filesystem::path(m_config_folder) / "evm_state.bin";
+    m_evm.load(evm_file.string());
     return true;
   }
   //-----------------------------------------------------------------------------------------------
     bool core::deinit()
   {
+    boost::filesystem::path evm_file = boost::filesystem::path(m_config_folder) / "evm_state.bin";
+    m_evm.save(evm_file.string());
     m_miner.stop();
     m_mempool.deinit();
     m_blockchain_storage.deinit();
@@ -993,8 +999,11 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::add_new_tx(transaction& tx, const crypto::hash& tx_hash, const crypto::hash& tx_prefix_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, bool relayed, bool do_not_relay)
   {
-    if (keeped_by_block)
+  if (keeped_by_block)
+  {
       get_blockchain_storage().on_new_tx_from_block(tx);
+      process_evm_tx(tx);
+  }
 
     if(m_mempool.have_tx(tx_hash))
     {
@@ -1537,6 +1546,63 @@ namespace cryptonote
       MCLOG_RED(level, "global", "Free space is below 1 GB on " << m_config_folder);
     }
     return true;
+  }
+
+  //------------------------------------------------------------------------------------------------------------------------------
+  void core::process_evm_tx(const transaction& tx)
+  {
+    std::vector<tx_extra_field> fields;
+    if (!parse_tx_extra(tx.extra, fields))
+      return;
+    tx_extra_nonce nonce_field;
+    if (!find_tx_extra_field_by_type(fields, nonce_field, 0))
+      return;
+
+    MDEBUG("process_evm_tx nonce:" << nonce_field.nonce);
+
+    const std::string deploy_prefix = "evm:deploy:";
+    const std::string call_prefix = "evm:call:";
+
+    if (nonce_field.nonce.compare(0, deploy_prefix.size(), deploy_prefix) == 0)
+    {
+      std::string hex = nonce_field.nonce.substr(deploy_prefix.size());
+      std::string bin;
+      epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
+      std::vector<uint8_t> code(bin.begin(), bin.end());
+      std::string account = epee::string_tools::pod_to_hex(get_transaction_hash(tx));
+      MDEBUG("process_evm_tx deploy account:" << account << " code_len:" << code.size());
+      try
+      {
+        m_evm.deploy(account, code);
+      }
+      catch (const std::exception &e)
+      {
+        MERROR("EVM deploy failed: " << e.what());
+      }
+    }
+    else if (nonce_field.nonce.compare(0, call_prefix.size(), call_prefix) == 0)
+    {
+      std::string rest = nonce_field.nonce.substr(call_prefix.size());
+      size_t pos = rest.find(':');
+      if (pos == std::string::npos)
+        return;
+      std::string account = rest.substr(0, pos);
+      std::string hex = rest.substr(pos + 1);
+      std::string bin;
+      epee::string_tools::parse_hexstr_to_binbuff(hex, bin);
+      std::vector<uint8_t> data(bin.begin(), bin.end());
+      uint64_t height = m_blockchain_storage.get_current_blockchain_height();
+      uint64_t ts = static_cast<uint64_t>(time(nullptr));
+      MDEBUG("process_evm_tx call account:" << account << " data_len:" << data.size());
+      try
+      {
+        m_evm.call(account, data, height, ts);
+      }
+      catch (const std::exception &e)
+      {
+        MERROR("EVM call failed in block tx: " << e.what());
+      }
+    }
   }
   //-----------------------------------------------------------------------------------------------
   void core::set_target_blockchain_height(uint64_t target_blockchain_height)
