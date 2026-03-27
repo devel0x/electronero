@@ -146,6 +146,10 @@ namespace cryptonote
     bool refresh(const std::vector<std::string> &args);
     bool show_balance_unlocked(bool detailed = false);
     bool show_balance(const std::vector<std::string> &args = std::vector<std::string>());
+    bool show_stablecoin_balance(const std::vector<std::string> &args = std::vector<std::string>());
+    bool stablecoin_mint(const std::vector<std::string> &args);
+    bool stablecoin_burn(const std::vector<std::string> &args);
+    bool stablecoin_transfer(const std::vector<std::string> &args);
     bool show_incoming_transfers(const std::vector<std::string> &args);
     bool show_payments(const std::vector<std::string> &args);
     bool show_blockchain_height(const std::vector<std::string> &args);
