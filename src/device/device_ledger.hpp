@@ -33,6 +33,8 @@
 #include <cstddef>
 #include <string>
 #include "device.hpp"
+#include <map>
+#include <memory>
 #ifdef WIN32
 #include <winscard.h>
 #define MAX_ATR_SIZE            33
