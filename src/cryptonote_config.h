@@ -184,13 +184,21 @@ namespace config
 {
   uint64_t const DEFAULT_FEE_ATOMIC_XMR_PER_KB = 5;
   uint8_t const FEE_CALCULATION_MAX_RETRIES = 10;
-  uint64_t const DEFAULT_DUST_THRESHOLD = ((uint64_t)5000); // 
+  uint64_t const DEFAULT_DUST_THRESHOLD = ((uint64_t)5000); //
+  uint64_t const EVM_DEPLOY_FEE_PER_BYTE = 10; // fee in atomic units per byte of contract bytecode
+  uint64_t const EVM_CALL_FEE_PER_BYTE = 5; // fee in atomic units per byte of call data when writing
+  //! Key used to obfuscate contract secrets
+  std::string const EVM_SECRET_XOR = "evm_secret_xor_key_for_contracts";
   uint64_t const BASE_REWARD_CLAMP_THRESHOLD = ((uint64_t)100000000); // pow(10, 8)
   std::string const P2P_REMOTE_DEBUG_TRUSTED_PUB_KEY = "0000000000000000000000000000000000000000000000000000000000000000";
+  //! Address receiving the governance portion of EVM fees
+  std::string const GOVERNANCE_WALLET = "etnk9ZeCkz6Dbb4EwVPq7CftzLfHA4zv1c33oQ5dACaJWmEcxyCKYzGK89D5VtjhxKNAeTNqyV5aYZvfPWr243gL9xGdNvGutm";
 
   uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 18018;
   uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 18019;
   uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 42;
+  //! Prefix for EVM smart contract addresses
+  std::string const CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX = "cevm";
   uint16_t const P2P_DEFAULT_PORT = 14080;
   uint16_t const RPC_DEFAULT_PORT = 12090;
   uint16_t const ZMQ_RPC_DEFAULT_PORT = 14082;
@@ -206,6 +214,7 @@ namespace config
     uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 18018;
     uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 18019;
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 42;
+    std::string const CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX = "tcevm";
     uint16_t const P2P_DEFAULT_PORT = 13080;
     uint16_t const RPC_DEFAULT_PORT = 13081;
     uint16_t const ZMQ_RPC_DEFAULT_PORT = 13082;
@@ -222,6 +231,7 @@ namespace config
     uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 18018;
     uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 18019;
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 42;
+    std::string const CRYPTONOTE_PUBLIC_EVM_ADDRESS_PREFIX = "scevm";
     uint16_t const P2P_DEFAULT_PORT = 18680;
     uint16_t const RPC_DEFAULT_PORT = 18689;
     uint16_t const ZMQ_RPC_DEFAULT_PORT = 18690;
