@@ -1,0 +1,14 @@
+[app]
+name = "blank-app"
+id = "com.example.blank"
+version = "0.1.0"
+
+[desktop]
+width = 1100
+height = 760
+
+[permissions]
+filesystem = ["./data"]
+clipboard = true
+subprocess = false
+notifications = true

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sample Workbench</title>
+  </head>
+  <body>
+    <h2>Sample Workbench</h2>
+    <button id="sys">System Info</button>
+    <button id="save">Save Settings</button>
+    <pre id="output"></pre>
+
+    <script>
+      const output = document.getElementById('output');
+      document.getElementById('sys').onclick = async () => {
+        output.textContent = JSON.stringify(await window.pywebview.api.system_info(), null, 2);
+      };
+      document.getElementById('save').onclick = async () => {
+        const result = await window.pywebview.api.save_settings({ theme: 'dark', autosave: true });
+        output.textContent = JSON.stringify(result, null, 2);
+      };
+    </script>
+  </body>
+</html>
