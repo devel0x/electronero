@@ -1,0 +1,12 @@
+{
+  "name": "_gex_ui_ux",
+  "version": "0.1.0",
+  "description": "Modern Aceternity-inspired UI for browsing code, diffing changes, and orchestrating _Gex runs.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^36.2.0"
+  }
+}
