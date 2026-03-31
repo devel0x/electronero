@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PyDesk Blank App</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #1f2937; }
+      .card { max-width: 760px; padding: 16px; border: 1px solid #d1d5db; border-radius: 12px; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #9ca3af; cursor: pointer; }
+      textarea { width: 100%; min-height: 120px; margin-top: 12px; }
+      pre { background: #111827; color: #e5e7eb; padding: 12px; border-radius: 8px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>PyDesk V2-ready Vertical Slice</h1>
+    <div class="card">
+      <p>This app calls Python-native bridge methods from a web frontend.</p>
+      <button id="sys">Get System Info</button>
+      <pre id="out">Click the button to call the native bridge...</pre>
+
+      <h3>Write a local note (native filesystem call)</h3>
+      <textarea id="note" placeholder="Write something...">Hello from PyDesk!</textarea>
+      <button id="save">Save Note</button>
+    </div>
+
+    <script>
+      const out = document.getElementById('out');
+      document.getElementById('sys').addEventListener('click', async () => {
+        const info = await window.pywebview.api.get_system_info();
+        out.textContent = JSON.stringify(info, null, 2);
+      });
+      document.getElementById('save').addEventListener('click', async () => {
+        const text = document.getElementById('note').value;
+        const result = await window.pywebview.api.write_note(text);
+        out.textContent = `Saved: ${JSON.stringify(result, null, 2)}`;
+      });
+          if (window.pywebview?.api?.echo_plugin_status) {
+        window.pywebview.api.echo_plugin_status().then((res) => {
+          console.log('plugin response', res);
+        });
+      }
+    </script>
+  </body>
+</html>

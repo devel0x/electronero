@@ -1,0 +1,23 @@
+[app]
+name = "sample-workbench"
+id = "com.pydesk.sampleworkbench"
+version = "0.2.1"
+
+[desktop]
+width = 1200
+height = 800
+
+[permissions]
+filesystem = ["./data"]
+clipboard = true
+notifications = true
+subprocess = false
+
+[runtime]
+plugins_enabled = true
+strict_plugins = true
+plugin_allowlist = ["sample"]
+
+[build]
+tool = "pyinstaller"
+entrypoint = "desktop/main.py"
