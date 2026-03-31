@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>_Gex UI/UX</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+  </head>
+  <body>
+    <div class="aurora"></div>
+    <header class="topbar glass">
+      <div>
+        <h1>_Gex UI/UX</h1>
+        <p>Aceternity-inspired workbench for file-level scan orchestration.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button id="pick-folder">Open Folder</button>
+        <input id="gex-command" value="_Gex" title="_Gex command" />
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel glass left">
+        <div class="panel-title-row">
+          <h2>Explorer</h2>
+          <span id="root-label">No directory selected</span>
+        </div>
+        <div id="file-tree" class="file-tree"></div>
+      </aside>
+
+      <section class="center-stack">
+        <div class="panel glass editor-shell">
+          <div class="panel-title-row">
+            <h2>Monaco Inspection</h2>
+            <span id="current-file">Select a file</span>
+          </div>
+          <div id="editor"></div>
+        </div>
+
+        <div class="panel glass diff-shell">
+          <div class="panel-title-row">
+            <h2>Diff</h2>
+            <span id="diff-status">No run yet</span>
+          </div>
+          <div id="diff-editor"></div>
+        </div>
+      </section>
+
+      <aside class="panel glass right">
+        <div class="panel-title-row">
+          <h2>Run Manager</h2>
+        </div>
+
+        <div class="run-controls">
+          <button id="scan-current">Scan Current File</button>
+          <button id="enqueue-current">Queue Current</button>
+          <button id="run-queue">Run Queue (1-by-1)</button>
+          <button id="clear-queue" class="ghost">Clear Queue</button>
+        </div>
+
+        <div class="queue-box">
+          <h3>Queued Files</h3>
+          <ul id="queue-list"></ul>
+        </div>
+
+        <div class="run-box">
+          <h3>Run Output</h3>
+          <pre id="run-output"></pre>
+        </div>
+      </aside>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
