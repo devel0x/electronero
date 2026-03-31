@@ -1,0 +1,11 @@
+name: react-vite-fastapi
+description: "React + Vite frontend with FastAPI backend and pywebview desktop shell"
+stack:
+  frontend: "React 18 + Vite + TypeScript"
+  backend: "FastAPI + Uvicorn"
+  shell: "pywebview"
+features:
+  - manifest-driven permissions
+  - plugin loading
+  - api health endpoint
+  - frontend to backend call example

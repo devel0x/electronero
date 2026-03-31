@@ -1,0 +1,23 @@
+[app]
+name = "react-vite-fastapi-app"
+id = "com.example.reactvitefastapi"
+version = "0.1.0"
+
+[desktop]
+width = 1280
+height = 840
+
+[permissions]
+filesystem = ["./data"]
+clipboard = true
+subprocess = false
+notifications = true
+
+[runtime]
+plugins_enabled = true
+strict_plugins = true
+plugin_allowlist = ["echo"]
+
+[dev]
+frontend_url = "http://127.0.0.1:5173"
+backend_url = "http://127.0.0.1:8000"
