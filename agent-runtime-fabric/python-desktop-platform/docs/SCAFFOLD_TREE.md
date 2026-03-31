@@ -1,0 +1,33 @@
+# Proposed Repository Scaffold (V1)
+
+```text
+python-desktop-platform/
+  README.md
+  docs/
+    V1_ARCHITECTURE.md
+    SCAFFOLD_TREE.md
+  platform_core/
+    pyproject.toml
+    src/pydesk/
+      __init__.py
+      cli/main.py
+      core/config.py
+      core/permissions.py
+      core/plugins.py
+      templates/blank-app/
+        platform.toml
+        README.md
+        backend/bridge.py
+        desktop/main.py
+        frontend/index.html
+        plugins/
+          echo.py
+        data/
+    tests/test_config.py
+  example_app/
+    README.md
+    platform.toml
+    backend/bridge.py
+    desktop/main.py
+    frontend/index.html
+```
