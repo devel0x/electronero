@@ -1,0 +1,4 @@
+backend/__pycache__/
+backend/gex_module/__pycache__/
+frontend/node_modules/
+frontend/dist/
