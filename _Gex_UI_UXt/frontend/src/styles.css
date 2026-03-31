@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 212, 191, 0.4) rgba(15, 23, 42, 0.6);
+}
+
+button, input {
+  transition: all 180ms ease;
+}
