@@ -1,0 +1,219 @@
+:root {
+  color-scheme: dark;
+  --bg: #070a14;
+  --bg-2: #0f1730;
+  --panel: rgba(23, 28, 56, 0.52);
+  --line: rgba(145, 167, 255, 0.18);
+  --text: #e9ecff;
+  --muted: #9ca7d7;
+  --accent: #7f8cff;
+  --accent-2: #46c7ff;
+  --danger: #ff6f9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at 20% 20%, #1f2d5d 0%, var(--bg) 40%), var(--bg);
+  overflow: hidden;
+}
+
+.aurora {
+  position: fixed;
+  inset: -20%;
+  background: radial-gradient(circle at 70% 20%, rgba(108, 92, 255, 0.35), transparent 40%),
+    radial-gradient(circle at 30% 80%, rgba(70, 199, 255, 0.25), transparent 40%);
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.circuit-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(70, 199, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127, 140, 255, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 20% 20%, rgba(87, 255, 213, 0.08), transparent 32%),
+    radial-gradient(circle at 80% 70%, rgba(127, 140, 255, 0.09), transparent 35%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+  opacity: 0.7;
+}
+
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+  border-radius: 16px;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 14px 38px rgba(0, 0, 0, 0.4);
+}
+
+.topbar {
+  margin: 14px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.topbar p {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 0.9rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 340px;
+  gap: 12px;
+  height: calc(100vh - 98px);
+  padding: 0 14px 14px;
+}
+
+.panel {
+  padding: 12px;
+  overflow: hidden;
+}
+
+.left,
+.right {
+  display: flex;
+  flex-direction: column;
+}
+
+.center-stack {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.editor-shell,
+.diff-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+#editor,
+#diff-editor {
+  margin-top: 8px;
+  min-height: 0;
+  flex: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(87, 255, 213, 0.12), 0 0 45px rgba(77, 145, 255, 0.1);
+}
+
+button,
+input {
+  border: 1px solid var(--line);
+  background: rgba(34, 42, 80, 0.8);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 0.9rem;
+}
+
+button {
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(127, 140, 255, 0.58);
+}
+
+.ghost {
+  border-color: rgba(255, 111, 159, 0.4);
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.panel-title-row span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.file-tree {
+  margin-top: 10px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.file-item {
+  font-size: 0.86rem;
+  color: #c6d1ff;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 2px 0;
+}
+
+.file-item:hover,
+.file-item.active {
+  background: rgba(89, 122, 255, 0.25);
+}
+
+.file-item.dir {
+  color: #99b8ff;
+  font-weight: 600;
+  cursor: default;
+}
+
+.run-controls {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.queue-box,
+.run-box {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+#queue-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  max-height: 150px;
+  overflow: auto;
+  color: var(--muted);
+}
+
+#run-output {
+  margin: 8px 0 0;
+  max-height: 250px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #b8c8ff;
+  font-size: 0.8rem;
+}
