@@ -31,6 +31,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string.hpp>
+#include <sstream>
 #include <cstdint>
 #include "include_base_utils.h"
 using namespace epee;
@@ -802,7 +803,7 @@ namespace tools
         mixin = MAX_MIXIN;
       }
       uint32_t priority = m_wallet->adjust_priority(req.priority);
-      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, m_trusted_daemon);
+      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, m_trusted_daemon, 0);
 
       if (ptx_vector.empty())
       {
@@ -871,7 +872,7 @@ namespace tools
       }
       uint32_t priority = m_wallet->adjust_priority(req.priority);
       LOG_PRINT_L2("on_transfer_split calling create_transactions_2");
-      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, m_trusted_daemon);
+      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, m_trusted_daemon, 0);
       LOG_PRINT_L2("on_transfer_split called create_transactions_2");
 
       return fill_response(ptx_vector, req.get_tx_keys, res.tx_key_list, res.amount_list, res.fee_list, res.multisig_txset, req.do_not_relay,
@@ -882,6 +883,84 @@ namespace tools
       handle_rpc_exception(std::current_exception(), er, WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR);
       return false;
     }
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_bulk_transfer(const wallet_rpc::COMMAND_RPC_BULK_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_BULK_TRANSFER::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_wallet->restricted())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+
+    std::string path = m_wallet_dir + "/" + req.filename;
+    std::string content;
+    if (!epee::file_io_utils::load_file_to_string(path, content))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+      er.message = "failed to read input file";
+      return false;
+    }
+
+    std::istringstream iss(content);
+    std::list<wallet_rpc::transfer_destination> destinations;
+    std::string line;
+    while (std::getline(iss, line))
+    {
+      boost::algorithm::trim(line);
+      if (line.empty() || line[0] == '#' || line[0] == ';')
+        continue;
+      std::istringstream line_ss(line);
+      std::string address, amount_str;
+      if (!(line_ss >> address >> amount_str))
+        continue;
+      wallet_rpc::transfer_destination d;
+      d.address = address;
+      if (!cryptonote::parse_amount(d.amount, amount_str))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_WRONG_AMOUNT;
+        er.message = "invalid amount in file";
+        return false;
+      }
+      destinations.push_back(d);
+    }
+
+    if (destinations.empty())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_ZERO_DESTINATION;
+      er.message = "no transfers found in file";
+      return false;
+    }
+
+    wallet_rpc::COMMAND_RPC_TRANSFER::request treq;
+    treq.destinations = destinations;
+    treq.account_index = req.account_index;
+    treq.subaddr_indices = req.subaddr_indices;
+    treq.priority = req.priority;
+    treq.mixin = req.mixin;
+    treq.ring_size = req.ring_size;
+    treq.unlock_time = req.unlock_time;
+    treq.payment_id = req.payment_id;
+    treq.get_tx_key = req.get_tx_key;
+    treq.do_not_relay = req.do_not_relay;
+    treq.get_tx_hex = req.get_tx_hex;
+    treq.get_tx_metadata = req.get_tx_metadata;
+
+    wallet_rpc::COMMAND_RPC_TRANSFER::response tres;
+    if (!on_transfer(treq, tres, er))
+      return false;
+
+    res.tx_hash = tres.tx_hash;
+    res.tx_key = tres.tx_key;
+    res.amount_keys = tres.amount_keys;
+    res.amount = tres.amount;
+    res.fee = tres.fee;
+    res.tx_blob = tres.tx_blob;
+    res.tx_metadata = tres.tx_metadata;
+    res.multisig_txset = tres.multisig_txset;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -2900,6 +2979,175 @@ namespace tools
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+
+  bool wallet_rpc_server::on_deploy_contract(const wallet_rpc::COMMAND_RPC_DEPLOY_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_DEPLOY_CONTRACT::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_wallet->restricted())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+
+    std::vector<uint8_t> extra;
+    std::string extra_nonce = std::string("evm:deploy:") + req.bytecode;
+    if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
+      er.message = "failed to construct tx extra";
+      return false;
+    }
+
+    const uint64_t byte_size = req.bytecode.size() / 2;
+    const uint64_t evm_fee = byte_size * config::EVM_DEPLOY_FEE_PER_BYTE;
+    const uint64_t gov_fee = evm_fee / 2;
+    const uint64_t net_fee = evm_fee - gov_fee;
+
+    cryptonote::tx_destination_entry de;
+    de.addr = m_wallet->get_account().get_keys().m_account_address;
+    de.amount = 1;
+    de.is_subaddress = false;
+    std::vector<cryptonote::tx_destination_entry> dsts{de};
+    cryptonote::address_parse_info gov_info;
+    if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+    {
+      cryptonote::tx_destination_entry gov;
+      gov.addr = gov_info.address;
+      gov.amount = gov_fee;
+      gov.is_subaddress = gov_info.is_subaddress;
+      dsts.push_back(gov);
+    }
+
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    uint32_t priority = m_wallet->adjust_priority(0);
+    std::set<uint32_t> subaddr_indices;
+
+    std::vector<wallet2::pending_tx> ptx_vector;
+    try {
+      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, net_fee);
+    } catch (const std::exception &e) {
+      er.code = WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR;
+      er.message = std::string("failed to create transaction: ") + e.what();
+      return false;
+    }
+
+    if (ptx_vector.empty())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_TX_NOT_POSSIBLE;
+      er.message = "No transaction created";
+      return false;
+    }
+
+    if (!req.do_not_relay)
+      m_wallet->commit_tx(ptx_vector[0]);
+
+    crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    res.fee = ptx_vector[0].fee + net_fee;
+    if (req.get_tx_hex)
+      res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
+    if (req.get_tx_metadata)
+      res.tx_metadata = ptx_to_string(ptx_vector[0]);
+    res.address = epee::string_tools::pod_to_hex(txid);
+    return true;
+  }
+
+  bool wallet_rpc_server::on_call_contract(const wallet_rpc::COMMAND_RPC_CALL_CONTRACT::request& req, wallet_rpc::COMMAND_RPC_CALL_CONTRACT::response& res, epee::json_rpc::error& er)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_wallet->restricted())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+
+    if (!req.write)
+    {
+      cryptonote::COMMAND_RPC_CALL_CONTRACT::request daemon_req;
+      cryptonote::COMMAND_RPC_CALL_CONTRACT::response daemon_res;
+      daemon_req.account = req.account;
+      daemon_req.caller = m_wallet->get_account().get_public_address_str(m_wallet->nettype());
+      daemon_req.data = req.data;
+      daemon_req.write = false;
+      daemon_req.fee = 0;
+      bool r = m_wallet->invoke_http_json("/call_contract", daemon_req, daemon_res);
+      if (!r)
+      {
+        er.code = WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR;
+        er.message = "RPC request failed";
+        return false;
+      }
+      res.result = daemon_res.result;
+      res.status = daemon_res.status;
+      return daemon_res.status == CORE_RPC_STATUS_OK;
+    }
+
+    bool text_op = boost::algorithm::starts_with(req.data, "deposit:") || boost::algorithm::starts_with(req.data, "transfer:");
+    const uint64_t byte_size = text_op ? req.data.size() : req.data.size() / 2;
+    const uint64_t evm_fee = byte_size * config::EVM_CALL_FEE_PER_BYTE;
+    const uint64_t gov_fee = evm_fee / 2;
+    const uint64_t net_fee = evm_fee - gov_fee;
+
+    std::vector<uint8_t> extra;
+    std::string extra_nonce = std::string("evm:call:") + req.account + ":" + req.data;
+    if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID;
+      er.message = "failed to construct tx extra";
+      return false;
+    }
+
+    cryptonote::tx_destination_entry de;
+    de.addr = m_wallet->get_account().get_keys().m_account_address;
+    de.amount = 1;
+    de.is_subaddress = false;
+    std::vector<cryptonote::tx_destination_entry> dsts{de};
+    cryptonote::address_parse_info gov_info;
+    if (cryptonote::get_account_address_from_str(gov_info, m_wallet->nettype(), config::GOVERNANCE_WALLET))
+    {
+      cryptonote::tx_destination_entry gov;
+      gov.addr = gov_info.address;
+      gov.amount = gov_fee;
+      gov.is_subaddress = gov_info.is_subaddress;
+      dsts.push_back(gov);
+    }
+
+    size_t mixin = m_wallet->default_mixin() > 0 ? m_wallet->default_mixin() : DEFAULT_MIXIN;
+    uint32_t priority = m_wallet->adjust_priority(0);
+    std::set<uint32_t> subaddr_indices;
+
+    std::vector<wallet2::pending_tx> ptx_vector;
+    try {
+      ptx_vector = m_wallet->create_transactions_2(dsts, mixin, 0, priority, extra, 0, subaddr_indices, m_trusted_daemon, net_fee);
+    } catch (const std::exception &e) {
+      er.code = WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR;
+      er.message = std::string("failed to create transaction: ") + e.what();
+      return false;
+    }
+
+    if (ptx_vector.empty())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_TX_NOT_POSSIBLE;
+      er.message = "No transaction created";
+      return false;
+    }
+
+    if (!req.do_not_relay)
+      m_wallet->commit_tx(ptx_vector[0]);
+
+    crypto::hash txid = get_transaction_hash(ptx_vector[0].tx);
+    res.tx_hash = epee::string_tools::pod_to_hex(txid);
+    res.fee = ptx_vector[0].fee + net_fee;
+    if (req.get_tx_hex)
+      res.tx_blob = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx_vector[0].tx));
+    if (req.get_tx_metadata)
+      res.tx_metadata = ptx_to_string(ptx_vector[0]);
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+
 }
 
 int main(int argc, char** argv) {
